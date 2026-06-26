@@ -330,7 +330,7 @@ struct AppTutorialView: View {
                 .offset(y: textOffset)
 
                 VStack(spacing: 16) {
-                    companyField(title: "Company Name", text: $companyName, placeholder: "e.g. Amrize Construction")
+                    companyField(title: "Company Name", text: $companyName, placeholder: "e.g. ABC Construction")
                     companyField(title: "Occupation", text: $occupation, placeholder: "e.g. Asphalt / Concrete / Foreman")
 
                     VStack(alignment: .leading, spacing: 8) {
