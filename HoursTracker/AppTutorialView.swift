@@ -184,14 +184,23 @@ struct AppTutorialView: View {
     private var topBar: some View {
         HStack {
             Spacer()
-            Button("Skip") {
-                Haptics.lightTap()
-                finishTutorial()
+            if !currentPage.isSignInStep {
+                Button("Skip") {
+                    Haptics.lightTap()
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        iconOpacity = 0
+                        textOpacity = 0
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                        stepIndex = pages.count - 1
+                        animateContentIn()
+                    }
+                }
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppTheme.Colors.subtext)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 8)
             }
-            .font(.system(size: 16, weight: .semibold, design: .rounded))
-            .foregroundStyle(AppTheme.Colors.subtext)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 8)
         }
     }
 
@@ -395,6 +404,8 @@ struct AppTutorialView: View {
             PrimaryButton(primaryButtonTitle, systemImage: isLastStep ? "arrow.right" : "chevron.right") {
                 advance()
             }
+            .disabled(isLastStep && !authService.isSignedIn)
+            .opacity(isLastStep && !authService.isSignedIn ? 0.4 : 1)
 
             if stepIndex > 0 {
                 Button {
@@ -416,7 +427,7 @@ struct AppTutorialView: View {
 
     private var primaryButtonTitle: String {
         if isLastStep {
-            return authService.isSignedIn ? "Get Started" : "Skip for now"
+            return authService.isSignedIn ? "Get Started" : "Sign in to continue"
         }
         return "Continue"
     }
