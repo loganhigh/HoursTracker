@@ -35,16 +35,15 @@ enum FirebaseMigrationFlags {
     }
 
     /// Friends list reads `publicProfiles/{uid}` instead of full `users/{uid}`.
-    /// Defaults to false until publicProfiles are reliably populated.
     static var usePublicProfilesForFriends: Bool {
         if defaults.object(forKey: "ff_public_profiles") == nil { return false }
         return defaults.bool(forKey: "ff_public_profiles")
     }
 
     /// `friendships/{pairId}` is the canonical relationship source.
-    /// Defaults to false until backfill populates the collection.
+    /// Backfill runs on first sign-in to populate from legacy friends.
     static var useFriendshipsCollection: Bool {
-        if defaults.object(forKey: "ff_friendships") == nil { return false }
+        if defaults.object(forKey: "ff_friendships") == nil { return true }
         return defaults.bool(forKey: "ff_friendships")
     }
 }

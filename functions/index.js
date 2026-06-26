@@ -467,3 +467,60 @@ exports.recomputeUserStatsCallable = onCall(
     return { ok: true, uid };
   }
 );
+
+/**
+ * Backfill friendships collection from legacy users/{uid}/friends subcollection.
+ * Idempotent — skips pairs that already exist. Each user only backfills their
+ * own friends; both sides calling this converges to the same result.
+ */
+exports.backfillFriendships = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Sign in required.");
+    }
+    const uid = request.auth.uid;
+    const friendsSnap = await db
+      .collection("users")
+      .doc(uid)
+      .collection("friends")
+      .get();
+
+    if (friendsSnap.empty) return { ok: true, backfilled: 0 };
+
+    let backfilled = 0;
+    const batch = db.batch();
+
+    for (const doc of friendsSnap.docs) {
+      const friendUid = doc.documentID || doc.id;
+      const sorted = [uid, friendUid].sort();
+      const pairId = `${sorted[0]}_${sorted[1]}`;
+      const ref = db.collection("friendships").doc(pairId);
+      const existing = await ref.get();
+      if (existing.exists) continue;
+
+      const reciprocal = await db
+        .collection("users")
+        .doc(friendUid)
+        .collection("friends")
+        .doc(uid)
+        .get();
+      if (!reciprocal.exists) continue;
+
+      const addedAt = doc.data()?.addedAt || FieldValue.serverTimestamp();
+      batch.set(ref, {
+        userA: sorted[0],
+        userB: sorted[1],
+        createdAt: addedAt,
+        createdBy: uid,
+      });
+      backfilled++;
+    }
+
+    if (backfilled > 0) {
+      await batch.commit();
+    }
+
+    return { ok: true, backfilled };
+  }
+);

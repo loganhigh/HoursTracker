@@ -627,6 +627,8 @@ final class CloudSyncManager: ObservableObject {
 
     // MARK: - Auth lifecycle
 
+    private let backfillKey = "friendships_backfill_complete_v1"
+
     private func handleSignedIn(uid: String) {
         currentUID = uid
         hasAppliedRemoteEntries = false
@@ -636,6 +638,49 @@ final class CloudSyncManager: ObservableObject {
             if FirebaseMigrationFlags.useServerStats {
                 StatsListenerService.shared.startListening(uid: uid)
             }
+            if !UserDefaults.standard.bool(forKey: backfillKey) {
+                await backfillFriendships(uid: uid)
+            }
+        }
+    }
+
+    private func backfillFriendships(uid: String) async {
+        do {
+            let friendsSnap = try await db.collection("users").document(uid)
+                .collection("friends").getDocuments()
+            guard !friendsSnap.documents.isEmpty else {
+                UserDefaults.standard.set(true, forKey: backfillKey)
+                return
+            }
+            let batch = db.batch()
+            var count = 0
+            for doc in friendsSnap.documents {
+                let friendUid = doc.documentID
+                let sorted = [uid, friendUid].sorted()
+                let pairId = "\(sorted[0])_\(sorted[1])"
+                let ref = db.collection("friendships").document(pairId)
+                let existing = try await ref.getDocument()
+                if existing.exists { continue }
+                let reciprocal = try await db.collection("users").document(friendUid)
+                    .collection("friends").document(uid).getDocument()
+                if !reciprocal.exists { continue }
+                let addedAt = doc.data()["addedAt"] as? Timestamp ?? Timestamp(date: Date())
+                batch.setData([
+                    "userA": sorted[0],
+                    "userB": sorted[1],
+                    "createdAt": addedAt,
+                    "createdBy": uid
+                ], forDocument: ref)
+                count += 1
+            }
+            if count > 0 {
+                try await batch.commit()
+            }
+            UserDefaults.standard.set(true, forKey: backfillKey)
+        } catch {
+            #if DEBUG
+            print("Friendship backfill error: \(error.localizedDescription)")
+            #endif
         }
     }
 
