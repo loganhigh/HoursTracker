@@ -158,9 +158,10 @@ final class FriendsService: ObservableObject {
     func startListening(uid: String) {
         if activeListeningUid == uid,
            friendIdsListener != nil || friendshipListenerA != nil {
-            // Already listening — kick off an immediate profile refresh to make
-            // sure we have the latest data (handles sheet re-opens, tab switches).
-            Task { await refreshFriendProfiles() }
+            Task {
+                await refreshFriendProfiles()
+                await refreshPendingRequests(uid: uid)
+            }
             return
         }
         stopListening()
@@ -675,6 +676,19 @@ final class FriendsService: ObservableObject {
                 }
             }
         }
+    }
+
+    private func refreshPendingRequests(uid: String) async {
+        do {
+            let snapshot = try await db.collection("users").document(uid)
+                .collection("friendRequests").getDocuments(source: .server)
+            pendingRequests = snapshot.documents.compactMap { doc in
+                let data = doc.data()
+                let name = data["fromName"] as? String ?? "Friend"
+                let sentAt = (data["sentAt"] as? Timestamp)?.dateValue()
+                return FriendRequestItem(fromUid: doc.documentID, fromName: name, sentAt: sentAt)
+            }
+        } catch {}
     }
 
     private func mergePublicProfile(uid: String, data: [String: Any]?) {
