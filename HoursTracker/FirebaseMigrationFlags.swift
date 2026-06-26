@@ -35,8 +35,9 @@ enum FirebaseMigrationFlags {
     }
 
     /// Friends list reads `publicProfiles/{uid}` instead of full `users/{uid}`.
+    /// Defaults to false until publicProfiles are reliably populated.
     static var usePublicProfilesForFriends: Bool {
-        if defaults.object(forKey: "ff_public_profiles") == nil { return true }
+        if defaults.object(forKey: "ff_public_profiles") == nil { return false }
         return defaults.bool(forKey: "ff_public_profiles")
     }
 
