@@ -718,6 +718,7 @@ final class CloudSyncManager: ObservableObject {
             FriendShiftNudgeService.shared.stopListening()
             FriendsService.shared.stopListening()
             StatsListenerService.shared.stopListening()
+            ProfilePhotoManager.shared.clearFriendCache()
         }
     }
 

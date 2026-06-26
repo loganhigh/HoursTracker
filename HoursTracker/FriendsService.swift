@@ -560,7 +560,7 @@ final class FriendsService: ObservableObject {
         stopRefreshTimer()
         // Poll every 10 s so friend stats stay fresh even when the Firestore
         // WebSocket listener misses a push (common in simulators / VPNs).
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 await self?.refreshFriendProfiles()
             }
