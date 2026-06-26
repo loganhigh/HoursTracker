@@ -636,8 +636,6 @@ private struct HoursHomeView: View {
                 )
                 .id(currentPayCycle)
 
-                WeatherCard(prestige: store.gamificationProfile.prestige)
-
                 // Best month highlight
                 if let bestText = bestMonthText {
                     HStack(spacing: 10) {

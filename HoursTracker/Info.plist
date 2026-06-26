@@ -13,7 +13,5 @@
 			</array>
 		</dict>
 	</array>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Hour Tracker uses your location to show local weather on the home screen.</string>
 </dict>
 </plist>
