@@ -411,6 +411,8 @@ async function recomputeUserStats(db, uid, options = {}) {
     privacy: userData.privacy || {},
     acceptInvites: userData.acceptInvites !== false,
     companyName: userData.companyName || "",
+    companyHoursLogged: privacy.shareHours ? companyHoursLogged : 0,
+    companyDaysWorked: privacy.shareHours ? companyDaysWorked : 0,
     badgeCount,
     updatedAt,
   };
@@ -430,6 +432,47 @@ async function recomputeUserStats(db, uid, options = {}) {
     { merge: true }
   );
 
+  // Company stats — hours and days since companyStartDate
+  const companyStart = userData.companyStartDate?.toDate?.() || null;
+  const workEntries = entries.filter((e) => !e.isOffDay);
+  const companyEntries = companyStart
+    ? workEntries.filter((e) => {
+        const d = entryDate(e);
+        return d && d >= startOfDay(companyStart);
+      })
+    : workEntries;
+  const companyHoursLogged = companyEntries.reduce((s, e) => s + paidHours(e), 0);
+  const companyDaysWorked = new Set(
+    companyEntries.map((e) => isoDate(entryDate(e))).filter(Boolean)
+  ).size;
+
+  // Per-day breakdown for the current pay cheque
+  const chequeDailySummary = (() => {
+    if (!privacy.shareHours) return [];
+    const today = startOfDay(now);
+    const cutoff = payPeriod.periodEnd < today ? payPeriod.periodEnd : today;
+    const grouped = {};
+    for (const entry of entries) {
+      const d = entryDate(entry);
+      if (!d || entry.isOffDay) continue;
+      const t = d.getTime();
+      if (t < payPeriod.periodStart.getTime() || t >= payPeriod.periodEnd.getTime()) continue;
+      const key = isoDate(d);
+      if (!grouped[key]) grouped[key] = { hours: 0, shifts: 0 };
+      grouped[key].hours += paidHours(entry);
+      grouped[key].shifts += 1;
+    }
+    const result = [];
+    const cursor = new Date(payPeriod.periodStart);
+    while (cursor <= cutoff) {
+      const key = isoDate(cursor);
+      const day = grouped[key] || { hours: 0, shifts: 0 };
+      result.push({ date: key, hours: day.hours, shifts: day.shifts });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return result;
+  })();
+
   const legacyMirror = {
     weeklyHours: privacy.shareHours ? week.hours : 0,
     weeklyShiftsLogged: privacy.shareHours ? week.shifts : 0,
@@ -444,6 +487,13 @@ async function recomputeUserStats(db, uid, options = {}) {
     badgeCount,
     updatedAt,
   };
+  if (privacy.shareHours) {
+    legacyMirror.companyHoursLogged = companyHoursLogged;
+    legacyMirror.companyDaysWorked = companyDaysWorked;
+    legacyMirror.chequeDailySummary = chequeDailySummary;
+    legacyMirror.chequeWindowStart = isoDate(payPeriod.periodStart);
+    legacyMirror.chequeWindowCutoff = isoDate(payPeriod.periodEnd);
+  }
   batch.set(db.collection("users").doc(uid), legacyMirror, { merge: true });
 
   await batch.commit();
