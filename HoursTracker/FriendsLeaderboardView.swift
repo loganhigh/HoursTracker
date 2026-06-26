@@ -1,15 +1,6 @@
 import SwiftUI
 
-/// Three-category weekly leaderboard surfaced from the Friends sheet.
-/// Pulls live friend stats from `FriendsService.friends` and stitches the
-/// current user in via the local `HoursStore` + `GamificationProfile` so
-/// the user always sees themselves in the standings (even with zero friends).
-///
-/// Categories — all derived from the same per-friend profile snapshot that
-/// `CloudSyncManager.saveProfileSnapshot` publishes, so no extra queries:
-/// 1. Most Hours This Week  — `weeklyHours`
-/// 2. Most Shifts           — `weeklyShiftsLogged`
-/// 3. Consistency Streak    — composite of current streak + days logged this week
+/// Leaderboard with weekly hours and company-focused categories.
 struct FriendsLeaderboardView: View {
 
     @ObservedObject var store: HoursStore
@@ -23,24 +14,24 @@ struct FriendsLeaderboardView: View {
 
     enum Category: String, CaseIterable, Identifiable {
         case hours = "Most Hours"
-        case shifts = "Most Shifts"
-        case consistency = "Consistency"
+        case tenure = "Tenure"
+        case companyHours = "Company Hours"
 
         var id: String { rawValue }
 
         var subtitle: String {
             switch self {
-            case .hours:       return "Hours logged Mon–Sun this week"
-            case .shifts:      return "Shifts logged Mon–Sun this week"
-            case .consistency: return "Days logged this week + streak"
+            case .hours:        return "Hours logged Mon–Sun this week"
+            case .tenure:       return "Time at current company"
+            case .companyHours: return "Hours logged since company start"
             }
         }
 
         var icon: String {
             switch self {
-            case .hours:       return "clock.fill"
-            case .shifts:      return "plus.circle.fill"
-            case .consistency: return "flame.fill"
+            case .hours:        return "clock.fill"
+            case .tenure:       return "building.2.fill"
+            case .companyHours: return "briefcase.fill"
             }
         }
     }
@@ -291,9 +282,18 @@ struct FriendsLeaderboardView: View {
         // out of `shareHours` those fields are zeroed at write time AND we
         // skip them in the leaderboard so they don't appear with a misleading
         // "0" rank — privacy + UX both stay clean.
-        let friendRows = friendsService.friends
-            .filter { $0.privacy.shareHours }
-            .map { makeRow(forFriend: $0) }
+        let friendRows: [LeaderboardRow] = {
+            switch selected {
+            case .hours:
+                return friendsService.friends
+                    .filter { $0.privacy.shareHours }
+                    .map { makeRow(forFriend: $0) }
+            case .tenure, .companyHours:
+                return friendsService.friends
+                    .filter { $0.hasCompanyInfo || $0.privacy.shareHours }
+                    .map { makeRow(forFriend: $0) }
+            }
+        }()
         var all = [myRow] + friendRows
         // Sort descending on the category metric; tiebreaker = display name
         // for stable visual ordering.
@@ -308,9 +308,16 @@ struct FriendsLeaderboardView: View {
         let name = UserDefaults.standard.string(forKey: "profile_display_name") ?? "You"
         let profile = store.gamificationProfile
         let weekly = WeeklyStatsCalculator.weeklyHours(store.entries)
-        let shifts = WeeklyStatsCalculator.weeklyShiftsLogged(store.entries)
-        let daysLogged = WeeklyStatsCalculator.weeklyDaysLogged(store.entries)
-        let streak = profile.currentStreak
+        let companyStartTS = UserDefaults.standard.double(forKey: "company_start_date_ts")
+        let companyStartDate = companyStartTS > 0 ? Date(timeIntervalSince1970: companyStartTS) : nil
+        let companyEntries = store.allEntriesIncludingArchive().filter { !$0.isOffDay }
+        let companyHoursLogged: Double = {
+            guard let start = companyStartDate else { return companyEntries.reduce(0) { $0 + $1.paidHours } }
+            let startDay = Calendar.current.startOfDay(for: start)
+            return companyEntries
+                .filter { Calendar.current.startOfDay(for: $0.date) >= startDay }
+                .reduce(0) { $0 + $1.paidHours }
+        }()
         return makeRow(
             id: authService.user?.uid ?? "self",
             name: name,
@@ -320,9 +327,9 @@ struct FriendsLeaderboardView: View {
                 prestige: profile.prestige
             ),
             weeklyHours: weekly,
-            weeklyShifts: shifts,
-            daysLogged: daysLogged,
-            streak: streak,
+            companyStartDate: companyStartDate,
+            companyHoursLogged: companyHoursLogged,
+            companyName: UserDefaults.standard.string(forKey: "company_name") ?? "",
             profilePhotoURL: ProfilePhotoManager.shared.remotePhotoURL
         )
     }
@@ -334,9 +341,9 @@ struct FriendsLeaderboardView: View {
             isMe: false,
             levelDisplayLine: friend.levelDisplayLine,
             weeklyHours: friend.weeklyHours,
-            weeklyShifts: friend.weeklyShiftsLogged,
-            daysLogged: friend.weeklyDaysLogged,
-            streak: friend.currentStreak,
+            companyStartDate: friend.companyStartDate,
+            companyHoursLogged: friend.companyHoursLogged,
+            companyName: friend.companyName,
             profilePhotoURL: friend.profilePhotoURL
         )
     }
@@ -347,9 +354,9 @@ struct FriendsLeaderboardView: View {
         isMe: Bool,
         levelDisplayLine: String,
         weeklyHours: Double,
-        weeklyShifts: Int,
-        daysLogged: Int,
-        streak: Int,
+        companyStartDate: Date?,
+        companyHoursLogged: Double,
+        companyName: String,
         profilePhotoURL: String?
     ) -> LeaderboardRow {
         let primaryValue: Double
@@ -359,17 +366,16 @@ struct FriendsLeaderboardView: View {
         case .hours:
             primaryValue = weeklyHours
             primaryDisplay = AppTheme.Format.hours(weeklyHours)
-            detail = streak > 0 ? "\(streak)-day streak" : ""
-        case .shifts:
-            primaryValue = Double(weeklyShifts)
-            primaryDisplay = weeklyShifts == 1 ? "1 shift" : "\(weeklyShifts) shifts"
-            detail = weeklyHours > 0
-                ? AppTheme.Format.hours(weeklyHours) + " this week"
-                : "no hours logged this week"
-        case .consistency:
-            primaryValue = Double(daysLogged) + Double(min(streak, 30)) / 30.0
-            primaryDisplay = streak > 0 ? "\(streak) days" : "—"
-            detail = "\(daysLogged) day\(daysLogged == 1 ? "" : "s") logged this week"
+            detail = ""
+        case .tenure:
+            let days = companyStartDate.map { Calendar.current.dateComponents([.day], from: $0, to: Date()).day ?? 0 } ?? 0
+            primaryValue = Double(days)
+            primaryDisplay = Self.formatTenure(days: days)
+            detail = companyName.isEmpty ? "" : companyName
+        case .companyHours:
+            primaryValue = companyHoursLogged
+            primaryDisplay = AppTheme.Format.hours(companyHoursLogged)
+            detail = companyName.isEmpty ? "" : companyName
         }
         let subtitle = detail.isEmpty ? levelDisplayLine : "\(levelDisplayLine) • \(detail)"
         return LeaderboardRow(
@@ -382,6 +388,21 @@ struct FriendsLeaderboardView: View {
             subtitle: subtitle,
             profilePhotoURL: profilePhotoURL
         )
+    }
+
+    private static func formatTenure(days: Int) -> String {
+        if days <= 0 { return "—" }
+        let years = days / 365
+        let months = (days % 365) / 30
+        if years > 0 && months > 0 {
+            return "\(years)y \(months)m"
+        } else if years > 0 {
+            return years == 1 ? "1 year" : "\(years) years"
+        } else if months > 0 {
+            return months == 1 ? "1 month" : "\(months) months"
+        } else {
+            return days == 1 ? "1 day" : "\(days) days"
+        }
     }
 }
 
