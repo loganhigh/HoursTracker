@@ -452,22 +452,12 @@ final class FriendsService: ObservableObject {
             throw FriendsError.cannotAddSelf
         }
 
-        // Bail early if already friends — gives a clear error instead of a
-        // silent Firestore permission failure.
-        if FirebaseMigrationFlags.useFriendshipsCollection {
-            let pairId = FriendshipPairId.make(myUid, targetUid)
-            let friendshipSnap = try await db.collection("friendships").document(pairId)
-                .getDocument(source: .server)
-            if friendshipSnap.exists {
-                throw FriendsError.alreadyFriends
-            }
-        } else {
-            let existingFriendSnap = try await db.collection("users")
-                .document(myUid).collection("friends").document(targetUid)
-                .getDocument(source: .server)
-            if existingFriendSnap.exists {
-                throw FriendsError.alreadyFriends
-            }
+        // Check legacy path (permissive read rules) for already-friends.
+        let existingFriendSnap = try await db.collection("users")
+            .document(myUid).collection("friends").document(targetUid)
+            .getDocument(source: .server)
+        if existingFriendSnap.exists {
+            throw FriendsError.alreadyFriends
         }
 
         // Honor the recipient's privacy flag. Defaults to `true` when the
