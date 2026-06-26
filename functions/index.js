@@ -531,3 +531,87 @@ exports.backfillFriendships = onCall(
     return { ok: true, backfilled };
   }
 );
+
+/** Accept a friend request — creates both friend links, friendships doc, cleans up requests. */
+exports.acceptFriendRequest = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+    const myUid = request.auth.uid;
+    const fromUid = request.data?.fromUid;
+    if (!fromUid || typeof fromUid !== "string") {
+      throw new HttpsError("invalid-argument", "fromUid is required.");
+    }
+
+    const requestDoc = await db.collection("users").doc(myUid)
+      .collection("friendRequests").doc(fromUid).get();
+    if (!requestDoc.exists) {
+      throw new HttpsError("not-found", "Friend request not found.");
+    }
+
+    const batch = db.batch();
+    const now = FieldValue.serverTimestamp();
+
+    batch.set(db.collection("users").doc(myUid).collection("friends").doc(fromUid),
+      { friendUid: fromUid, addedAt: now });
+    batch.set(db.collection("users").doc(fromUid).collection("friends").doc(myUid),
+      { friendUid: myUid, addedAt: now });
+
+    batch.delete(db.collection("users").doc(myUid).collection("friendRequests").doc(fromUid));
+    batch.delete(db.collection("users").doc(fromUid).collection("friendRequests").doc(myUid));
+
+    const sorted = [myUid, fromUid].sort();
+    const pairId = `${sorted[0]}_${sorted[1]}`;
+    batch.set(db.collection("friendships").doc(pairId), {
+      userA: sorted[0],
+      userB: sorted[1],
+      createdAt: now,
+      createdBy: myUid,
+    });
+
+    await batch.commit();
+    return { ok: true };
+  }
+);
+
+/** Decline a friend request. */
+exports.declineFriendRequest = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+    const myUid = request.auth.uid;
+    const fromUid = request.data?.fromUid;
+    if (!fromUid || typeof fromUid !== "string") {
+      throw new HttpsError("invalid-argument", "fromUid is required.");
+    }
+    await db.collection("users").doc(myUid)
+      .collection("friendRequests").doc(fromUid).delete();
+    return { ok: true };
+  }
+);
+
+/** Remove a friend — deletes both friend links, friendships doc, stale requests. */
+exports.removeFriend = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+    const myUid = request.auth.uid;
+    const friendUid = request.data?.friendUid;
+    if (!friendUid || typeof friendUid !== "string") {
+      throw new HttpsError("invalid-argument", "friendUid is required.");
+    }
+
+    const batch = db.batch();
+    batch.delete(db.collection("users").doc(myUid).collection("friends").doc(friendUid));
+    batch.delete(db.collection("users").doc(friendUid).collection("friends").doc(myUid));
+    batch.delete(db.collection("users").doc(myUid).collection("friendRequests").doc(friendUid));
+    batch.delete(db.collection("users").doc(friendUid).collection("friendRequests").doc(myUid));
+
+    const sorted = [myUid, friendUid].sort();
+    const pairId = `${sorted[0]}_${sorted[1]}`;
+    batch.delete(db.collection("friendships").doc(pairId));
+
+    await batch.commit();
+    return { ok: true };
+  }
+);

@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseFunctions
 
 // MARK: - Models
 
@@ -124,6 +125,7 @@ final class FriendsService: ObservableObject {
     @Published var myFriendCode: String?
 
     private let db = Firestore.firestore()
+    private lazy var functions = Functions.functions(region: "us-central1")
     private var friendIdsListener: ListenerRegistration?
     private var friendIdsListenerKey: String?
     private var friendshipListenerA: ListenerRegistration?
@@ -486,60 +488,29 @@ final class FriendsService: ObservableObject {
     }
 
     func acceptRequest(fromUid: String, myUid: String) async throws {
-        let batch = db.batch()
-        let myFriendRef = db.collection("users").document(myUid).collection("friends").document(fromUid)
-        let theirFriendRef = db.collection("users").document(fromUid).collection("friends").document(myUid)
-        let requestRef = db.collection("users").document(myUid).collection("friendRequests").document(fromUid)
-        let theirOutgoingRef = db.collection("users").document(fromUid)
-            .collection("friendRequests").document(myUid)
-
-        batch.setData(["friendUid": fromUid, "addedAt": FieldValue.serverTimestamp()], forDocument: myFriendRef)
-        batch.setData(["friendUid": myUid, "addedAt": FieldValue.serverTimestamp()], forDocument: theirFriendRef)
-        batch.deleteDocument(requestRef)
-        batch.deleteDocument(theirOutgoingRef)
-
-        try await batch.commit()
-
-        // Write friendships doc separately so a rule denial doesn't block
-        // the core friend link + request cleanup above.
-        if FirebaseMigrationFlags.useFriendshipsCollection {
-            let pairId = FriendshipPairId.make(myUid, fromUid)
-            let sorted = [myUid, fromUid].sorted()
-            try? await db.collection("friendships").document(pairId).setData([
-                "userA": sorted[0],
-                "userB": sorted[1],
-                "createdAt": FieldValue.serverTimestamp(),
-                "createdBy": myUid
-            ])
+        do {
+            _ = try await functions.httpsCallable("acceptFriendRequest")
+                .call(["fromUid": fromUid])
+        } catch {
+            throw FriendsError.callableFailed(error)
         }
     }
 
     func declineRequest(fromUid: String, myUid: String) async throws {
-        try await db.collection("users").document(myUid)
-            .collection("friendRequests").document(fromUid)
-            .delete()
+        do {
+            _ = try await functions.httpsCallable("declineFriendRequest")
+                .call(["fromUid": fromUid])
+        } catch {
+            throw FriendsError.callableFailed(error)
+        }
     }
 
-    /// Removes a friend link from both users' friend lists and clears any
-    /// stale incoming friend-request on this user's account.
     func removeFriend(friendUid: String, myUid: String) async throws {
-        guard NetworkMonitor.shared.isConnected else {
-            throw NSError(domain: "FriendsService", code: -1,
-                          userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please try again when online."])
-        }
-        let batch = db.batch()
-        batch.deleteDocument(db.collection("users").document(myUid).collection("friends").document(friendUid))
-        batch.deleteDocument(db.collection("users").document(friendUid).collection("friends").document(myUid))
-        batch.deleteDocument(db.collection("users").document(myUid).collection("friendRequests").document(friendUid))
-        batch.deleteDocument(db.collection("users").document(friendUid).collection("friendRequests").document(myUid))
-
-        try await batch.commit()
-
-        // Delete friendships doc separately — if it doesn't exist, the
-        // security rule check on resource.data would deny a batch delete.
-        if FirebaseMigrationFlags.useFriendshipsCollection {
-            let pairId = FriendshipPairId.make(myUid, friendUid)
-            try? await db.collection("friendships").document(pairId).delete()
+        do {
+            _ = try await functions.httpsCallable("removeFriend")
+                .call(["friendUid": friendUid])
+        } catch {
+            throw FriendsError.callableFailed(error)
         }
     }
 
@@ -891,6 +862,7 @@ enum FriendsError: LocalizedError {
     case cannotAddSelf
     case invitesDisabled
     case alreadyFriends
+    case callableFailed(Error)
 
     var errorDescription: String? {
         switch self {
@@ -899,6 +871,7 @@ enum FriendsError: LocalizedError {
         case .cannotAddSelf: return "You can't add yourself as a friend."
         case .invitesDisabled: return "This user isn't accepting friend invites right now."
         case .alreadyFriends: return "You're already friends with this person."
+        case .callableFailed: return "Something went wrong. Check your connection and try again."
         }
     }
 }

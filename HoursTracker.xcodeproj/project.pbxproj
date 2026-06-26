@@ -6,20 +6,126 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		3979DBF02FB9912F00FA5C57 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = FB002AUTH2F90000100000002 /* FirebaseAuth */; };
+		3979DBF12FB9912F00FA5C57 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = FB003FS2F90000100000003 /* FirebaseFirestore */; };
+		399C69202F71C97F00AE7851 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 395F9ED62F34701900F3AB21 /* WidgetKit.framework */; };
+		399C69212F71C97F00AE7851 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 395F9ED82F34701900F3AB21 /* SwiftUI.framework */; };
+		399C69322F71C98000AE7851 /* HoursTrackerWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 399C691F2F71C97F00AE7851 /* HoursTrackerWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		39DC13672F210AA7000BC0FD /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39DC13662F210AA2000BC0FD /* SettingsView.swift */; };
+		7A0001A12F30000100000001 /* OvertimeRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001A02F30000100000001 /* OvertimeRulesTests.swift */; };
+		FB004MSG2F90000100000004B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = FB004MSG2F90000100000004 /* FirebaseMessaging */; };
+		FB005STG2F90000100000005B /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = FB005STG2F90000100000005 /* FirebaseStorage */; };
+		FB006FUN2F90000100000006B /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = FB006FUN2F90000100000006 /* FirebaseFunctions */; };
+		GID001SIG2F90000100000005B /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = GID001SIG2F90000100000005 /* GoogleSignIn */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		399C69302F71C98000AE7851 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 39EC399D2F20CA7D00130B56 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 399C691E2F71C97F00AE7851;
+			remoteInfo = HoursTrackerWidgetExtension;
+		};
+		7A0001B12F30000100000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 39EC399D2F20CA7D00130B56 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 39EC39A42F20CA7D00130B56;
+			remoteInfo = HoursTracker;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		395F9EEF2F34701A00F3AB21 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				399C69322F71C98000AE7851 /* HoursTrackerWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		395F9ED62F34701900F3AB21 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		395F9ED82F34701900F3AB21 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		399C691F2F71C97F00AE7851 /* HoursTrackerWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HoursTrackerWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		39DC13662F210AA2000BC0FD /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		39EC39A52F20CA7D00130B56 /* HoursTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HoursTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A0001A02F30000100000001 /* OvertimeRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvertimeRulesTests.swift; sourceTree = "<group>"; };
+		7A0001A32F30000100000001 /* HoursTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HoursTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		399C69352F71C98000AE7851 /* Exceptions for "HoursTrackerWidget" folder in "HoursTrackerWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 399C691E2F71C97F00AE7851 /* HoursTrackerWidgetExtension */;
+		};
+		39EC39A82F20CA7D00130B57 /* Exceptions for "HoursTracker" folder in "HoursTracker" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 39EC39A42F20CA7D00130B56 /* HoursTracker */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		395F9EDA2F34701900F3AB21 /* HoursTrackerWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = HoursTrackerWidget;
+			sourceTree = "<group>";
+		};
+		399C69222F71C97F00AE7851 /* HoursTrackerWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				399C69352F71C98000AE7851 /* Exceptions for "HoursTrackerWidget" folder in "HoursTrackerWidgetExtension" target */,
+			);
+			path = HoursTrackerWidget;
+			sourceTree = "<group>";
+		};
 		39EC39A72F20CA7D00130B56 /* HoursTracker */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				39EC39A82F20CA7D00130B57 /* Exceptions for "HoursTracker" folder in "HoursTracker" target */,
+			);
 			path = HoursTracker;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		399C691C2F71C97F00AE7851 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				399C69212F71C97F00AE7851 /* SwiftUI.framework in Frameworks */,
+				399C69202F71C97F00AE7851 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		39EC39A22F20CA7D00130B56 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3979DBF12FB9912F00FA5C57 /* FirebaseFirestore in Frameworks */,
+				3979DBF02FB9912F00FA5C57 /* FirebaseAuth in Frameworks */,
+				FB004MSG2F90000100000004B /* FirebaseMessaging in Frameworks */,
+				FB005STG2F90000100000005B /* FirebaseStorage in Frameworks */,
+				FB006FUN2F90000100000006B /* FirebaseFunctions in Frameworks */,
+				GID001SIG2F90000100000005B /* GoogleSignIn in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A00019E2F30000100000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -29,10 +135,24 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		395F9ED52F34701900F3AB21 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				395F9ED62F34701900F3AB21 /* WidgetKit.framework */,
+				395F9ED82F34701900F3AB21 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		39EC399C2F20CA7D00130B56 = {
 			isa = PBXGroup;
 			children = (
 				39EC39A72F20CA7D00130B56 /* HoursTracker */,
+				39DC13662F210AA2000BC0FD /* SettingsView.swift */,
+				7A00019F2F30000100000001 /* HoursTrackerTests */,
+				395F9EDA2F34701900F3AB21 /* HoursTrackerWidget */,
+				399C69222F71C97F00AE7851 /* HoursTrackerWidget */,
+				395F9ED52F34701900F3AB21 /* Frameworks */,
 				39EC39A62F20CA7D00130B56 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,13 +161,45 @@
 			isa = PBXGroup;
 			children = (
 				39EC39A52F20CA7D00130B56 /* HoursTracker.app */,
+				7A0001A32F30000100000001 /* HoursTrackerTests.xctest */,
+				399C691F2F71C97F00AE7851 /* HoursTrackerWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		7A00019F2F30000100000001 /* HoursTrackerTests */ = {
+			isa = PBXGroup;
+			children = (
+				7A0001A02F30000100000001 /* OvertimeRulesTests.swift */,
+			);
+			path = HoursTrackerTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		399C691E2F71C97F00AE7851 /* HoursTrackerWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 399C69362F71C98000AE7851 /* Build configuration list for PBXNativeTarget "HoursTrackerWidgetExtension" */;
+			buildPhases = (
+				399C691B2F71C97F00AE7851 /* Sources */,
+				399C691C2F71C97F00AE7851 /* Frameworks */,
+				399C691D2F71C97F00AE7851 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				399C69222F71C97F00AE7851 /* HoursTrackerWidget */,
+			);
+			name = HoursTrackerWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = HoursTrackerWidgetExtension;
+			productReference = 399C691F2F71C97F00AE7851 /* HoursTrackerWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		39EC39A42F20CA7D00130B56 /* HoursTracker */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 39EC39B02F20CA7E00130B56 /* Build configuration list for PBXNativeTarget "HoursTracker" */;
@@ -55,20 +207,46 @@
 				39EC39A12F20CA7D00130B56 /* Sources */,
 				39EC39A22F20CA7D00130B56 /* Frameworks */,
 				39EC39A32F20CA7D00130B56 /* Resources */,
+				395F9EEF2F34701A00F3AB21 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				399C69312F71C98000AE7851 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				39EC39A72F20CA7D00130B56 /* HoursTracker */,
 			);
 			name = HoursTracker;
 			packageProductDependencies = (
+				FB002AUTH2F90000100000002 /* FirebaseAuth */,
+				FB003FS2F90000100000003 /* FirebaseFirestore */,
+				FB004MSG2F90000100000004 /* FirebaseMessaging */,
+				FB005STG2F90000100000005 /* FirebaseStorage */,
+				FB006FUN2F90000100000006 /* FirebaseFunctions */,
+				GID001SIG2F90000100000005 /* GoogleSignIn */,
 			);
 			productName = HoursTracker;
 			productReference = 39EC39A52F20CA7D00130B56 /* HoursTracker.app */;
 			productType = "com.apple.product-type.application";
+		};
+		7A0001A22F30000100000001 /* HoursTrackerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A0001AE2F30000100000001 /* Build configuration list for PBXNativeTarget "HoursTrackerTests" */;
+			buildPhases = (
+				7A00019D2F30000100000001 /* Sources */,
+				7A00019E2F30000100000001 /* Frameworks */,
+				7A0001B02F30000100000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7A0001B22F30000100000001 /* PBXTargetDependency */,
+			);
+			name = HoursTrackerTests;
+			productName = HoursTrackerTests;
+			productReference = 7A0001A32F30000100000001 /* HoursTrackerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -80,7 +258,13 @@
 				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
+					399C691E2F71C97F00AE7851 = {
+						CreatedOnToolsVersion = 26.2;
+					};
 					39EC39A42F20CA7D00130B56 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					7A0001A22F30000100000001 = {
 						CreatedOnToolsVersion = 26.2;
 					};
 				};
@@ -91,21 +275,43 @@
 			knownRegions = (
 				en,
 				Base,
+				es,
+				fr,
 			);
 			mainGroup = 39EC399C2F20CA7D00130B56;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				FB001REF2F90000100000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				GID001REF2F90000100000006 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 39EC39A62F20CA7D00130B56 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				39EC39A42F20CA7D00130B56 /* HoursTracker */,
+				7A0001A22F30000100000001 /* HoursTrackerTests */,
+				399C691E2F71C97F00AE7851 /* HoursTrackerWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		399C691D2F71C97F00AE7851 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		39EC39A32F20CA7D00130B56 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A0001B02F30000100000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -115,16 +321,110 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		39EC39A12F20CA7D00130B56 /* Sources */ = {
+		399C691B2F71C97F00AE7851 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		39EC39A12F20CA7D00130B56 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				39DC13672F210AA7000BC0FD /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A00019D2F30000100000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7A0001A12F30000100000001 /* OvertimeRulesTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		399C69312F71C98000AE7851 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 399C691E2F71C97F00AE7851 /* HoursTrackerWidgetExtension */;
+			targetProxy = 399C69302F71C98000AE7851 /* PBXContainerItemProxy */;
+		};
+		7A0001B22F30000100000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 39EC39A42F20CA7D00130B56 /* HoursTracker */;
+			targetProxy = 7A0001B12F30000100000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		399C69332F71C98000AE7851 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = HoursTrackerWidget/HoursTrackerWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 12;
+				DEVELOPMENT_TEAM = 3649Y4UC9W;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HoursTrackerWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = HoursTrackerWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.9.7;
+				PRODUCT_BUNDLE_IDENTIFIER = com.app.HourTracker.HoursTrackerWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		399C69342F71C98000AE7851 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = HoursTrackerWidget/HoursTrackerWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 12;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 3649Y4UC9W;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HoursTrackerWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = HoursTrackerWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.9.7;
+				PRODUCT_BUNDLE_IDENTIFIER = com.app.HourTracker.HoursTrackerWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		39EC39AE2F20CA7E00130B56 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -251,22 +551,32 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = HoursTracker/HoursTracker.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = 3649Y4UC9W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HoursTracker/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Hour Tracker";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Used to scan certificates and award documents.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Used to upload certificate, award, and profile photos.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.logan.HoursTracker;
+				MARKETING_VERSION = 1.9.7;
+				PRODUCT_BUNDLE_IDENTIFIER = com.app.HourTracker;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -283,22 +593,34 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = HoursTracker/HoursTrackerRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 3649Y4UC9W;
-				ENABLE_PREVIEWS = YES;
+				ENABLE_PREVIEWS = NO;
+				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HoursTracker/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Hour Tracker";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Used to scan certificates and award documents.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Used to upload certificate, award, and profile photos.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.logan.HoursTracker;
+				MARKETING_VERSION = 1.9.7;
+				PRODUCT_BUNDLE_IDENTIFIER = com.app.HourTracker;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -310,9 +632,68 @@
 			};
 			name = Release;
 		};
+		7A0001AC2F30000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 12;
+				DEVELOPMENT_TEAM = 3649Y4UC9W;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.9.7;
+				PRODUCT_BUNDLE_IDENTIFIER = com.app.HourTracker.HoursTrackerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HoursTracker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HoursTracker";
+			};
+			name = Debug;
+		};
+		7A0001AD2F30000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 12;
+				DEVELOPMENT_TEAM = 3649Y4UC9W;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.9.7;
+				PRODUCT_BUNDLE_IDENTIFIER = com.app.HourTracker.HoursTrackerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HoursTracker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HoursTracker";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		399C69362F71C98000AE7851 /* Build configuration list for PBXNativeTarget "HoursTrackerWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				399C69332F71C98000AE7851 /* Debug */,
+				399C69342F71C98000AE7851 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		39EC39A02F20CA7D00130B56 /* Build configuration list for PBXProject "HoursTracker" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -331,7 +712,68 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		7A0001AE2F30000100000001 /* Build configuration list for PBXNativeTarget "HoursTrackerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A0001AC2F30000100000001 /* Debug */,
+				7A0001AD2F30000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		FB001REF2F90000100000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.13.0;
+			};
+		};
+		GID001REF2F90000100000006 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		FB002AUTH2F90000100000002 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB001REF2F90000100000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		FB003FS2F90000100000003 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB001REF2F90000100000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		FB004MSG2F90000100000004 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB001REF2F90000100000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+		FB005STG2F90000100000005 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB001REF2F90000100000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+		FB006FUN2F90000100000006 /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB001REF2F90000100000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
+		};
+		GID001SIG2F90000100000005 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = GID001REF2F90000100000006 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 39EC399D2F20CA7D00130B56 /* Project object */;
 }
