@@ -14,7 +14,7 @@ struct FriendsLeaderboardView: View {
 
     enum Category: String, CaseIterable, Identifiable {
         case hours = "Most Hours"
-        case tenure = "Tenure"
+        case tenure = "Time at Company"
         case companyHours = "Company Hours"
 
         var id: String { rawValue }
