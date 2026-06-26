@@ -164,8 +164,15 @@ exports.notifyFriendsOnShiftLogged = onDocumentCreated(
     const body = data.body || "logged a shift";
     const notificationBody = `${authorName} ${body}`;
 
+    // Idempotency: skip if we already sent notifications for this event.
+    const dedupeRef = db.collection("_fcmDedup").doc(`shift_${authorUid}_${eventId}`);
+    const dedupeSnap = await dedupeRef.get();
+    if (dedupeSnap.exists) return;
+
     const mutualFriendUids = await getMutualFriendUids(authorUid);
     if (mutualFriendUids.length === 0) return;
+
+    await dedupeRef.set({ sentAt: FieldValue.serverTimestamp() });
 
     const sendPromises = [];
 

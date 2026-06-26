@@ -82,10 +82,11 @@ final class CloudSyncManager: ObservableObject {
 
     func checkPendingChanges() {
         let pendingEntries = UserDefaults.standard.integer(forKey: "pending_entries_count")
+        let pendingDeletes = getPendingDeletes().count
         let pendingSettings = UserDefaults.standard.bool(forKey: "pending_settings_sync") ? 1 : 0
         let pendingProfile = UserDefaults.standard.bool(forKey: pendingProfileSyncKey) ? 1 : 0
         DispatchQueue.main.async { [weak self] in
-            self?.pendingChanges = pendingEntries + pendingSettings + pendingProfile
+            self?.pendingChanges = pendingEntries + pendingDeletes + pendingSettings + pendingProfile
         }
     }
 
@@ -141,7 +142,12 @@ final class CloudSyncManager: ObservableObject {
     }
 
     func deleteEntry(_ entry: WorkEntry, completion: @escaping (Result<Void, Error>) -> Void) {
-        guard let uid = currentUID, networkMonitor.isConnected else {
+        guard let uid = currentUID else {
+            completion(.success(()))
+            return
+        }
+        guard networkMonitor.isConnected else {
+            queueDeleteForSync(entry.id)
             completion(.success(()))
             return
         }
@@ -686,11 +692,7 @@ final class CloudSyncManager: ObservableObject {
 
     private func handleSignedOut() {
         let uid = currentUID
-        if let uid {
-            Task { @MainActor in
-                await PushNotificationService.shared.clearTokenOnSignOut(uid: uid)
-            }
-        }
+        // Stop listeners FIRST to prevent callbacks from processing stale data.
         if let entriesListenerKey {
             FirebaseListenerRegistry.shared.remove(key: entriesListenerKey)
         }
@@ -719,6 +721,9 @@ final class CloudSyncManager: ObservableObject {
             FriendsService.shared.stopListening()
             StatsListenerService.shared.stopListening()
             ProfilePhotoManager.shared.clearFriendCache()
+            if let uid {
+                await PushNotificationService.shared.clearTokenOnSignOut(uid: uid)
+            }
         }
     }
 
@@ -850,7 +855,41 @@ final class CloudSyncManager: ObservableObject {
         return entry
     }
 
-    // MARK: - Offline queue (legacy)
+    // MARK: - Offline queue
+
+    private func queueDeleteForSync(_ entryID: UUID) {
+        var pending = getPendingDeletes()
+        if !pending.contains(entryID.uuidString) {
+            pending.append(entryID.uuidString)
+        }
+        savePendingDeletes(pending)
+    }
+
+    private func getPendingDeletes() -> [String] {
+        UserDefaults.standard.stringArray(forKey: "pending_deletes") ?? []
+    }
+
+    private func savePendingDeletes(_ ids: [String]) {
+        UserDefaults.standard.set(ids, forKey: "pending_deletes")
+        checkPendingChanges()
+    }
+
+    private func syncPendingDeletes() {
+        guard let uid = currentUID, networkMonitor.isConnected else { return }
+        let pending = getPendingDeletes()
+        guard !pending.isEmpty else { return }
+        let collection = entriesCollectionName()
+        var remaining = pending
+        for idString in pending {
+            db.collection("users").document(uid).collection(collection).document(idString)
+                .delete { [weak self] error in
+                    if error == nil {
+                        remaining.removeAll { $0 == idString }
+                        self?.savePendingDeletes(remaining)
+                    }
+                }
+        }
+    }
 
     private func queueEntryForSync(_ entry: WorkEntry) {
         var pending = getPendingEntries()
@@ -884,6 +923,7 @@ final class CloudSyncManager: ObservableObject {
     private func syncWhenOnline() {
         guard currentUID != nil, networkMonitor.isConnected, let store = hoursStore else { return }
         let pendingProfile = UserDefaults.standard.bool(forKey: pendingProfileSyncKey)
+        syncPendingDeletes()
         if pendingChanges > 0 {
             syncAll(entries: store.entries, settings: store.paySettings) { _ in }
         } else if pendingProfile {
