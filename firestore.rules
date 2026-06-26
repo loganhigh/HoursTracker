@@ -1,0 +1,199 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isFriendOf(userId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid)/friends/$(userId));
+    }
+
+    // pairId is always sorted lexicographically: min(a,b)_max(a,b)
+    function friendshipPairExists(uidA, uidB) {
+      return (uidA < uidB
+        ? exists(/databases/$(database)/documents/friendships/$(uidA + '_' + uidB))
+        : exists(/databases/$(database)/documents/friendships/$(uidB + '_' + uidA)));
+    }
+
+    function isFriendOfAny(userId) {
+      return isSignedIn()
+        && (isFriendOf(userId) || friendshipPairExists(request.auth.uid, userId));
+    }
+
+    function canReadSocialContent(ownerUid) {
+      return isSignedIn() && (request.auth.uid == ownerUid || isFriendOfAny(ownerUid));
+    }
+
+    function isFriendshipParticipant() {
+      return isSignedIn()
+        && (resource.data.userA == request.auth.uid || resource.data.userB == request.auth.uid);
+    }
+
+    function validPost(data) {
+      return data.authorId == request.auth.uid
+        && data.text is string
+        && data.text.size() > 0
+        && data.text.size() <= 280
+        && data.visibility == 'friendsOnly';
+    }
+
+    function validComment(data) {
+      return data.authorId == request.auth.uid
+        && data.text is string
+        && data.text.size() > 0
+        && data.text.size() <= 200;
+    }
+
+    match /publicProfiles/{profileUid} {
+      allow read: if isSignedIn();
+      allow write: if false;
+
+      match /stats/{statDoc} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
+    }
+
+    match /friendships/{pairId} {
+      allow read: if isSignedIn()
+        && (resource.data.userA == request.auth.uid || resource.data.userB == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.userA is string
+        && request.resource.data.userB is string
+        && (request.auth.uid == request.resource.data.userA
+          || request.auth.uid == request.resource.data.userB);
+      allow delete: if isFriendshipParticipant();
+      allow update: if false;
+    }
+
+    match /users/{uid} {
+      // Profile docs are readable by any signed-in user so friend-code lookup
+      // (query on `friendCode`) works before a friendship exists. Push device
+      // tokens live in the private `deviceTokens` subcollection instead.
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+
+      match /paySettings/{doc} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      match /gamification/{doc} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      match /entries/{entryId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      match /timeEntries/{entryId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      match /stats/{statDoc} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+
+      match /feed/{feedDoc} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+
+      match /deviceTokens/{deviceId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      match /friends/{friendUid} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+
+        allow create: if request.auth != null
+          && request.auth.uid == friendUid
+          && exists(/databases/$(database)/documents/users/$(friendUid)/friendRequests/$(uid));
+
+        allow delete: if request.auth != null
+          && (request.auth.uid == uid || request.auth.uid == friendUid);
+      }
+
+      match /friendRequests/{fromUid} {
+        // Recipient can read/delete incoming requests; sender can delete a request they sent.
+        allow read, delete: if request.auth != null
+          && (request.auth.uid == uid || request.auth.uid == fromUid);
+
+        // Shared invite guard — recipient must accept invites (or the field
+        // is absent, which means the default is open).
+        allow create, update: if request.auth != null
+          && request.auth.uid == fromUid
+          && request.resource.data.fromUid == fromUid
+          && (
+            !exists(/databases/$(database)/documents/users/$(uid))
+            || !("acceptInvites" in get(/databases/$(database)/documents/users/$(uid)).data)
+            || get(/databases/$(database)/documents/users/$(uid)).data.acceptInvites == true
+          );
+      }
+
+      match /activity/{eventId} {
+        allow read: if canReadSocialContent(uid);
+        allow create, update, delete:
+          if request.auth != null && request.auth.uid == uid;
+      }
+
+      match /shiftNudges/{nudgeId} {
+        allow read: if request.auth != null && (
+          request.auth.uid == uid
+          || resource.data.fromUid == request.auth.uid
+        );
+        allow create: if request.auth != null
+          && request.auth.uid == request.resource.data.fromUid
+          && request.auth.uid != uid
+          && isFriendOfAny(uid)
+          && request.resource.data.fromName is string
+          && request.resource.data.fromName.size() > 0
+          && request.resource.data.fromName.size() <= 40
+          && request.resource.data.status == 'pending'
+          && request.resource.data.keys().hasOnly(['fromUid', 'fromName', 'status', 'createdAt']);
+        allow update: if request.auth != null
+          && request.auth.uid == uid
+          && resource.data.status == 'pending'
+          && request.resource.data.status == 'reacted'
+          && request.resource.data.reaction is string
+          && request.resource.data.reaction.size() > 0
+          && request.resource.data.reaction.size() <= 8
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'reaction', 'reactedAt']);
+        allow delete: if request.auth != null && (
+          request.auth.uid == uid || resource.data.fromUid == request.auth.uid
+        );
+      }
+
+      match /boardPosts/{postId} {
+        allow read: if canReadSocialContent(uid);
+        allow create: if request.auth != null
+          && request.auth.uid == uid
+          && validPost(request.resource.data);
+        allow delete: if request.auth != null && request.auth.uid == uid;
+        allow update: if request.auth != null && (
+          request.auth.uid == uid
+          || (
+            isFriendOfAny(uid)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions', 'commentCount'])
+          )
+        );
+
+        match /comments/{commentId} {
+          allow read: if canReadSocialContent(uid);
+          allow create: if canReadSocialContent(uid)
+            && validComment(request.resource.data);
+          allow delete: if request.auth != null
+            && resource.data.authorId == request.auth.uid;
+          allow update: if request.auth != null
+            && resource.data.authorId == request.auth.uid
+            && validComment(request.resource.data);
+        }
+      }
+    }
+  }
+}
