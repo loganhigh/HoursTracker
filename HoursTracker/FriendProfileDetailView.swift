@@ -10,6 +10,7 @@ struct FriendProfileDetailView: View {
     @State private var showRemoveConfirm = false
     @State private var isRemoving = false
     @State private var showFullPhoto = false
+    @State private var showAllBadges = false
 
     private var friend: FriendProfile? {
         friendsService.friends.first { $0.uid == friendUid }
@@ -317,7 +318,26 @@ struct FriendProfileDetailView: View {
                         .padding(.vertical, 12)
                 } else {
                     if !earned.isEmpty {
-                        friendBadgesGrid(badges: earned, tier: tier)
+                        let visible = showAllBadges ? earned : Array(earned.prefix(9))
+                        friendBadgesGrid(badges: visible, tier: tier)
+                        if earned.count > 9 && !showAllBadges {
+                            Button {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    showAllBadges = true
+                                }
+                            } label: {
+                                Text("See all \(earned.count) badges")
+                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(AppTheme.Colors.accent)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .fill(AppTheme.Colors.accent.opacity(0.12))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                     if !legend.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
