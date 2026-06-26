@@ -392,6 +392,8 @@ struct FriendsView: View {
         guard let uid = authService.user?.uid else { return }
         do {
             try await friendsService.acceptRequest(fromUid: request.fromUid, myUid: uid)
+            // Re-attach listeners so the new friend appears immediately
+            friendsService.startListening(uid: uid)
             store.syncProfileSnapshotToCloud()
             actionMessageIsError = false
             actionMessage = "You're now friends with \(request.fromName)"
