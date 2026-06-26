@@ -52,6 +52,38 @@ struct WeatherData {
     }
 }
 
+// MARK: - Location Helper
+
+private class LocationDelegate: NSObject, CLLocationManagerDelegate {
+    var onLocation: ((CLLocation) -> Void)?
+    var onDenied: (() -> Void)?
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        if let location = locations.last {
+            onLocation?(location)
+            onLocation = nil
+            manager.stopUpdatingLocation()
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        onDenied?()
+        onDenied = nil
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.startUpdatingLocation()
+        case .denied, .restricted:
+            onDenied?()
+            onDenied = nil
+        default:
+            break
+        }
+    }
+}
+
 // MARK: - Weather Service
 
 @MainActor
@@ -60,24 +92,48 @@ final class WeatherService: ObservableObject {
 
     @Published var weather: WeatherData?
     @Published var isLoading = false
+    @Published var locationDenied = false
 
     private let locationManager = CLLocationManager()
+    private let locationDelegate = LocationDelegate()
     private let geocoder = CLGeocoder()
     private var lastFetch: Date?
+    private var hasFetched = false
+
+    private init() {
+        locationManager.delegate = locationDelegate
+        locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
+    }
 
     func fetchIfNeeded() {
         if let last = lastFetch, Date().timeIntervalSince(last) < 1800 { return }
         guard !isLoading else { return }
         isLoading = true
+        locationDenied = false
 
-        locationManager.requestWhenInUseAuthorization()
-        guard let location = locationManager.location else {
-            isLoading = false
-            return
+        locationDelegate.onLocation = { [weak self] location in
+            Task { @MainActor in
+                await self?.fetch(location: location)
+            }
+        }
+        locationDelegate.onDenied = { [weak self] in
+            Task { @MainActor in
+                self?.isLoading = false
+                self?.locationDenied = true
+            }
         }
 
-        Task {
-            await fetch(location: location)
+        let status = locationManager.authorizationStatus
+        switch status {
+        case .notDetermined:
+            locationManager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            locationManager.startUpdatingLocation()
+        case .denied, .restricted:
+            isLoading = false
+            locationDenied = true
+        @unknown default:
+            isLoading = false
         }
     }
 
@@ -118,6 +174,7 @@ final class WeatherService: ObservableObject {
                     isDay: isDay
                 )
                 lastFetch = Date()
+                hasFetched = true
             }
         } catch {
             #if DEBUG
@@ -141,22 +198,19 @@ final class WeatherService: ObservableObject {
 
 struct WeatherCard: View {
     let prestige: Int
-    @StateObject private var service = WeatherService.shared
+    @ObservedObject private var service = WeatherService.shared
 
     private var tier: PrestigeTheme.Tier {
         PrestigeTheme.tier(for: prestige)
     }
 
     var body: some View {
-        Group {
-            if let weather = service.weather {
-                weatherContent(weather)
-            } else if service.isLoading {
-                loadingContent
-            }
-        }
-        .onAppear {
-            service.fetchIfNeeded()
+        if let weather = service.weather {
+            weatherContent(weather)
+        } else if service.isLoading {
+            loadingContent
+        } else if service.locationDenied {
+            deniedContent
         }
     }
 
@@ -202,14 +256,7 @@ struct WeatherCard: View {
             .padding(.top, 12)
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(tier.primary.opacity(0.25), lineWidth: 1)
-                )
-        )
+        .background(cardBackground)
     }
 
     private func statPill(label: String, value: String) -> some View {
@@ -240,13 +287,29 @@ struct WeatherCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(AppTheme.Colors.stroke, lineWidth: 1)
-                )
-        )
+        .background(cardBackground)
+    }
+
+    private var deniedContent: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "location.slash.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(AppTheme.Colors.faint)
+            Text("Enable location in Settings for weather")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(AppTheme.Colors.subtext)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(16)
+        .background(cardBackground)
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(AppTheme.Colors.card2)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(tier.primary.opacity(0.25), lineWidth: 1)
+            )
     }
 }
