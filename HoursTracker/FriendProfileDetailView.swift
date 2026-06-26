@@ -634,8 +634,8 @@ struct FriendProfileDetailView: View {
     private func performRemove() async {
         guard let friend, let onRemoveFriend else { return }
         isRemoving = true
-        defer { isRemoving = false }
         let removed = await onRemoveFriend(friend)
+        isRemoving = false
         if removed {
             dismiss()
         }

@@ -498,19 +498,20 @@ final class FriendsService: ObservableObject {
         batch.deleteDocument(requestRef)
         batch.deleteDocument(theirOutgoingRef)
 
+        try await batch.commit()
+
+        // Write friendships doc separately so a rule denial doesn't block
+        // the core friend link + request cleanup above.
         if FirebaseMigrationFlags.useFriendshipsCollection {
             let pairId = FriendshipPairId.make(myUid, fromUid)
             let sorted = [myUid, fromUid].sorted()
-            let friendshipRef = db.collection("friendships").document(pairId)
-            batch.setData([
+            try? await db.collection("friendships").document(pairId).setData([
                 "userA": sorted[0],
                 "userB": sorted[1],
                 "createdAt": FieldValue.serverTimestamp(),
                 "createdBy": myUid
-            ], forDocument: friendshipRef)
+            ])
         }
-
-        try await batch.commit()
     }
 
     func declineRequest(fromUid: String, myUid: String) async throws {
@@ -522,18 +523,24 @@ final class FriendsService: ObservableObject {
     /// Removes a friend link from both users' friend lists and clears any
     /// stale incoming friend-request on this user's account.
     func removeFriend(friendUid: String, myUid: String) async throws {
+        guard NetworkMonitor.shared.isConnected else {
+            throw NSError(domain: "FriendsService", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please try again when online."])
+        }
         let batch = db.batch()
         batch.deleteDocument(db.collection("users").document(myUid).collection("friends").document(friendUid))
         batch.deleteDocument(db.collection("users").document(friendUid).collection("friends").document(myUid))
         batch.deleteDocument(db.collection("users").document(myUid).collection("friendRequests").document(friendUid))
         batch.deleteDocument(db.collection("users").document(friendUid).collection("friendRequests").document(myUid))
 
+        try await batch.commit()
+
+        // Delete friendships doc separately — if it doesn't exist, the
+        // security rule check on resource.data would deny a batch delete.
         if FirebaseMigrationFlags.useFriendshipsCollection {
             let pairId = FriendshipPairId.make(myUid, friendUid)
-            batch.deleteDocument(db.collection("friendships").document(pairId))
+            try? await db.collection("friendships").document(pairId).delete()
         }
-
-        try await batch.commit()
     }
 
     /// One-shot server fetch for a friend profile — used when the friends
