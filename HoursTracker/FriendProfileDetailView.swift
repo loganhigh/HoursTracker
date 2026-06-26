@@ -62,12 +62,13 @@ struct FriendProfileDetailView: View {
                     companyCard(friend: friend)
                 }
 
+                personalBestsCard(friend: friend)
+
                 if friend.privacy.shareHours {
                     careerStatsCard(friend: friend)
                     if friend.hasChequeDetail {
                         chequeDetailCard(friend: friend, tier: tier)
                     }
-                    personalBestsCard(friend: friend)
                 } else {
                     hiddenHoursCard
                 }
