@@ -1266,12 +1266,9 @@ private struct HomeFriendsCardContent: View {
     private var weeklyStandings: [WeeklyStandingsRow] {
         let myName = UserDefaults.standard.string(forKey: "profile_display_name") ?? "You"
         let profile = store.gamificationProfile
-        let myHours: Double = {
-            if FirebaseMigrationFlags.useServerStats, let week = statsListener.weekStats {
-                return week.hours
-            }
-            return WeeklyStatsCalculator.weeklyHours(store.entries)
-        }()
+        let currentCycle = store.currentPayCycle()
+        let myHours = PayCycleEngine.entries(store.entries, in: currentCycle)
+            .reduce(0.0) { $0 + $1.paidHours }
         let myLevelLine = GamificationLevelCalculator.displayLevelLine(
             level: store.displayedLevel,
             prestige: profile.prestige
@@ -1292,7 +1289,7 @@ private struct HomeFriendsCardContent: View {
                 WeeklyStandingsRow(
                     id: $0.uid,
                     name: $0.displayName,
-                    hours: $0.weeklyHours,
+                    hours: $0.chequeHours,
                     levelLine: levelLine(for: $0),
                     profilePhotoURL: $0.profilePhotoURL,
                     isMe: false
@@ -1323,7 +1320,7 @@ private struct HomeFriendsCardContent: View {
             .frame(maxWidth: .infinity)
 
             VStack(spacing: 10) {
-                Text("Most hours this week")
+                Text("Most hours this cheque")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundStyle(AppTheme.Colors.faint)
                     .tracking(0.6)
