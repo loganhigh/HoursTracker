@@ -40,6 +40,20 @@ struct SettingsView: View {
                 Form {
                 // MARK: - Payday
                 Section {
+                    Picker("Pay period", selection: Binding(
+                        get: { settings.payPeriodType },
+                        set: { newType in
+                            settings.payPeriodType = newType
+                            store.persist()
+                        }
+                    )) {
+                        ForEach(PayPeriodType.allCases, id: \.self) { type in
+                            Text(type.displayName).tag(type)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.vertical, 4)
+
                     Button {
                         showingPaydayPicker = true
                     } label: {
