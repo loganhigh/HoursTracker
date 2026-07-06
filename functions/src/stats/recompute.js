@@ -826,7 +826,11 @@ async function enrichLeaderboardCountryCodes(db, entries) {
 /**
  * Recompute the global lifetime-hours leaderboard and write it to a single
  * public doc `leaderboards/global`. Every client reads just this one doc.
- * `top` holds the top 5; `all` holds every ranked user (hours > 0).
+ * `top` holds the top 5; `all` holds the broadcast slice of ranked users.
+ *
+ * Returns `{ previous, current }` — the broadcast ranking that was in the doc
+ * before this rebuild and the one just written — so callers can diff ranks and
+ * notify users who moved (see notifyLeaderboardRankMoves in index.js).
  */
 async function updateGlobalLeaderboard(db) {
   const all = [];
@@ -867,15 +871,41 @@ async function updateGlobalLeaderboard(db) {
     countryCode,
   }));
 
+  // Cap the broadcast `all` array. Writing EVERY ranked user into this single
+  // doc is both a hard scaling cliff (Firestore's 1 MiB per-document limit is hit
+  // around ~10k ranked users, and because this is an atomic merge:false write the
+  // failure would freeze the entire board including `top`) and the dominant
+  // recurring cost (the full doc is re-broadcast to every connected client on
+  // every 15-min refresh). The client already falls back to a paged
+  // `publicProfiles` query (TopTrackersService.ensureFullLeaderboardLoaded) for
+  // rankings beyond what the doc carries, so a bounded slice here is sufficient
+  // for the visible board while keeping the doc tiny and the cost flat.
+  // `totalRanked` still reports the true full count.
+  const BROADCAST_RANK_LIMIT = 100;
+  const broadcastAll = all.slice(0, BROADCAST_RANK_LIMIT);
+
+  // Capture the outgoing ranking before overwriting so callers can diff ranks
+  // for move notifications. A read failure must never block the rebuild.
+  let previous = [];
+  try {
+    const prevSnap = await db.collection("leaderboards").doc("global").get();
+    const prevAll = prevSnap.exists ? prevSnap.data()?.all : null;
+    if (Array.isArray(prevAll)) previous = prevAll;
+  } catch (err) {
+    console.warn("updateGlobalLeaderboard: previous read failed:", err?.message || err);
+  }
+
   await db.collection("leaderboards").doc("global").set(
     {
       top,
-      all,
+      all: broadcastAll,
       totalRanked: all.length,
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: false }
   );
+
+  return { previous, current: broadcastAll };
 }
 
 module.exports = {

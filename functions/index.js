@@ -766,6 +766,138 @@ exports.onTimeEntryWritten = onDocumentWritten(
   }
 );
 
+// ── Leaderboard rank-move notifications ─────────────────────────────────────
+
+// At most one leaderboard alert per user per window. The board rebuilds every
+// 15 minutes and single-place shuffles are constant near the top; without a
+// throttle an active pair of users could ping-pong notifications at each other
+// all day.
+const LEADERBOARD_NOTIFY_THROTTLE_MS = 6 * 60 * 60 * 1000;
+// Safety cap per refresh: a bulk stats recompute can reshuffle the whole
+// board at once — notify the biggest movers, let the throttle state absorb
+// the rest on later refreshes.
+const LEADERBOARD_NOTIFY_MAX_PER_RUN = 50;
+// Off-board throttle entries are kept this long so a user oscillating around
+// the board cutoff doesn't get a fresh "you're on the board" alert every time
+// they re-enter.
+const LEADERBOARD_NOTIFY_STATE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Default-on, mirrors friendShiftAlertsEnabled: absent field means enabled. */
+function leaderboardAlertsEnabled(data) {
+  if (!data || data.leaderboardAlerts === undefined) return true;
+  return data.leaderboardAlerts !== false;
+}
+
+/**
+ * Push an alert to users whose global-leaderboard position changed between the
+ * previous broadcast and the one just written.
+ *
+ * The baseline for "moved" is the rank the user was last *notified* at (kept in
+ * the private `_leaderboardNotify/state` doc, no security-rules exposure), not
+ * simply the previous refresh — so slow drift accumulates into one "you moved
+ * up 4 spots" alert after the throttle window instead of being re-detected and
+ * discarded every 15 minutes.
+ */
+async function notifyLeaderboardRankMoves(previous, current) {
+  // No previous broadcast (first run) means every rank would look like a move.
+  if (!Array.isArray(previous) || previous.length === 0) return;
+  if (!Array.isArray(current) || current.length === 0) return;
+
+  const prevRankByUid = new Map(
+    previous
+      .filter((e) => e && typeof e.uid === "string" && Number.isFinite(e.rank))
+      .map((e) => [e.uid, e.rank])
+  );
+
+  const stateRef = db.collection("_leaderboardNotify").doc("state");
+  const stateSnap = await stateRef.get();
+  const state = (stateSnap.exists && stateSnap.data()?.entries) || {};
+  const now = Date.now();
+
+  const nextState = {};
+  const candidates = [];
+
+  for (const entry of current) {
+    const uid = entry?.uid;
+    const rank = entry?.rank;
+    if (typeof uid !== "string" || !Number.isFinite(rank)) continue;
+
+    const last = state[uid];
+    // Carry the last-notified baseline forward; only a successful (or
+    // throttled-out below) notification moves it.
+    nextState[uid] = last ? { ...last } : { rank, at: 0 };
+
+    const baseline = last ? last.rank : prevRankByUid.get(uid);
+    if (baseline === undefined) {
+      // Wasn't on the broadcast board at all last refresh: broke into the top N.
+      candidates.push({ uid, rank, delta: null, sortKey: 999 });
+    } else if (baseline !== rank) {
+      candidates.push({ uid, rank, delta: baseline - rank, sortKey: Math.abs(baseline - rank) });
+    }
+  }
+
+  // Keep recent off-board entries purely for enter/exit throttling.
+  for (const [uid, last] of Object.entries(state)) {
+    if (!nextState[uid] && last && now - (last.at || 0) < LEADERBOARD_NOTIFY_STATE_TTL_MS) {
+      nextState[uid] = { ...last };
+    }
+  }
+
+  candidates.sort((a, b) => b.sortKey - a.sortKey);
+
+  let sent = 0;
+  for (const cand of candidates) {
+    if (sent >= LEADERBOARD_NOTIFY_MAX_PER_RUN) break;
+    const last = state[cand.uid];
+    if (last && now - (last.at || 0) < LEADERBOARD_NOTIFY_THROTTLE_MS) continue;
+
+    let userData = null;
+    try {
+      const userSnap = await db.collection("users").doc(cand.uid).get();
+      userData = userSnap.exists ? userSnap.data() : null;
+    } catch (err) {
+      console.warn(`leaderboard notify: user read failed uid=${cand.uid}:`, err?.message || err);
+      continue;
+    }
+    if (!leaderboardAlertsEnabled(userData)) {
+      // Respect the opt-out but advance the baseline so a later opt-in doesn't
+      // unleash a backlog of stale "you moved" alerts.
+      nextState[cand.uid] = { rank: cand.rank, at: now };
+      continue;
+    }
+
+    let title;
+    let body;
+    if (cand.delta === null) {
+      title = "Global leaderboard 🏆";
+      body = `You're on the global leaderboard at #${cand.rank}!`;
+    } else if (cand.delta > 0) {
+      const spots = cand.delta === 1 ? "1 spot" : `${cand.delta} spots`;
+      title = "You're climbing! 📈";
+      body = `You moved up ${spots} to #${cand.rank} on the global leaderboard.`;
+    } else {
+      title = "Leaderboard update";
+      body = `You slipped to #${cand.rank} on the global leaderboard — log some hours to climb back!`;
+    }
+
+    await sendPushToUser(cand.uid, userData, {
+      title,
+      body,
+      dataPayload: { kind: "leaderboardRank", rank: String(cand.rank) },
+    });
+    nextState[cand.uid] = { rank: cand.rank, at: now };
+    sent += 1;
+  }
+
+  await stateRef.set(
+    { entries: nextState, updatedAt: FieldValue.serverTimestamp() },
+    { merge: false }
+  );
+  if (sent > 0) {
+    console.log(`leaderboard notify: sent=${sent} candidates=${candidates.length}`);
+  }
+}
+
 /**
  * Rebuild the global leaderboard on a fixed cadence rather than on every shift
  * write. This decouples leaderboard cost from write volume: it now costs
@@ -782,7 +914,14 @@ exports.leaderboardRefresh = onSchedule(
     memory: "512MiB",
   },
   async () => {
-    await updateGlobalLeaderboard(db);
+    const { previous, current } = await updateGlobalLeaderboard(db);
+    // Notifications are best-effort: a notify failure must never mark the
+    // scheduled rebuild as failed (the board itself was written successfully).
+    try {
+      await notifyLeaderboardRankMoves(previous, current);
+    } catch (err) {
+      console.warn("leaderboardRefresh: rank-move notify failed:", err?.message || err);
+    }
   }
 );
 
