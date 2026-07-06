@@ -6,6 +6,7 @@ import AVFoundation
 // MARK: - Root
 struct RootView: View {
     @EnvironmentObject private var store: HoursStore
+    @EnvironmentObject private var authService: AuthService
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var cloudSync: CloudSyncManager
     @State private var showingContactSupport = false
@@ -14,6 +15,8 @@ struct RootView: View {
     @AppStorage("has_prompted_rate_after_5") private var hasPromptedRateAfter5 = false
     @AppStorage("display_name_prompt_last_tier") private var displayNamePromptLastTier: Int = 0
     @State private var showingDisplayNamePrompt = false
+    @State private var showingCountryFlagPrompt = false
+    @State private var showingCountryFlagPicker = false
 
     var body: some View {
         SideMenuContainer(
@@ -64,6 +67,39 @@ struct RootView: View {
         }
         .sheet(isPresented: $showingDisplayNamePrompt) {
             DisplayNamePromptSheet()
+        }
+        .alert("Hey! Add a country flag", isPresented: $showingCountryFlagPrompt) {
+            Button("Choose country") {
+                showingCountryFlagPicker = true
+            }
+            Button("Not now", role: .cancel) {
+                CountryFlag.markPromptSkipped()
+            }
+        } message: {
+            Text("Pick your country so your flag shows beside your name on the global leaderboard.")
+        }
+        .sheet(isPresented: $showingCountryFlagPicker) {
+            NavigationStack {
+                CountryFlagPickerView(store: store)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { showingCountryFlagPicker = false }
+                        }
+                    }
+            }
+        }
+        .onAppear { scheduleCountryFlagPromptIfNeeded() }
+        .onChange(of: authService.user?.uid) { _, _ in
+            scheduleCountryFlagPromptIfNeeded()
+        }
+    }
+
+    private func scheduleCountryFlagPromptIfNeeded() {
+        guard authService.user != nil, CountryFlag.needsCountryPrompt else { return }
+        guard !showingCountryFlagPrompt, !showingCountryFlagPicker else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            guard authService.user != nil, CountryFlag.needsCountryPrompt else { return }
+            showingCountryFlagPrompt = true
         }
     }
 }
@@ -119,10 +155,29 @@ private struct DisplayNamePromptSheet: View {
     }
 }
 
+/// Invisible helper that watches `scenePhase` in its own tiny `body`, kept
+/// separate from `HoursHomeView.body` so this doesn't add another modifier
+/// to that already very large SwiftUI expression (which is at the edge of
+/// what the type-checker can resolve in reasonable time).
+private struct ScenePhaseFriendsRefreshObserver: View {
+    @Environment(\.scenePhase) private var scenePhase
+    let onBecomeActive: () -> Void
+
+    var body: some View {
+        Color.clear
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    onBecomeActive()
+                }
+            }
+    }
+}
+
 // MARK: - Main Home Screen
 private struct HoursHomeView: View {
     @EnvironmentObject private var store: HoursStore
     @EnvironmentObject private var authService: AuthService
+    @EnvironmentObject private var premium: PremiumManager
     @Environment(\.sideMenu) private var sideMenu
     @ObservedObject private var friendsService = FriendsService.shared
     @ObservedObject private var statsListener = StatsListenerService.shared
@@ -266,6 +321,15 @@ private struct HoursHomeView: View {
 
     // MARK: - Friends + activity subscriptions
 
+    /// Returning from background is another common "opening the app" moment —
+    /// re-pull friend stats fresh here too, since a backgrounded app's
+    /// listeners can sit on a stale snapshot for however long it was suspended.
+    private func handleScenePhaseChange(_ newPhase: ScenePhase) {
+        guard newPhase == .active else { return }
+        guard authService.user?.uid != nil else { return }
+        Task { await friendsService.refreshFriendProfiles() }
+    }
+
     private func refreshFriendsSubscription() {
         guard let uid = authService.user?.uid else {
             friendsService.stopListening()
@@ -274,6 +338,11 @@ private struct HoursHomeView: View {
         }
         friendsService.startListening(uid: uid)
         refreshActivitySubscription()
+        // Force a server-fresh pull immediately, rather than waiting on the
+        // listener's cache-then-server delivery — this is what actually
+        // guarantees every friend's hours/level are current the instant the
+        // app opens, not just "eventually" once a snapshot round-trips.
+        Task { await friendsService.refreshFriendProfiles() }
     }
 
     private func refreshActivitySubscription() {
@@ -316,44 +385,26 @@ private struct HoursHomeView: View {
         PayCycleEngine.entries(store.entries, in: currentPayCycle)
     }
 
-    private var periodHours: Double {
-        periodEntries.reduce(0) { $0 + $1.paidHours }
+    // MARK: - Logged months (current + previous)
+    private var loggedMonths: [Date] {
+        MonthHistoryHelper.loggedMonthStarts(from: store.entries)
     }
 
-    private var periodPay: Double {
-        periodEntries.reduce(0) { $0 + store.payBreakdown(for: $1).pay }
+    private var previewLoggedMonths: [Date] {
+        Array(loggedMonths.prefix(4))
     }
 
-    // MARK: - Current month
-    private var currentMonth: Date {
-        let cal = Calendar.current
-        return cal.date(from: cal.dateComponents([.year, .month], from: Date())) ?? Date()
-    }
-    
-    private var hasCurrentMonthEntries: Bool {
-        store.entries(inMonth: currentMonth).count > 0
-    }
-    
-    // MARK: - Weekly hours (Sun–Sat) for chart
-    private var weeklyHoursByDay: [(label: String, hours: Double)] {
-        var cal = Calendar.current
-        cal.firstWeekday = 1 // Sunday (Sunday beside Monday)
-        guard let interval = cal.dateInterval(of: .weekOfYear, for: Date()) else { return [] }
-        let labels = ["S", "M", "T", "W", "T", "F", "S"]
-        return (0..<7).compactMap { offset -> (String, Double)? in
-            guard let day = cal.date(byAdding: .day, value: offset, to: interval.start) else { return nil }
-            let hours = store.entries
-                .filter { cal.isDate($0.date, inSameDayAs: day) }
-                .reduce(0) { $0 + $1.paidHours }
-            return (labels[offset], hours)
-        }
-    }
-    
+    // Shared month-abbreviation formatter — hoisted out of the render path so the
+    // 12-month chart doesn't allocate a DateFormatter on every body evaluation.
+    private static let monthAbbrevFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM"
+        return f
+    }()
+
     // MARK: - Monthly hours (last 12 months) for chart
     private var monthlyHoursByMonth: [(label: String, hours: Double)] {
         let cal = Calendar.current
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM"
         let year = cal.component(.year, from: Date())
         return (1...12).compactMap { month -> (String, Double)? in
             var comps = DateComponents()
@@ -361,21 +412,12 @@ private struct HoursHomeView: View {
             comps.month = month
             guard let start = cal.date(from: comps) else { return nil }
             let hours = store.monthTotalHours(monthDate: start)
-            let label = formatter.string(from: start)
+            let label = Self.monthAbbrevFormatter.string(from: start)
             return (label, hours)
         }
     }
     
-    // MARK: - Previous months
-    private var previousMonths: [Date] {
-        MonthHistoryHelper.previousMonthStarts(from: store.entries)
-    }
-
-    private var previewPreviousMonths: [Date] {
-        Array(previousMonths.prefix(3))
-    }
-    
-    /// Best month by total hours (all time). Returns (monthStart, hours) or nil.
+    // MARK: - Weekly hours (Sun–Sat) for chart
     private var bestMonthSoFar: (monthStart: Date, hours: Double)? {
         let cal = Calendar.current
         let monthStarts = Set(store.entries.map {
@@ -411,12 +453,9 @@ private struct HoursHomeView: View {
     var body: some View {
         ZStack {
             AppTheme.Colors.bg.ignoresSafeArea()
-            AmbientOrbsView()
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
 
             ScrollView {
-            VStack(spacing: AppTheme.Spacing.xl) {
+            VStack(spacing: AppDesignSystem.Spacing.xxl) {
 
                 progressionCard
                     .cardAppear(index: 0)
@@ -424,9 +463,13 @@ private struct HoursHomeView: View {
                 NavigationLink {
                     PayCycleDetailView(store: store, initialCycle: currentPayCycle)
                 } label: {
-                    PayCycleHeroCard(store: store)
+                    PayPeriodMiniCalendar(
+                        cycle: currentPayCycle,
+                        entries: periodEntries
+                    )
                 }
                 .buttonStyle(PremiumPressStyle())
+                .id(currentPayCycle)
                 .cardAppear(index: 1)
 
                 VStack(spacing: 10) {
@@ -437,123 +480,46 @@ private struct HoursHomeView: View {
                     }
                     .tapBurst(trigger: logShiftBurst)
                     HStack(spacing: 10) {
-                        Button {
+                        minimalActionTile(
+                            title: "Off day",
+                            systemImage: "xmark.circle.fill",
+                            tint: Color(red: 0.94, green: 0.30, blue: 0.34)
+                        ) {
                             Haptics.lightTap()
                             offDayBurst &+= 1
                             logOffDayForToday()
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 14, weight: .bold))
-                                Text("Off day")
-                                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                            }
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [
-                                                Color(red: 0.96, green: 0.32, blue: 0.32),
-                                                Color(red: 0.82, green: 0.18, blue: 0.22)
-                                            ],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .shadow(color: Color.red.opacity(0.35), radius: 8, y: 3)
-                            )
                         }
-                        .buttonStyle(TapBurstButtonStyle())
                         .tapBurst(trigger: offDayBurst)
-                        Button {
+
+                        minimalActionTile(
+                            title: "Holiday",
+                            systemImage: "airplane",
+                            tint: Color(red: 0.34, green: 0.74, blue: 0.46)
+                        ) {
                             Haptics.lightTap()
                             holidayBurst &+= 1
                             holidayStartDate = Calendar.current.startOfDay(for: Date())
                             holidayDayCount = 1
                             showingHolidayPicker = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "airplane")
-                                    .font(.system(size: 14, weight: .bold))
-                                Text("Holiday")
-                                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                            }
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [
-                                                Color(red: 0.42, green: 0.82, blue: 0.50),
-                                                Color(red: 0.26, green: 0.68, blue: 0.40)
-                                            ],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .shadow(color: Color.green.opacity(0.32), radius: 8, y: 3)
-                            )
                         }
-                        .buttonStyle(TapBurstButtonStyle())
                         .tapBurst(trigger: holidayBurst)
                     }
                 }
                 .cardAppear(index: 2)
 
-                // This Month
-                SectionCard(
-                    title: "This Month",
-                    subtitle: nil,
-                    trailing: nil,
-                    centerHeader: true
-                ) {
-                    if !hasCurrentMonthEntries {
+                // Hours Logged
+                homeSection("Hours Logged") {
+                    if loggedMonths.isEmpty {
                         EmptyStateView(
                             icon: "calendar.badge.plus",
-                            title: "No shifts this month",
+                            title: "No shifts logged yet",
                             subtitle: "Log a shift to see your monthly totals here.",
                             primaryTitle: hasAnyShifts ? "Add Shift" : "Add First Shift",
                             primaryAction: {
                                 Haptics.lightTap()
                                 logShiftBurst &+= 1
                                 showingAdd = true
-                            }
-                        )
-                        .padding(.vertical, 8)
-                    } else {
-                        NavigationLink {
-                            MonthDetailView(store: store, monthDate: currentMonth)
-                        } label: {
-                            MonthSummaryRow(
-                                title: monthTitle(currentMonth),
-                                hours: store.monthTotalHours(monthDate: currentMonth),
-                                pay: store.monthEstimatedPay(monthDate: currentMonth),
-                                currencyCode: store.paySettings.currencyCode,
-                                showPay: store.paySettings.showPayCalculations
-                            )
-                        }
-                        .premiumPress()
-                    }
-                }
-                .cardAppear(index: 3)
-
-                // Previous Months
-                SectionCard(
-                    title: "Previous Months",
-                    subtitle: nil,
-                    trailing: nil,
-                    centerHeader: true
-                ) {
-                    if previousMonths.isEmpty {
-                        EmptyStateView(
-                            icon: "calendar.badge.clock",
-                            title: "No history yet",
-                            subtitle: "Your monthly progress will appear here",
+                            },
                             secondaryTitle: trackingHintDismissed ? nil : "How tracking works",
                             secondaryAction: {
                                 trackingHintDismissed = true
@@ -563,7 +529,7 @@ private struct HoursHomeView: View {
                         .padding(.vertical, 8)
                     } else {
                         VStack(spacing: 12) {
-                            ForEach(previewPreviousMonths, id: \.self) { monthDate in
+                            ForEach(previewLoggedMonths, id: \.self) { monthDate in
                                 NavigationLink {
                                     MonthDetailView(store: store, monthDate: monthDate)
                                 } label: {
@@ -581,8 +547,8 @@ private struct HoursHomeView: View {
                             NavigationLink {
                                 PreviousMonthsView(store: store)
                             } label: {
-                                Text(previousMonths.count > previewPreviousMonths.count
-                                     ? "View all \(previousMonths.count) months"
+                                Text(loggedMonths.count > previewLoggedMonths.count
+                                     ? "View all \(loggedMonths.count) months"
                                      : "View all months")
                                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                                     .foregroundStyle(AppTheme.Colors.accent)
@@ -599,28 +565,31 @@ private struct HoursHomeView: View {
                         }
                     }
                 }
-                .cardAppear(index: 4)
+                .cardAppear(index: 3)
 
                 // Monthly Overview (year-at-a-glance)
-                SectionCard(
-                    title: "Yearly Overview",
-                    subtitle: "\(Calendar.current.component(.year, from: Date()))",
-                    trailing: nil,
-                    centerHeader: true
-                ) {
-                    MonthlyOverviewChart(data: monthlyHoursByMonth)
+                homeSection("Yearly Overview", boxed: true) {
+                    VStack(spacing: 14) {
+                        Text(verbatim: "\(Calendar.current.component(.year, from: Date()))")
+                            .font(.system(size: 22, weight: .heavy, design: .rounded))
+                            .foregroundStyle(AppTheme.Colors.text)
+                            .frame(maxWidth: .infinity, alignment: .center)
+
+                        MonthlyOverviewChart(data: monthlyHoursByMonth)
+                    }
                 }
-                .cardAppear(index: 5)
+                .cardAppear(index: 4)
+
+                if !premium.isPremium {
+                    BannerAdView()
+                        .frame(height: 50)
+                        .frame(maxWidth: .infinity)
+                }
 
                 Button {
                     sideMenu.friendsSheet = true
                 } label: {
-                    SectionCard(
-                        title: "Friends",
-                        subtitle: nil,
-                        trailing: nil,
-                        centerHeader: true
-                    ) {
+                    homeSection("Friends", boxed: true) {
                         HomeFriendsCardContent(
                             friendsService: friendsService,
                             store: store,
@@ -629,12 +598,7 @@ private struct HoursHomeView: View {
                     }
                 }
                 .buttonStyle(.plain)
-
-                PayPeriodMiniCalendar(
-                    cycle: currentPayCycle,
-                    entries: periodEntries
-                )
-                .id(currentPayCycle)
+                .cardAppear(index: 5)
 
                 // Best month highlight
                 if let bestText = bestMonthText {
@@ -669,7 +633,7 @@ private struct HoursHomeView: View {
                     )
                 }
 
-                Text("v.\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.9.4")")
+                Text("2.0")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundStyle(AppTheme.Colors.subtext.opacity(0.4))
                     .tracking(1.5)
@@ -692,6 +656,9 @@ private struct HoursHomeView: View {
         .onChange(of: friendUidFingerprint) { _, _ in
             refreshActivitySubscription()
         }
+        .background(ScenePhaseFriendsRefreshObserver(onBecomeActive: {
+            handleScenePhaseChange(.active)
+        }))
         .refreshable {
             store.advanceNextPaydayIfNeeded()
             await store.refreshData()
@@ -771,6 +738,7 @@ private struct HoursHomeView: View {
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView(store: store, settings: $store.paySettings)
+                .environmentObject(authService)
         }
         .fullScreenCover(isPresented: $showingPrestigeConfetti) {
             PrestigeCelebrationView(
@@ -847,6 +815,93 @@ private struct HoursHomeView: View {
             }
         }
 
+    }
+
+    // MARK: - Minimal home building blocks
+
+    /// A quiet, tinted quick-action tile (sleek minimal — colored icon, neutral
+    /// label, soft tinted surface) replacing the old loud gradient buttons.
+    private func minimalActionTile(
+        title: String,
+        systemImage: String,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(tint)
+                Text(title)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+            .background(
+                RoundedRectangle(cornerRadius: AppDesignSystem.Radius.lg, style: .continuous)
+                    .fill(tint.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppDesignSystem.Radius.lg, style: .continuous)
+                            .stroke(tint.opacity(0.25), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(TapBurstButtonStyle())
+    }
+
+    /// Minimal section: a small uppercase label over content. When `boxed`, the
+    /// content sits in a subtle hairline surface; otherwise it floats on the
+    /// background for maximum air (rows supply their own backgrounds).
+    @ViewBuilder
+    private func homeSection<Content: View>(
+        _ title: String,
+        subtitle: String? = nil,
+        boxed: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(spacing: 12) {
+            VStack(spacing: 2) {
+                Text(title.uppercased())
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .tracking(1.6)
+                    .foregroundStyle(.white)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppTheme.Colors.faint)
+                }
+            }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 9)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(AppTheme.Colors.card.opacity(0.7))
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
+                    )
+            )
+            .frame(maxWidth: .infinity, alignment: .center)
+
+            if boxed {
+                content()
+                    .frame(maxWidth: .infinity)
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(AppTheme.Colors.card.opacity(0.55))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
+                            )
+                    )
+            } else {
+                content()
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var headerCard: some View {
@@ -983,42 +1038,6 @@ private struct HoursHomeView: View {
     }
     
     // MARK: - Achievements Preview
-    private var achievementsPreview: some View {
-        let stats = Stats(from: store)
-        let badges = BadgeFactory.makeBadges(stats: stats)
-        let lockedBadges = badges.filter { !$0.isUnlocked && !$0.isLegend }.sorted { $0.order < $1.order }
-        let earnedCount = badges.filter { $0.isUnlocked && !$0.isLegend }.count
-        
-        if let nextBadge = lockedBadges.first {
-            let remaining = nextBadge.remaining(stats)
-            let isHours = nextBadge.hoursTarget != nil
-            
-            return AnyView(
-                VStack(alignment: .center, spacing: 4) {
-                    if earnedCount > 0 {
-                        Text("\(earnedCount) Badge\(earnedCount == 1 ? "" : "s") Earned!")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(AppTheme.Colors.accent)
-                            .multilineTextAlignment(.center)
-                    }
-                    Text(isHours ? "\(remaining) more hours to \(nextBadge.name)" : "\(remaining) more to unlock \(nextBadge.name)")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-            )
-        } else {
-            return AnyView(
-                Text("Keep logging — overtime + weekends unlock the good ones.")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-            )
-        }
-    }
-    
     // MARK: - Helper Stats (for achievements preview, matches AchievementsView.Stats)
     private struct Stats {
         let totalHours: Double
@@ -1244,11 +1263,7 @@ private struct HomeFriendsCardContent: View {
     @ObservedObject var friendsService: FriendsService
     @ObservedObject var store: HoursStore
     @ObservedObject var authService: AuthService
-    @ObservedObject private var nudgeService = FriendShiftNudgeService.shared
     @ObservedObject private var statsListener = StatsListenerService.shared
-
-    @State private var copyConfirmation = false
-    @State private var nudgingFriendUid: String?
 
     private struct WeeklyStandingsRow: Identifiable {
         let id: String
@@ -1303,73 +1318,22 @@ private struct HomeFriendsCardContent: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            VStack(spacing: 12) {
-                Text("Your friend code")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-
-                friendCodeRow
-
-                Text(authService.user == nil ? "Sign in to get your friend code" : "Share your code to add friends")
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
-            }
-            .frame(maxWidth: .infinity)
-
-            VStack(spacing: 10) {
-                Text("Most hours this cheque")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.faint)
-                    .tracking(0.6)
-                    .frame(maxWidth: .infinity, alignment: .center)
-
-                VStack(spacing: 0) {
-                    ForEach(Array(weeklyStandings.prefix(3).enumerated()), id: \.element.id) { index, row in
-                        if index > 0 {
-                            Divider().opacity(0.2)
-                        }
-                        standingsRow(row, rank: index + 1)
-                    }
+        VStack(spacing: 0) {
+            ForEach(Array(weeklyStandings.prefix(3).enumerated()), id: \.element.id) { index, row in
+                if index > 0 {
+                    Divider().opacity(0.2)
                 }
-                .animation(nil, value: weeklyStandings.map { "\($0.id)-\($0.hours)" })
+                standingsRow(row, rank: index + 1)
             }
-            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity, minHeight: 220, alignment: .top)
+        .animation(nil, value: weeklyStandings.map { "\($0.id)-\($0.hours)" })
+        .frame(maxWidth: .infinity, alignment: .top)
         .padding(.vertical, 8)
         .animation(nil, value: friendsService.friends.map { "\($0.uid):\($0.weeklyHours):\($0.totalHours):\($0.level)" })
         .onAppear {
             store.syncProfileSnapshotToCloud()
             Task { await friendsService.refreshFriendProfiles() }
         }
-    }
-
-    private var friendCodeRow: some View {
-        HStack(spacing: 8) {
-            Text(displayCode)
-                .font(.system(size: 28, weight: .black, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.text)
-                .monospacedDigit()
-
-            Button {
-                copyCode()
-            } label: {
-                Image(systemName: copyConfirmation ? "checkmark.circle.fill" : "doc.on.doc")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(copyConfirmation ? AppTheme.Colors.accent : AppTheme.Colors.subtext)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(friendsService.myFriendCode == nil)
-        }
-    }
-
-    private var displayCode: String {
-        friendsService.myFriendCode ?? "——"
     }
 
     private func standingsRow(_ row: WeeklyStandingsRow, rank: Int) -> some View {
@@ -1400,13 +1364,6 @@ private struct HomeFriendsCardContent: View {
                             .padding(.vertical, 2)
                             .background(Capsule().fill(AppTheme.Colors.accent.opacity(0.22)))
                             .foregroundStyle(AppTheme.Colors.accent)
-                    } else if authService.user?.uid != nil {
-                        FriendShiftNudgeButton(
-                            friendUid: row.id,
-                            isSending: nudgingFriendUid == row.id,
-                            didSend: nudgeService.lastSentFriendUid == row.id,
-                            action: { Task { await sendNudge(toFriendUid: row.id, name: row.name) } }
-                        )
                     }
                 }
 
@@ -1423,33 +1380,6 @@ private struct HomeFriendsCardContent: View {
                 .monospacedDigit()
         }
         .padding(.vertical, 8)
-    }
-
-    private func copyCode() {
-        guard let code = friendsService.myFriendCode else { return }
-        UIPasteboard.general.string = code
-        Haptics.lightTap()
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            copyConfirmation = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-            withAnimation(.easeOut(duration: 0.25)) {
-                copyConfirmation = false
-            }
-        }
-    }
-
-    private func sendNudge(toFriendUid friendUid: String, name: String) async {
-        guard let uid = authService.user?.uid else { return }
-        let myName = UserDefaults.standard.string(forKey: "profile_display_name") ?? "Worker"
-        nudgingFriendUid = friendUid
-        defer { nudgingFriendUid = nil }
-        do {
-            try await nudgeService.sendNudge(to: friendUid, myUid: uid, myName: myName)
-            Haptics.success()
-        } catch {
-            Haptics.error()
-        }
     }
 }
 

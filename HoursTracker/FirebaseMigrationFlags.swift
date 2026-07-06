@@ -34,9 +34,17 @@ enum FirebaseMigrationFlags {
         return defaults.bool(forKey: "ff_client_activity")
     }
 
-    /// Friends list reads `publicProfiles/{uid}` instead of full `users/{uid}`.
+    /// Friends list reads `publicProfiles/{uid}` — the server-maintained single
+    /// source of truth — instead of the private, dual-written `users/{uid}` doc.
+    ///
+    /// ON by default: the backfill is complete (every user has a populated
+    /// `publicProfiles` doc), and `mergePublicProfile` falls back to the
+    /// `users/{uid}` doc for any friend whose public doc is somehow missing, so
+    /// nobody can vanish from the list. Reading the server-owned doc means a
+    /// stale or old-build client can never clobber the level/stats friends see —
+    /// security rules deny all client writes to `publicProfiles`.
     static var usePublicProfilesForFriends: Bool {
-        if defaults.object(forKey: "ff_public_profiles") == nil { return false }
+        if defaults.object(forKey: "ff_public_profiles") == nil { return true }
         return defaults.bool(forKey: "ff_public_profiles")
     }
 

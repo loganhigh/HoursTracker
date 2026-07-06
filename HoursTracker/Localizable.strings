@@ -1,0 +1,47 @@
+/* General */
+"cancel" = "Cancel";
+"done" = "Done";
+"save" = "Save";
+"edit" = "Edit";
+"delete" = "Delete";
+"close" = "Close";
+
+/* Navigation */
+"settings" = "Settings";
+"insights" = "Insights";
+"reporting" = "Reporting";
+"achievements" = "Achievements";
+
+/* Entries */
+"add_entry" = "Add Entry";
+"edit_entry" = "Edit Entry";
+"delete_entry" = "Delete Entry";
+"notes" = "Notes";
+"optional" = "Optional";
+
+/* Time */
+"start" = "Start";
+"end" = "End";
+"date" = "Date";
+"hours" = "Hours";
+"days" = "Days";
+
+/* Goal */
+"biweekly_hour_goal" = "Bi-Weekly Hour Goal";
+"goal_met" = "Goal met.";
+"short_of_goal" = "short of your goal!";
+"you_are_short_of_goal" = "You're %@ short of your goal!";
+"goal_met_over" = "Goal met. +%@ over";
+
+/* Settings */
+"language" = "Language";
+"app_language" = "App Language";
+"language_change_note" = "Language changes will take effect after restarting the app.";
+"notifications" = "Notifications";
+"holiday_pay" = "Holiday Pay";
+"vacation_pay" = "Vacation Pay";
+
+/* Pay */
+"show_pay_calculations" = "Show Pay Calculations";
+"hourly_wage" = "Hourly wage";
+"currency" = "Currency";

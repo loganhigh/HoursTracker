@@ -1,0 +1,47 @@
+/* General */
+"cancel" = "Cancelar";
+"done" = "Hecho";
+"save" = "Guardar";
+"edit" = "Editar";
+"delete" = "Eliminar";
+"close" = "Cerrar";
+
+/* Navigation */
+"settings" = "Configuración";
+"insights" = "Perspectivas";
+"reporting" = "Informes";
+"achievements" = "Logros";
+
+/* Entries */
+"add_entry" = "Agregar Entrada";
+"edit_entry" = "Editar Entrada";
+"delete_entry" = "Eliminar Entrada";
+"notes" = "Notas";
+"optional" = "Opcional";
+
+/* Time */
+"start" = "Inicio";
+"end" = "Fin";
+"date" = "Fecha";
+"hours" = "Horas";
+"days" = "Días";
+
+/* Goal */
+"biweekly_hour_goal" = "Meta de Horas Quincenal";
+"goal_met" = "Meta alcanzada.";
+"short_of_goal" = "faltan para tu meta!";
+"you_are_short_of_goal" = "Te faltan %@ para tu meta!";
+"goal_met_over" = "Meta alcanzada. +%@ extra";
+
+/* Settings */
+"language" = "Idioma";
+"app_language" = "Idioma de la Aplicación";
+"language_change_note" = "Los cambios de idioma se aplicarán después de reiniciar la aplicación.";
+"notifications" = "Notificaciones";
+"holiday_pay" = "Pago de Festivos";
+"vacation_pay" = "Pago de Vacaciones";
+
+/* Pay */
+"show_pay_calculations" = "Mostrar Cálculos de Pago";
+"hourly_wage" = "Salario por hora";
+"currency" = "Moneda";

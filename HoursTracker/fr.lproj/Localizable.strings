@@ -1,0 +1,47 @@
+/* General */
+"cancel" = "Annuler";
+"done" = "Terminé";
+"save" = "Enregistrer";
+"edit" = "Modifier";
+"delete" = "Supprimer";
+"close" = "Fermer";
+
+/* Navigation */
+"settings" = "Paramètres";
+"insights" = "Aperçus";
+"reporting" = "Rapports";
+"achievements" = "Réalisations";
+
+/* Entries */
+"add_entry" = "Ajouter une Entrée";
+"edit_entry" = "Modifier l'Entrée";
+"delete_entry" = "Supprimer l'Entrée";
+"notes" = "Notes";
+"optional" = "Optionnel";
+
+/* Time */
+"start" = "Début";
+"end" = "Fin";
+"date" = "Date";
+"hours" = "Heures";
+"days" = "Jours";
+
+/* Goal */
+"biweekly_hour_goal" = "Objectif d'Heures Bimensuel";
+"goal_met" = "Objectif atteint.";
+"short_of_goal" = "de votre objectif!";
+"you_are_short_of_goal" = "Il vous manque %@ pour votre objectif!";
+"goal_met_over" = "Objectif atteint. +%@ en plus";
+
+/* Settings */
+"language" = "Langue";
+"app_language" = "Langue de l'Application";
+"language_change_note" = "Les changements de langue prendront effet après le redémarrage de l'application.";
+"notifications" = "Notifications";
+"holiday_pay" = "Paiement des Jours Fériés";
+"vacation_pay" = "Paiement des Vacances";
+
+/* Pay */
+"show_pay_calculations" = "Afficher les Calculs de Paiement";
+"hourly_wage" = "Salaire horaire";
+"currency" = "Devise";

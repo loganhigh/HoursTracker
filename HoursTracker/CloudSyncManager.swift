@@ -152,6 +152,11 @@ final class CloudSyncManager: ObservableObject {
                        let store = self.hoursStore {
                         self.saveProfileSnapshot(store: store)
                     }
+                    // Keep friend-facing stats fresh in near-real-time. When the
+                    // profile-snapshot path is skipped (its default), nothing else
+                    // triggers the server recompute on a shift save, so friends
+                    // would otherwise see stale stats until the daily sweep.
+                    self.scheduleStatsRecomputeDebounced()
                     completion(.success(()))
                 }
             }
@@ -200,6 +205,7 @@ final class CloudSyncManager: ObservableObject {
                        let store = self.hoursStore {
                         self.saveProfileSnapshot(store: store)
                     }
+                    self.scheduleStatsRecomputeDebounced()
                     completion(.success(()))
                 }
             }
@@ -749,6 +755,24 @@ final class CloudSyncManager: ObservableObject {
         Task { [weak self] in
             _ = try? await self?.functions.httpsCallable("recomputeUserStatsCallable").call([:])
         }
+    }
+
+    private var recomputeDebounceWork: DispatchWorkItem?
+
+    /// Debounced recompute request for the shift-CRUD path. Logging a shift must
+    /// refresh the friend-facing `publicProfiles` stats promptly — otherwise a
+    /// friend's leaderboard/board view only updates via the once-daily server
+    /// sweep (~24h stale). Coalesces bursts (e.g. logging several shifts in a row,
+    /// or an edit that saves repeatedly) into a single server call ~2s after the
+    /// last write so we don't fan out one callable per keystroke-save.
+    func scheduleStatsRecomputeDebounced() {
+        guard currentUID != nil else { return }
+        recomputeDebounceWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.requestStatsRecompute()
+        }
+        recomputeDebounceWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: work)
     }
 
     /// Atomically bumps `highWaterPrestige` on the gamification doc.
@@ -1598,17 +1622,22 @@ private struct ProfileSnapshotInputs {
         } else {
             fields["countryCode"] = FieldValue.delete()
         }
-        if !companyName.isEmpty {
+        // Company PII (name/occupation/start-date) is written to users/{uid}, which
+        // is world-readable to any signed-in user. Only publish it when the user has
+        // opted into hour-sharing; when shareHours is off, actively delete any values
+        // a prior build may have left behind so opted-out users stop leaking their
+        // employer/title/start-date. The server only reads these when shareHours is on.
+        if shareHours && !companyName.isEmpty {
             fields["companyName"] = companyName
         } else {
             fields["companyName"] = FieldValue.delete()
         }
-        if !companyOccupation.isEmpty {
+        if shareHours && !companyOccupation.isEmpty {
             fields["companyOccupation"] = companyOccupation
         } else {
             fields["companyOccupation"] = FieldValue.delete()
         }
-        if companyStartTS > 0 {
+        if shareHours && companyStartTS > 0 {
             fields["companyStartDate"] = Timestamp(date: Date(timeIntervalSince1970: companyStartTS))
         } else {
             fields["companyStartDate"] = FieldValue.delete()

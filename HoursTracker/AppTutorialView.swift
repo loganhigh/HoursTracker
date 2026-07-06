@@ -158,6 +158,11 @@ struct AppTutorialView: View {
             glowPulse = 1.0
             animateContentIn()
         }
+        .onChange(of: authService.isSignedIn) { _, isSignedIn in
+            guard isSignedIn, currentPage.isSignInStep else { return }
+            Haptics.success()
+            finishTutorial()
+        }
     }
 
     // MARK: - Subviews

@@ -63,3 +63,15 @@ service-account*.json
 .claude-flow/data/
 .claude-flow/sessions/
 .claude/memory.db
+
+# ─── AI assistant tooling / runtime state (local only) ───
+.claude/
+.claude-flow/
+.swarm/
+.cursor/
+.vscode/
+.mcp.json
+agentdb.rvf
+agentdb.rvf.lock
+ruvector.db
+firepit-log.txt

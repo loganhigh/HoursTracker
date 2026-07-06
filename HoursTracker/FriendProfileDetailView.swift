@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseFunctions
 
 /// Drill-in profile for a friend — tap from Friends list.
 struct FriendProfileDetailView: View {
@@ -6,11 +7,22 @@ struct FriendProfileDetailView: View {
     @ObservedObject var friendsService: FriendsService
     var onRemoveFriend: ((FriendProfile) async -> Bool)? = nil
 
+    @EnvironmentObject private var authService: AuthService
     @Environment(\.dismiss) private var dismiss
     @State private var showRemoveConfirm = false
     @State private var isRemoving = false
     @State private var showFullPhoto = false
     @State private var showAllBadges = false
+
+    // CEO-only stats recompute (also gated server-side by UID + passcode).
+    @State private var showAdminPasscodePrompt = false
+    @State private var adminPasscode = ""
+    @State private var isAdminRecomputing = false
+    @State private var adminResultMessage: String?
+
+    private var isCEO: Bool {
+        DeveloperConfig.isCEO(uid: authService.user?.uid)
+    }
 
     private var friend: FriendProfile? {
         friendsService.friends.first { $0.uid == friendUid }
@@ -49,6 +61,71 @@ struct FriendProfileDetailView: View {
                 Text("Remove \(friend.displayName) from your friends list? They will also stop seeing your stats.")
             }
         }
+        .alert("Admin passcode", isPresented: $showAdminPasscodePrompt) {
+            SecureField("Passcode", text: $adminPasscode)
+            Button("Recompute") {
+                Task { await performAdminRecompute() }
+            }
+            Button("Cancel", role: .cancel) { adminPasscode = "" }
+        } message: {
+            Text("Force a stats recompute for this user.")
+        }
+        .alert("Admin", isPresented: Binding(
+            get: { adminResultMessage != nil },
+            set: { if !$0 { adminResultMessage = nil } }
+        )) {
+            Button("OK") { adminResultMessage = nil }
+        } message: {
+            Text(adminResultMessage ?? "")
+        }
+    }
+
+    private func adminRecomputeButton(friend: FriendProfile) -> some View {
+        Button {
+            adminPasscode = ""
+            showAdminPasscodePrompt = true
+        } label: {
+            HStack(spacing: 8) {
+                if isAdminRecomputing {
+                    ProgressView().tint(AppTheme.Colors.accent)
+                } else {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 15, weight: .bold))
+                }
+                Text(isAdminRecomputing ? "Recomputing…" : "Recompute stats (admin)")
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+            }
+            .foregroundStyle(AppTheme.Colors.accent)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .background(
+                RoundedRectangle(cornerRadius: AppDesignSystem.Radius.lg, style: .continuous)
+                    .fill(AppTheme.Colors.accent.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppDesignSystem.Radius.lg, style: .continuous)
+                            .stroke(AppTheme.Colors.accent.opacity(0.3), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isAdminRecomputing)
+    }
+
+    private func performAdminRecompute() async {
+        let passcode = adminPasscode
+        adminPasscode = ""
+        guard !passcode.isEmpty else { return }
+        isAdminRecomputing = true
+        defer { isAdminRecomputing = false }
+        do {
+            _ = try await Functions.functions(region: "us-central1")
+                .httpsCallable("adminRecomputeUserStats")
+                .call(["targetUid": friendUid, "passcode": passcode])
+            await friendsService.refreshFriendProfiles()
+            adminResultMessage = "Stats recomputed. Pull to refresh if needed."
+        } catch {
+            adminResultMessage = "Failed: \(error.localizedDescription)"
+        }
     }
 
     @ViewBuilder
@@ -76,6 +153,10 @@ struct FriendProfileDetailView: View {
 
                 if friend.privacy.shareBadges, friend.hasBadgeDetail {
                     badgesCard(friend: friend, tier: tier)
+                }
+
+                if isCEO {
+                    adminRecomputeButton(friend: friend)
                 }
 
                 if onRemoveFriend != nil {
@@ -310,7 +391,7 @@ struct FriendProfileDetailView: View {
         ) {
             VStack(spacing: 16) {
                 if friend.unlockedBadgeSummaries.isEmpty {
-                    Text("Badge details will appear after \(friend.displayName) opens the app.")
+                    Text("Badge details haven't synced yet.")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(AppTheme.Colors.subtext)
                         .multilineTextAlignment(.center)
@@ -387,7 +468,7 @@ struct FriendProfileDetailView: View {
         ) {
             VStack(spacing: 8) {
                 if entries.isEmpty {
-                    Text("Shift details will appear after \(friend.displayName) opens the app.")
+                    Text("No shift details available yet.")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(AppTheme.Colors.subtext)
                         .multilineTextAlignment(.center)

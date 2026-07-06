@@ -45,7 +45,10 @@ struct RemoteGamificationAnchors {
 ///   until the app is uninstalled. No automatic expiration or deletion.
 final class HoursStore: ObservableObject {
     @Published var entries: [WorkEntry] = [] {
-        didSet { weekEntriesCache = nil }
+        didSet {
+            weekEntriesCache = nil
+            monthHoursCache = nil
+        }
     }
     @Published var yearArchives: [YearArchive] = []
     @Published var paySettings: PaySettings = PaySettings()
@@ -857,8 +860,25 @@ final class HoursStore: ObservableObject {
         return entries.filter { $0.date >= start && $0.date < end }
     }
 
+    // Memoized month → total-paid-hours, invalidated whenever `entries` changes
+    // (see the didSet on `entries`). The dashboard renders a 12-month chart and a
+    // best-month scan that previously called this once per month on every body
+    // evaluation — each an O(n) filter over all entries — so it re-scanned full
+    // history dozens of times per render, including during confetti/XP animations.
+    // Caching by month-start makes repeat renders O(1) lookups.
+    private var monthHoursCache: [Date: Double]?
+
     func monthTotalHours(monthDate: Date) -> Double {
-        entries(inMonth: monthDate).reduce(0) { $0 + $1.paidHours }
+        let cal = Calendar.current
+        guard let key = cal.date(from: cal.dateComponents([.year, .month], from: monthDate)) else {
+            return entries(inMonth: monthDate).reduce(0) { $0 + $1.paidHours }
+        }
+        if let cached = monthHoursCache?[key] { return cached }
+        let value = entries(inMonth: monthDate).reduce(0) { $0 + $1.paidHours }
+        var cache = monthHoursCache ?? [:]
+        cache[key] = value
+        monthHoursCache = cache
+        return value
     }
 
     func monthEstimatedPay(monthDate: Date) -> Double {
@@ -892,17 +912,27 @@ final class HoursStore: ObservableObject {
     // MARK: - Streak Calculation
     
     /// Returns the current active work streak (consecutive days worked ending at the most recent work day).
+    /// Only counts actually-worked days (off-days are excluded), spans the year
+    /// archive so the streak survives the Jan-1 rollover, and reports 0 unless the
+    /// most recent worked day is today or yesterday — otherwise a long-idle user
+    /// would keep seeing a stale streak that can never decay.
     func currentWorkStreak() -> Int {
-        guard !entries.isEmpty else { return 0 }
-        
         let cal = Calendar.current
-        let workDates = Set(entries.map { cal.startOfDay(for: $0.date) }).sorted(by: >)
-        
+        let workDates = Set(
+            allEntriesIncludingArchive()
+                .filter { !$0.isOffDay }
+                .map { cal.startOfDay(for: $0.date) }
+        ).sorted(by: >)
+
         guard let mostRecent = workDates.first else { return 0 }
-        
+
+        let today = cal.startOfDay(for: Date())
+        let daysSinceLastWork = cal.dateComponents([.day], from: mostRecent, to: today).day ?? 99
+        guard daysSinceLastWork <= 1 else { return 0 }
+
         var streak = 1
         var currentDate = mostRecent
-        
+
         for i in 1..<workDates.count {
             let previousDate = workDates[i]
             let daysDiff = cal.dateComponents([.day], from: previousDate, to: currentDate).day ?? 0
