@@ -48,6 +48,18 @@ service cloud.firestore {
         && data.text.size() <= 200;
     }
 
+    // Fields on users/{uid} that only the admin Cloud Functions (Admin SDK)
+    // may set. Clients must never write these or they could self-boost.
+    function noAdminOnlyFieldsCreate() {
+      return !request.resource.data.keys()
+        .hasAny(['adminFloorLevel', 'adminFloorPrestige', 'adminEquippedTitle']);
+    }
+
+    function noAdminOnlyFieldsUpdate() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['adminFloorLevel', 'adminFloorPrestige', 'adminEquippedTitle']);
+    }
+
     match /publicProfiles/{profileUid} {
       allow read: if isSignedIn();
       allow write: if false;
@@ -58,16 +70,33 @@ service cloud.firestore {
       }
     }
 
+    // Public read-only "Top 5 Hour Trackers" board. Written only by Cloud
+    // Functions (Admin SDK bypasses these rules).
+    match /leaderboards/{doc} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // Live progress for the admin "Refresh all users" bulk job. Only the CEO
+    // admin account can read it (so the panel can show real counts instead of
+    // an indefinite spinner); only Cloud Functions (Admin SDK) ever write it.
+    match /adminOps/{doc} {
+      allow read: if isSignedIn() && request.auth.uid == 'msUcdbAbaAaS4HDj52CMs0Vzw8j2';
+      allow write: if false;
+    }
+
     match /friendships/{pairId} {
+      // Friendship docs are created and updated ONLY by Cloud Functions (Admin
+      // SDK, which bypasses these rules) via the two-sided sendFriendRequest /
+      // reconcileFriendships flow. A client `create` previously only had to name
+      // itself as userA/userB — with no proof the other party consented — and
+      // that unilateral write satisfied friendshipPairExists(), unlocking the
+      // victim's friends-only content. Clients may read a friendship they take
+      // part in and delete it (un-friend / account cleanup) only.
       allow read: if isSignedIn()
         && (resource.data.userA == request.auth.uid || resource.data.userB == request.auth.uid);
-      allow create: if isSignedIn()
-        && request.resource.data.userA is string
-        && request.resource.data.userB is string
-        && (request.auth.uid == request.resource.data.userA
-          || request.auth.uid == request.resource.data.userB);
+      allow create, update: if false;
       allow delete: if isFriendshipParticipant();
-      allow update: if false;
     }
 
     match /users/{uid} {
@@ -75,7 +104,11 @@ service cloud.firestore {
       // (query on `friendCode`) works before a friendship exists. Push device
       // tokens live in the private `deviceTokens` subcollection instead.
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && noAdminOnlyFieldsCreate();
+      allow update: if request.auth != null && request.auth.uid == uid
+        && noAdminOnlyFieldsUpdate();
+      allow delete: if request.auth != null && request.auth.uid == uid;
 
       match /paySettings/{doc} {
         allow read, write: if request.auth != null && request.auth.uid == uid;
@@ -98,6 +131,14 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      match /syncDiagnostics/{doc} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      match /debugEvents/{doc} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
       match /feed/{feedDoc} {
         allow read: if request.auth != null && request.auth.uid == uid;
         allow write: if false;
@@ -108,12 +149,14 @@ service cloud.firestore {
       }
 
       match /friends/{friendUid} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
-
-        allow create: if request.auth != null
-          && request.auth.uid == friendUid
-          && exists(/databases/$(database)/documents/users/$(friendUid)/friendRequests/$(uid));
-
+        // Friend links are written ONLY by Cloud Functions (Admin SDK) via the
+        // two-sided accept / reconcileFriendships flow. The previous blanket
+        // `write` let any signed-in user create `users/ME/friends/VICTIM`, which
+        // alone satisfies isFriendOf(VICTIM) and unlocks the victim's
+        // friends-only activity and board posts. Clients may read their own
+        // list and delete links (un-friend + account-deletion cleanup) only.
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow create, update: if false;
         allow delete: if request.auth != null
           && (request.auth.uid == uid || request.auth.uid == friendUid);
       }
