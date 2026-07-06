@@ -25,11 +25,15 @@ struct RemoteGamificationAnchors {
     /// Takes priority over `storedLevel` and is cleared from Firestore after
     /// it is applied once, so the field acts as a one-shot correction.
     let levelOverride: Int?
-    /// Persistent admin override on the public user doc (`adminLevel`).
-    /// Never written by the client — set it directly in the Firebase Console.
-    /// When present, the app uses this as the display level instead of the
-    /// XP-calculated value, on both the owner's device and friends' devices.
-    let adminLevel: Int?
+    /// Admin-only one-shot prestige set from `gamification/current.prestigeOverride`.
+    let prestigeOverride: Int?
+    /// Admin XP bonus synced from `gamification/current.adminXPOffset`.
+    let adminXPOffset: Int?
+    /// Deprecated — legacy floor field; no longer used for level display.
+    let adminFloorLevel: Int?
+    /// Admin-set prestige floor on the user doc (`adminFloorPrestige`). Never
+    /// written by the client. Acts as a floor on displayed prestige.
+    let adminFloorPrestige: Int?
     /// Persistent admin override for the badge title shown on profiles
     /// (`adminEquippedTitle`). Never written by the client.
     let adminEquippedTitle: String?
@@ -40,7 +44,9 @@ struct RemoteGamificationAnchors {
 /// - Persistence: All data (entries, settings) is saved to UserDefaults and persists indefinitely
 ///   until the app is uninstalled. No automatic expiration or deletion.
 final class HoursStore: ObservableObject {
-    @Published var entries: [WorkEntry] = []
+    @Published var entries: [WorkEntry] = [] {
+        didSet { weekEntriesCache = nil }
+    }
     @Published var yearArchives: [YearArchive] = []
     @Published var paySettings: PaySettings = PaySettings()
     @Published var payHistoryEntries: [PayHistoryEntry] = []
@@ -49,11 +55,14 @@ final class HoursStore: ObservableObject {
     @Published var gamificationProfile: GamificationProfile = .defaultProfile
     @Published var gamificationEventMessage: String?
     @Published private(set) var isLoaded = false
-    /// Persistent admin-level override pulled from `adminLevel` on the Firestore
-    /// user doc. Acts as a floor only — displayed/published level is
+    /// Persistent admin-level floor pulled from `adminFloorLevel` on the
+    /// Firestore user doc. Displayed/published level is
     /// `max(adminLevelOverride, gamificationProfile.level)` so XP progression
     /// continues normally above the floor.
     @Published var adminLevelOverride: Int? = nil
+    /// Persistent admin-prestige floor pulled from `adminFloorPrestige`.
+    /// Displayed prestige is `max(adminPrestigeOverride, gamificationProfile.prestige)`.
+    @Published var adminPrestigeOverride: Int? = nil
     /// Persistent admin title override from `adminEquippedTitle` on the user doc.
     var adminEquippedTitleOverride: String? = nil
     private var isLoading = false
@@ -67,6 +76,8 @@ final class HoursStore: ObservableObject {
     private let yearArchivesKey = "year_archives_v1"
     private let gamificationKey = "gamification_profile_v1"
     private let autoYearlyResetKey = "auto_yearly_reset_enabled"
+    private let adminLevelOverrideKey = "admin_level_override_v1"
+    private let adminPrestigeOverrideKey = "admin_prestige_override_v1"
     private let cloudSync = CloudSyncManager.shared
     private let networkMonitor = NetworkMonitor.shared
 
@@ -96,6 +107,18 @@ final class HoursStore: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: gamificationKey),
            let profile = try? dec.decode(GamificationProfile.self, from: data) {
             gamificationProfile = profile
+        }
+        // Restore the persisted admin-level floor synchronously so the displayed
+        // level is correct on first frame. Without this it starts nil and the UI
+        // briefly shows the lower XP-calculated level before cloud sync applies
+        // the override, causing a visible level "jump" on launch.
+        let savedAdminLevel = UserDefaults.standard.integer(forKey: adminLevelOverrideKey)
+        if savedAdminLevel > 0 {
+            adminLevelOverride = savedAdminLevel
+        }
+        let savedAdminPrestige = UserDefaults.standard.integer(forKey: adminPrestigeOverrideKey)
+        if savedAdminPrestige > 0 {
+            adminPrestigeOverride = savedAdminPrestige
         }
     }
 
@@ -164,12 +187,31 @@ final class HoursStore: ObservableObject {
     /// Merges Firestore entries into local data (keeps local-only shifts) and
     /// pushes an updated friends profile snapshot.
     func applyRemoteEntries(_ remoteEntries: [WorkEntry]) {
-        let remoteIDs = Set(remoteEntries.map(\.id))
-        var merged = entries
-        for remote in remoteEntries {
-            if let idx = merged.firstIndex(where: { $0.id == remote.id }) {
+        // Entries the user just deleted must stay gone even if a stale snapshot
+        // (or an in-flight pull) still carries them. `pending_deletes` acts as a
+        // tombstone set until the server confirms the removal.
+        let tombstones = cloudSync.pendingDeletionIDs()
+
+        // Drop tombstoned docs from the remote set so they can't be re-added,
+        // and drop any locally-held copy so the row disappears immediately.
+        let liveRemote = tombstones.isEmpty
+            ? remoteEntries
+            : remoteEntries.filter { !tombstones.contains($0.id.uuidString) }
+        let remoteIDs = Set(liveRemote.map(\.id))
+
+        var merged = tombstones.isEmpty
+            ? entries
+            : entries.filter { !tombstones.contains($0.id.uuidString) }
+        // Index by id so each remote entry is an O(1) lookup instead of a linear
+        // scan of `merged` — the previous `firstIndex(where:)` per remote made
+        // this O(n·m) on every remote snapshot; it's now O(n+m).
+        var indexByID = [UUID: Int](minimumCapacity: merged.count)
+        for (i, entry) in merged.enumerated() { indexByID[entry.id] = i }
+        for remote in liveRemote {
+            if let idx = indexByID[remote.id] {
                 merged[idx] = remote
             } else {
+                indexByID[remote.id] = merged.count
                 merged.append(remote)
             }
         }
@@ -182,10 +224,18 @@ final class HoursStore: ObservableObject {
             prestige: gamificationProfile.prestige
         )
 
+        // Re-upload only genuinely local-only entries (offline-created) — never
+        // tombstoned ones, which are already excluded from `merged`.
         let localOnly = merged.filter { !remoteIDs.contains($0.id) }
         for entry in localOnly {
             cloudSync.saveEntry(entry) { _ in }
         }
+
+        // Clear tombstones the server has confirmed gone (absent from the raw
+        // snapshot). Tombstones for docs still present remotely are kept so the
+        // deletion keeps applying until it propagates.
+        cloudSync.reconcileTombstones(presentRemoteIDs: Set(remoteEntries.map { $0.id.uuidString }))
+
         syncProfileSnapshotToCloud()
     }
 
@@ -238,7 +288,13 @@ final class HoursStore: ObservableObject {
                 gamificationProfile.equippedTitle = cloudTitle
                 didUpdate = true
             }
+            if let cloudOffset = anchors.adminXPOffset,
+               cloudOffset != gamificationProfile.adminXPOffset {
+                gamificationProfile.adminXPOffset = cloudOffset
+                didUpdate = true
+            }
             if didUpdate {
+                recalculateGamification(eventHint: nil)
                 saveLocallyOnly()
             }
             return
@@ -256,6 +312,9 @@ final class HoursStore: ObservableObject {
             gamificationProfile.bestStreak = anchors.bestStreak
         }
         gamificationProfile.streakFreezes = max(gamificationProfile.streakFreezes, anchors.streakFreezes)
+        if let cloudOffset = anchors.adminXPOffset, cloudOffset != gamificationProfile.adminXPOffset {
+            gamificationProfile.adminXPOffset = cloudOffset
+        }
         if let cloudTitle, !cloudTitle.isEmpty {
             gamificationProfile.equippedTitle = cloudTitle
         }
@@ -278,26 +337,6 @@ final class HoursStore: ObservableObject {
         let payHistoryCopy = payHistoryEntries
         let yearArchivesCopy = yearArchives
         let gamificationCopy = gamificationProfile
-        let enc = JSONEncoder()
-        enc.dateEncodingStrategy = .iso8601
-
-        var entriesData: Data?
-        var settingsData: Data?
-        var payHistoryData: Data?
-        var yearArchivesData: Data?
-        var gamificationData: Data?
-        do {
-            entriesData = try enc.encode(entriesCopy)
-            settingsData = try enc.encode(settingsCopy)
-            payHistoryData = try enc.encode(payHistoryCopy)
-            yearArchivesData = try enc.encode(yearArchivesCopy)
-            gamificationData = try enc.encode(gamificationCopy)
-        } catch {
-            AppLogger.db.error("saveLocallyOnly failed: \(String(describing: error))")
-            return
-        }
-        guard let entriesData, let settingsData else { return }
-
         let entriesKey = self.entriesKey
         let settingsKey = self.settingsKey
         let payHistoryKey = self.payHistoryKey
@@ -305,7 +344,37 @@ final class HoursStore: ObservableObject {
         let gamificationKey = self.gamificationKey
         let prestigeCopy = gamificationCopy.prestige
 
+        // PaySettings and GamificationProfile have main-actor-isolated Encodable
+        // conformances, so they must be encoded on the main actor (they're tiny,
+        // so the cost is negligible). The large entries/payHistory/yearArchives
+        // arrays — the ones that made this a main-thread stall on every save for
+        // a multi-year history — are encoded on the background queue below.
+        let mainEnc = JSONEncoder()
+        mainEnc.dateEncodingStrategy = .iso8601
+        let settingsData: Data
+        let gamificationData: Data
+        do {
+            settingsData = try mainEnc.encode(settingsCopy)
+            gamificationData = try mainEnc.encode(gamificationCopy)
+        } catch {
+            AppLogger.db.error("saveLocallyOnly failed (settings/gamification): \(String(describing: error))")
+            return
+        }
+
         DispatchQueue.global(qos: .utility).async {
+            let enc = JSONEncoder()
+            enc.dateEncodingStrategy = .iso8601
+            let entriesData: Data
+            let payHistoryData: Data
+            let yearArchivesData: Data
+            do {
+                entriesData = try enc.encode(entriesCopy)
+                payHistoryData = try enc.encode(payHistoryCopy)
+                yearArchivesData = try enc.encode(yearArchivesCopy)
+            } catch {
+                AppLogger.db.error("saveLocallyOnly failed: \(String(describing: error))")
+                return
+            }
             UserDefaults.standard.set(entriesData, forKey: entriesKey)
             UserDefaults.standard.set(settingsData, forKey: settingsKey)
             UserDefaults.standard.set(payHistoryData, forKey: payHistoryKey)
@@ -353,58 +422,80 @@ final class HoursStore: ObservableObject {
         }
     }
 
-    /// Level shown in UI — prefers server-computed level (which includes
-    /// adminLevel floor), falls back to local XP calculation with admin floor.
+    /// Level shown in UI — prefers server-computed level when available.
     var displayedLevel: Int {
         if FirebaseMigrationFlags.useServerStats,
            let serverLevel = StatsListenerService.shared.lifetimeStats?.level {
-            return max(adminLevelOverride ?? 0, serverLevel)
+            return serverLevel
         }
-        return max(adminLevelOverride ?? 0, gamificationProfile.level)
+        return gamificationProfile.level
     }
 
-    /// Gamification snapshot for UI cards; uses server level when available.
+    /// Prestige shown in UI.
+    var displayedPrestige: Int {
+        gamificationProfile.prestige
+    }
+
+    /// Gamification snapshot for UI cards.
     func displayedGamificationProfile() -> GamificationProfile {
         var profile = gamificationProfile
-        let level = displayedLevel
-        guard level > profile.level else { return profile }
-        profile.level = level
-        profile.xpIntoCurrentLevel = 0
-        profile.xpForNextLevel = GamificationLevelCalculator.xpRequiredForLevel(level)
+        profile.prestige = displayedPrestige
         return profile
     }
 
-    /// Called from `pullFromCloud` when the public cloud profile has a stored
-    /// `level` that differs from the local calculated level. Synthesises a
-    /// snapshot value that reproduces the stored level so a manual Firestore
-    /// correction becomes durable instead of being overwritten by XP math.
-    /// Only ratchets **up** — never downgrades natural XP progression.
-    func applySyntheticLevelSnapshot(storedLevel: Int) {
-        let maxLevel = GamificationLevelCalculator.maxLevelForPrestige(gamificationProfile.prestige)
-        let clampedLevel = min(max(storedLevel, 1), maxLevel)
-
-        guard gamificationProfile.prestige > 0,
-              clampedLevel > 1,
-              clampedLevel > gamificationProfile.level else { return }
-
-        // Sum the XP required to complete levels 1…(clampedLevel-1).
-        // Setting the snapshot to (totalXP - that sum) places the user at the
-        // very start of clampedLevel — a safe, conservative reconstruction.
-        let xpForPrecedingLevels = (1..<clampedLevel)
-            .reduce(0) { $0 + GamificationLevelCalculator.xpRequiredForLevel($1) }
-        let synthetic = max(0, gamificationProfile.totalXP - xpForPrecedingLevels)
-        gamificationProfile.prestigeXPSnapshots = [synthetic]
+    /// Applies a cloud-synced admin XP offset (multi-device / server admin set).
+    func syncAdminXPOffsetFromCloud(_ offset: Int) {
+        guard offset != gamificationProfile.adminXPOffset else { return }
+        gamificationProfile.adminXPOffset = offset
         recalculateGamification(eventHint: nil)
         saveLocallyOnly()
     }
 
-    /// Stores the admin level override so profile sync re-publishes it as `level`.
-    func applyAdminLevel(_ adminLevel: Int?) {
-        if let adminLevel, adminLevel > 0 {
-            adminLevelOverride = adminLevel
-        } else {
-            adminLevelOverride = nil
+    /// Applies admin progression written remotely (admin panel / other device).
+    ///
+    /// Always ADOPTS the cloud values (prestige, snapshots, adminXPOffset)
+    /// rather than re-deriving a local offset from levelOverride/prestigeOverride
+    /// flags. The old re-derivation path computed a slightly different offset on
+    /// every device (each against its own local XP), so devices never agreed and
+    /// each listener fire re-snapped XP back to the target level — replaying
+    /// level-ups endlessly. The server-computed offset is the single source of
+    /// truth; local XP earned since simply stacks on top of it.
+    func applyCloudGamificationProgression(_ anchors: RemoteGamificationAnchors) {
+        var dirty = false
+        if anchors.prestige != gamificationProfile.prestige {
+            gamificationProfile.prestige = anchors.prestige
+            gamificationProfile.prestigeFloor = max(
+                gamificationProfile.prestigeFloor ?? 0,
+                anchors.prestige,
+                anchors.highWaterPrestige
+            )
+            dirty = true
         }
+        if !anchors.prestigeXPSnapshots.isEmpty,
+           anchors.prestigeXPSnapshots != gamificationProfile.prestigeXPSnapshots {
+            gamificationProfile.prestigeXPSnapshots = anchors.prestigeXPSnapshots
+            dirty = true
+        }
+        if let cloudOffset = anchors.adminXPOffset,
+           cloudOffset != gamificationProfile.adminXPOffset {
+            gamificationProfile.adminXPOffset = cloudOffset
+            dirty = true
+        }
+        guard dirty else { return }
+        recalculateGamification(eventHint: nil)
+        saveLocallyOnly()
+    }
+
+    /// Deprecated — legacy admin floors; no longer clears progression sets.
+    func applyAdminLevel(_ adminLevel: Int?) {
+        adminLevelOverride = nil
+        UserDefaults.standard.removeObject(forKey: adminLevelOverrideKey)
+    }
+
+    /// Deprecated — legacy admin floors; no longer clears progression sets.
+    func applyAdminPrestige(_ adminPrestige: Int?) {
+        adminPrestigeOverride = nil
+        UserDefaults.standard.removeObject(forKey: adminPrestigeOverrideKey)
     }
 
     /// Stores the admin title override so profile sync re-publishes it.
@@ -997,17 +1088,34 @@ final class HoursStore: ObservableObject {
     }
 
     /// Returns all non-off-day entries in the same Mon–Sun week as `date`, sorted oldest-first.
+    /// Memoized week buckets (week-start → that week's non-off-day entries,
+    /// ascending). Invalidated whenever `entries` changes (see the didSet on
+    /// `entries`). Building this once per entries-generation turns the weekly
+    /// overtime pay path from O(n²) — `weekEntries(for:)` previously re-filtered
+    /// the entire entries array on every call, and it's called once per entry
+    /// from `payBreakdown`, itself called per entry on every render and every
+    /// add/update — into O(n).
+    private var weekEntriesCache: [Date: [WorkEntry]]?
+
     private func weekEntries(for date: Date) -> [WorkEntry] {
         var cal = Calendar.current
         cal.firstWeekday = 2
         guard let ws = cal.dateInterval(of: .weekOfYear, for: date)?.start else { return [] }
-        return entries
-            .filter { !$0.isOffDay }
-            .filter {
-                var c = Calendar.current; c.firstWeekday = 2
-                return c.dateInterval(of: .weekOfYear, for: $0.date)?.start == ws
-            }
-            .sorted { $0.date < $1.date }
+        if let cache = weekEntriesCache {
+            return cache[ws] ?? []
+        }
+        var buckets: [Date: [WorkEntry]] = [:]
+        var c = Calendar.current
+        c.firstWeekday = 2
+        for entry in entries where !entry.isOffDay {
+            guard let start = c.dateInterval(of: .weekOfYear, for: entry.date)?.start else { continue }
+            buckets[start, default: []].append(entry)
+        }
+        for key in buckets.keys {
+            buckets[key]?.sort { $0.date < $1.date }
+        }
+        weekEntriesCache = buckets
+        return buckets[ws] ?? []
     }
 
     func payBreakdown(for entry: WorkEntry) -> PayBreakdown {
@@ -1269,6 +1377,22 @@ final class HoursStore: ObservableObject {
 
     /// Cutoff only applies when enabled and a date is saved.
     private func normalizePaySettings() {
+        let cal = Calendar.current
+        let minReasonableDate = cal.date(from: DateComponents(year: 2020, month: 1, day: 1)) ?? Date(timeIntervalSince1970: 0)
+        let maxReasonableDate = cal.date(byAdding: .year, value: 5, to: Date()) ?? Date().addingTimeInterval(5 * 365 * 24 * 60 * 60)
+
+        func isReasonablePayBoundary(_ date: Date?) -> Bool {
+            guard let date else { return true }
+            return date >= minReasonableDate && date <= maxReasonableDate
+        }
+
+        if !isReasonablePayBoundary(paySettings.nextPayday) {
+            paySettings.nextPayday = nil
+        }
+        if !isReasonablePayBoundary(paySettings.nextCutoff) {
+            paySettings.nextCutoff = nil
+            paySettings.payPeriodUsesCutoff = false
+        }
         if paySettings.payPeriodUsesCutoff && paySettings.nextCutoff == nil {
             paySettings.payPeriodUsesCutoff = false
         }
@@ -1323,36 +1447,47 @@ final class HoursStore: ObservableObject {
         let payHistoryKey = self.payHistoryKey
         let yearArchivesKey = self.yearArchivesKey
         let gamificationKey = self.gamificationKey
-
-        // Encode on main (avoids Swift 6 main-actor-isolated Encodable in background); write on background
-        let enc = JSONEncoder()
-        enc.dateEncodingStrategy = .iso8601
-        var entriesData: Data?
-        var settingsData: Data?
-        var payHistoryData: Data?
-        var yearArchivesData: Data?
-        var gamificationData: Data?
-        do {
-            entriesData = try enc.encode(entriesCopy)
-            settingsData = try enc.encode(settingsCopy)
-            payHistoryData = try enc.encode(payHistoryCopy)
-            yearArchivesData = try enc.encode(yearArchivesCopy)
-            gamificationData = try enc.encode(gamificationCopy)
-        } catch {
-            AppLogger.db.error("save failed: \(String(describing: error))")
-            return
-        }
-        guard let entriesData, let settingsData else { return }
         let prestigeCopy = gamificationCopy.prestige
 
+        // PaySettings and GamificationProfile have main-actor-isolated Encodable
+        // conformances, so they're encoded here on the main actor (tiny, so
+        // negligible). The large entries/payHistory/yearArchives arrays are
+        // encoded on the background queue below so serializing a large history no
+        // longer blocks the main thread on every add/edit/delete. (Cloud sync
+        // below is independent and stays on the main path.)
+        let mainEnc = JSONEncoder()
+        mainEnc.dateEncodingStrategy = .iso8601
+        let settingsData: Data
+        let gamificationData: Data
+        do {
+            settingsData = try mainEnc.encode(settingsCopy)
+            gamificationData = try mainEnc.encode(gamificationCopy)
+        } catch {
+            AppLogger.db.error("save failed (settings/gamification): \(String(describing: error))")
+            return
+        }
+
         DispatchQueue.global(qos: .utility).async {
+            let enc = JSONEncoder()
+            enc.dateEncodingStrategy = .iso8601
+            let entriesData: Data
+            let payHistoryData: Data
+            let yearArchivesData: Data
+            do {
+                entriesData = try enc.encode(entriesCopy)
+                payHistoryData = try enc.encode(payHistoryCopy)
+                yearArchivesData = try enc.encode(yearArchivesCopy)
+            } catch {
+                AppLogger.db.error("save failed: \(String(describing: error))")
+                return
+            }
             AppLogger.db.debug("save: writing to UserDefaults on background")
             UserDefaults.standard.set(entriesData, forKey: entriesKey)
             UserDefaults.standard.set(settingsData, forKey: settingsKey)
             UserDefaults.standard.set(payHistoryData, forKey: payHistoryKey)
             UserDefaults.standard.set(yearArchivesData, forKey: yearArchivesKey)
             UserDefaults.standard.set(gamificationData, forKey: gamificationKey)
-            
+
             // Update widget data
             WidgetDataManager.shared.updateWidgetData(
                 entries: entriesCopy,
@@ -1476,8 +1611,19 @@ final class HoursStore: ObservableObject {
                         mergedEntries.append(localEntry)
                     }
                     // Re-upload any local-only entries that weren't in the Firestore snapshot.
+                    // Include archived years too: Career/lifetime totals count
+                    // `yearArchives`, while the server can only recompute from
+                    // docs that exist in Firestore. Without this, older archived
+                    // shifts remain visible locally but missing from public/admin
+                    // profile totals.
                     let localOnlyEntries = deduplicatedEntries.filter { !remoteIDs.contains($0.id) }
                     for entry in localOnlyEntries {
+                        self.cloudSync.saveEntry(entry) { _ in }
+                    }
+                    let localOnlyArchivedEntries = normalizedArchives
+                        .flatMap(\.entries)
+                        .filter { !remoteIDs.contains($0.id) }
+                    for entry in localOnlyArchivedEntries {
                         self.cloudSync.saveEntry(entry) { _ in }
                     }
                     let rollover = self.archivePriorYearsIfNeeded(entries: mergedEntries, archives: normalizedArchives)
@@ -1527,6 +1673,7 @@ final class HoursStore: ObservableObject {
                 if shouldRepublishProfileAfterLoad {
                     self.syncProfileSnapshotToCloud()
                 }
+                self.cloudSync.runDailyCloudRepairIfNeeded()
                 completion?()
             }
         }
@@ -1726,6 +1873,9 @@ struct GamificationProfile: Codable {
     var prestigeXPSnapshots: [Int] = []
     /// Paid work hours at each prestige — prestige only rolls back when hours are deleted.
     var prestigeHourSnapshots: [Double] = []
+    /// Admin XP bonus applied on top of shift-derived XP so an admin level set
+    /// becomes the user's current level while shifts still add XP normally.
+    var adminXPOffset: Int = 0
     var xpIntoCurrentLevel: Int
     var xpForNextLevel: Int
     var canPrestige: Bool
@@ -1817,6 +1967,8 @@ private enum GamificationEngine {
 
         totalXP += challengeXP
 
+        totalXP += previous.adminXPOffset
+
         // XP boost events (backend-ready; currently empty unless configured).
         let boostMultiplier = max(previous.activeBoosts.map(\.multiplier).max() ?? 1.0, 1.0)
         totalXP = Int((Double(totalXP) * boostMultiplier).rounded())
@@ -1866,7 +2018,11 @@ private enum GamificationEngine {
         var unlockedBadges = Set(previous.unlockedBadges)
 
         for milestone in [10, 25, 50, 75, 100] where level >= milestone {
-            unlockedTitles.insert("Level \(milestone) Veteran")
+            // Level 10 is reached too quickly to feel like a "Veteran" milestone —
+            // the badge still unlocks at 10, but the equippable title starts at 25.
+            if milestone >= 25 {
+                unlockedTitles.insert("Level \(milestone) Veteran")
+            }
             unlockedBadges.insert("level_\(milestone)")
         }
         for p in 1...10 where manualPrestige >= p {
@@ -1897,7 +2053,7 @@ private enum GamificationEngine {
             equippedTitle = prev
         } else {
             // Auto-select best available: highest milestone title, or first alphabetically
-            let milestoneOrder = ["Level 100 Veteran", "Level 75 Veteran", "Level 50 Veteran", "Level 25 Veteran", "Level 10 Veteran"]
+            let milestoneOrder = ["Level 100 Veteran", "Level 75 Veteran", "Level 50 Veteran", "Level 25 Veteran"]
             equippedTitle = milestoneOrder.first { unlockedTitles.contains($0) } ?? unlockedTitles.sorted().first
         }
 

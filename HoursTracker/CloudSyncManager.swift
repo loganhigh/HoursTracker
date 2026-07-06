@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseFunctions
 
 // MARK: - Cloud Sync Manager (Firestore)
 
@@ -12,7 +13,6 @@ final class CloudSyncManager: ObservableObject {
     @Published var lastSyncDate: Date?
     @Published var syncError: String?
     @Published var pendingChanges = 0
-    @Published var showRemoteOverwriteAlert = false
 
     /// True when Firestore is available and user is signed in.
     var isCloudAvailable: Bool { currentUID != nil }
@@ -25,6 +25,7 @@ final class CloudSyncManager: ObservableObject {
     /// hit Firebase's runtime check (and they all gate on `isCloudAvailable`
     /// / `currentUID` first, which stays `nil` without a signed-in user).
     private lazy var db: Firestore = Firestore.firestore()
+    private lazy var functions = Functions.functions(region: "us-central1")
     private let networkMonitor = NetworkMonitor.shared
     private var authService: AuthService?
     private weak var hoursStore: HoursStore?
@@ -34,14 +35,19 @@ final class CloudSyncManager: ObservableObject {
     private var entriesListenerKey: String?
     private var settingsListener: ListenerRegistration?
     private var settingsListenerKey: String?
+    private var gamificationListener: ListenerRegistration?
+    private var gamificationListenerKey: String?
     /// True once Firestore has delivered at least one entries snapshot this session.
     /// HoursStore uses this to avoid stale UserDefaults overwriting cloud data.
     private(set) var hasAppliedRemoteEntries = false
     private var isPulling = false
+    private var isRunningDailyRepairSync = false
+    private var shouldRunDailyRepairAfterPull = false
     private var cancellables = Set<AnyCancellable>()
 
-    private let remoteOverwriteConfirmedKey = "cloud_remote_overwrite_confirmed_v1"
     private let pendingProfileSyncKey = "pending_profile_sync"
+    private let dailyRepairSyncDateKeyPrefix = "cloud_daily_repair_sync_v3_date_"
+    private let repairBatchSize = 200
     private let encoder: JSONEncoder = {
         let e = JSONEncoder()
         e.dateEncodingStrategy = .millisecondsSince1970
@@ -57,7 +63,10 @@ final class CloudSyncManager: ObservableObject {
         checkPendingChanges()
         networkMonitor.$isConnected
             .sink { [weak self] isConnected in
-                if isConnected { self?.syncWhenOnline() }
+                if isConnected {
+                    self?.syncWhenOnline()
+                    self?.runDailyCloudRepairIfNeeded()
+                }
             }
             .store(in: &cancellables)
     }
@@ -78,6 +87,11 @@ final class CloudSyncManager: ObservableObject {
         }
     }
 
+    private static func dayKey(for date: Date) -> String {
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
+    }
+
     // MARK: - Sync status
 
     func checkPendingChanges() {
@@ -93,6 +107,8 @@ final class CloudSyncManager: ObservableObject {
     // MARK: - Entry CRUD
 
     func saveEntry(_ entry: WorkEntry, completion: @escaping (Result<Void, Error>) -> Void) {
+        // Saving an entry cancels any pending deletion tombstone for the same id.
+        clearDeleteTombstone(entry.id)
         guard let uid = currentUID else {
             queueEntryForSync(entry)
             completion(.success(()))
@@ -105,7 +121,7 @@ final class CloudSyncManager: ObservableObject {
         }
 
         let payload = entryFirestorePayload(entry)
-        let primaryCollection = FirebaseMigrationFlags.useTimeEntriesPath ? "timeEntries" : "entries"
+        let primaryCollection = entriesCollectionName()
         let primaryRef = db.collection("users").document(uid).collection(primaryCollection).document(entry.id.uuidString)
 
         FirestoreOperationLog.write(operation: "saveEntry.\(primaryCollection)", uid: uid) { done in
@@ -121,6 +137,7 @@ final class CloudSyncManager: ObservableObject {
                 case .success:
                     self.markEntryAsSynced(entry.id)
                     self.checkPendingChanges()
+                    self.traceRepairGate(reason: "saveEntrySuccess")
                     if FirebaseMigrationFlags.useServerStats {
                         Task { @MainActor in
                             StatsListenerService.shared.markEntryWritePending()
@@ -142,16 +159,20 @@ final class CloudSyncManager: ObservableObject {
     }
 
     func deleteEntry(_ entry: WorkEntry, completion: @escaping (Result<Void, Error>) -> Void) {
+        // Tombstone immediately (persisted) so a stale snapshot or the
+        // applyRemoteEntries re-upload path can't resurrect the entry before the
+        // server delete lands. Cleared by reconcileTombstones once a snapshot
+        // confirms the doc is gone.
+        queueDeleteForSync(entry.id)
         guard let uid = currentUID else {
             completion(.success(()))
             return
         }
         guard networkMonitor.isConnected else {
-            queueDeleteForSync(entry.id)
             completion(.success(()))
             return
         }
-        let primaryCollection = FirebaseMigrationFlags.useTimeEntriesPath ? "timeEntries" : "entries"
+        let primaryCollection = entriesCollectionName()
         let primaryRef = db.collection("users").document(uid)
             .collection(primaryCollection).document(entry.id.uuidString)
 
@@ -162,6 +183,7 @@ final class CloudSyncManager: ObservableObject {
                 guard let self else { return }
                 switch result {
                 case .failure(let error):
+                    // Leave the tombstone queued; syncPendingDeletes retries it.
                     completion(.failure(error))
                 case .success:
                     if FirebaseMigrationFlags.useLegacyEntryMirror {
@@ -239,6 +261,156 @@ final class CloudSyncManager: ObservableObject {
         }
     }
 
+    /// Explicit repair path for accounts where this device has older archived
+    /// shifts that never made it into Firestore. Normal edits only touch the
+    /// active `entries` array, but lifetime/career totals also include
+    /// `yearArchives`; pushing this full set makes the server recompute match
+    /// what the user sees locally on their own Career page.
+    func forceUploadAllLocalData(completion: @escaping (Result<Void, Error>) -> Void) {
+        guard let uid = currentUID, networkMonitor.isConnected else {
+            completion(.failure(NSError(
+                domain: "CloudSync",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Not signed in or offline"]
+            )))
+            return
+        }
+        guard let store = hoursStore else {
+            completion(.failure(NSError(
+                domain: "CloudSync",
+                code: -4,
+                userInfo: [NSLocalizedDescriptionKey: "Local data is still loading. Try again in a moment."]
+            )))
+            return
+        }
+        let allEntries = store.allEntriesIncludingArchive()
+        let totalHours = allEntries
+            .filter { !$0.isOffDay }
+            .reduce(0.0) { $0 + $1.paidHours }
+        writeRepairDiagnostic(uid: uid, status: "started", entryCount: allEntries.count, localHours: totalHours)
+
+        isSyncing = true
+        syncError = nil
+        uploadEntriesInBatches(allEntries, uid: uid, uploaded: 0) { [weak self] uploadResult in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch uploadResult {
+                case .failure(let error):
+                    self.isSyncing = false
+                    self.syncError = error.localizedDescription
+                    self.writeRepairDiagnostic(
+                        uid: uid,
+                        status: "failed",
+                        entryCount: allEntries.count,
+                        localHours: totalHours,
+                        error: error.localizedDescription
+                    )
+                    completion(.failure(error))
+                case .success:
+                    let group = DispatchGroup()
+                    var syncErrors: [Error] = []
+
+                    group.enter()
+                    self.saveSettings(store.paySettings) { result in
+                        if case .failure(let error) = result { syncErrors.append(error) }
+                        group.leave()
+                    }
+
+                    group.enter()
+                    self.saveProfileSnapshot(store: store) { result in
+                        if case .failure(let error) = result { syncErrors.append(error) }
+                        group.leave()
+                    }
+
+                    group.notify(queue: .main) {
+                        self.isSyncing = false
+                        self.lastSyncDate = Date()
+                        if let error = syncErrors.first {
+                            self.syncError = error.localizedDescription
+                            self.writeRepairDiagnostic(
+                                uid: uid,
+                                status: "failed",
+                                entryCount: allEntries.count,
+                                localHours: totalHours,
+                                error: error.localizedDescription
+                            )
+                            completion(.failure(error))
+                        } else {
+                            self.syncError = nil
+                            self.writeRepairDiagnostic(
+                                uid: uid,
+                                status: "finished",
+                                entryCount: allEntries.count,
+                                localHours: totalHours
+                            )
+                            completion(.success(()))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Automatic daily repair upload. This quietly publishes the complete local
+    /// dataset (active + archived entries) once per day when the app is open,
+    /// signed in, online, and the store has finished loading. It is intentionally
+    /// keyed by uid so switching accounts cannot suppress another account's
+    /// daily repair window.
+    func runDailyCloudRepairIfNeeded() {
+        traceRepairGate(reason: "runDailyCloudRepairIfNeeded")
+        guard let uid = currentUID, networkMonitor.isConnected else {
+            return
+        }
+        guard let store = hoursStore, store.isLoaded else {
+            writeRepairDiagnostic(uid: uid, status: "waiting_for_store_load", entryCount: 0)
+            return
+        }
+        if isPulling {
+            shouldRunDailyRepairAfterPull = true
+            let allEntries = store.allEntriesIncludingArchive()
+            let totalHours = allEntries
+                .filter { !$0.isOffDay }
+                .reduce(0.0) { $0 + $1.paidHours }
+            writeRepairDiagnostic(
+                uid: uid,
+                status: "waiting_for_pull",
+                entryCount: allEntries.count,
+                localHours: totalHours
+            )
+            return
+        }
+        guard !isRunningDailyRepairSync else {
+            return
+        }
+
+        let todayKey = Self.dayKey(for: Date())
+        let defaultsKey = dailyRepairSyncDateKeyPrefix + uid
+        if UserDefaults.standard.string(forKey: defaultsKey) == todayKey {
+            let allEntries = store.allEntriesIncludingArchive()
+            let totalHours = allEntries
+                .filter { !$0.isOffDay }
+                .reduce(0.0) { $0 + $1.paidHours }
+            writeRepairDiagnostic(
+                uid: uid,
+                status: "skipped_already_ran_today",
+                entryCount: allEntries.count,
+                localHours: totalHours
+            )
+            return
+        }
+
+        isRunningDailyRepairSync = true
+        forceUploadAllLocalData { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.isRunningDailyRepairSync = false
+                if case .success = result {
+                    UserDefaults.standard.set(todayKey, forKey: defaultsKey)
+                }
+            }
+        }
+    }
+
     func fetchEntries(completion: @escaping (Result<[WorkEntry], Error>) -> Void) {
         guard let uid = currentUID, networkMonitor.isConnected else {
             completion(.failure(NSError(domain: "CloudSync", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not signed in or offline"])))
@@ -252,6 +424,123 @@ final class CloudSyncManager: ObservableObject {
                 }
                 let entries = snapshot?.documents.compactMap { self.entry(from: $0.data()) } ?? []
                 completion(.success(entries))
+            }
+        }
+    }
+
+    private func uploadEntriesInBatches(
+        _ entries: [WorkEntry],
+        uid: String,
+        uploaded: Int,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        Task { @MainActor [weak self] in
+            await self?.uploadEntriesInBatchesOnMainActor(
+                entries,
+                uid: uid,
+                uploaded: uploaded,
+                completion: completion
+            )
+        }
+    }
+
+    @MainActor
+    private func uploadEntriesInBatchesOnMainActor(
+        _ entries: [WorkEntry],
+        uid: String,
+        uploaded: Int,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) async {
+        guard uploaded < entries.count else {
+            completion(.success(()))
+            return
+        }
+
+        let upperBound = min(uploaded + repairBatchSize, entries.count)
+        let chunk = Array(entries[uploaded..<upperBound])
+        let payloads = chunk.map { entryCallablePayload($0) }
+
+        do {
+            _ = try await functions.httpsCallable("clientUploadTimeEntriesBatch").call(
+                functionsCallablePayload(["entries": payloads])
+            )
+            for entry in chunk {
+                markEntryAsSynced(entry.id)
+            }
+            writeRepairDiagnostic(
+                uid: uid,
+                status: "uploading",
+                entryCount: entries.count,
+                uploadedCount: upperBound
+            )
+            await uploadEntriesInBatchesOnMainActor(
+                entries,
+                uid: uid,
+                uploaded: upperBound,
+                completion: completion
+            )
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
+    private func writeRepairDiagnostic(
+        uid: String,
+        status: String,
+        entryCount: Int,
+        uploadedCount: Int? = nil,
+        localHours: Double? = nil,
+        error: String? = nil
+    ) {
+        var payload: [String: Any] = [
+            "status": status,
+            "entryCount": entryCount,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+        if let uploadedCount { payload["uploadedCount"] = uploadedCount }
+        if let localHours { payload["localHours"] = localHours }
+        if let error { payload["error"] = error }
+
+        let ref = db.collection("users").document(uid)
+            .collection("syncDiagnostics").document("dailyRepair")
+        FirestoreOperationLog.write(operation: "diagnostic.dailyRepair", uid: uid) { done in
+            ref.setData(payload, merge: true, completion: done)
+        } completion: { [weak self] result in
+            if case .failure(let error) = result {
+                DispatchQueue.main.async {
+                    self?.syncError = "Diagnostic write failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func traceRepairGate(reason: String) {
+        guard let uid = currentUID else { return }
+        let entries = hoursStore?.allEntriesIncludingArchive() ?? []
+        let localHours = entries
+            .filter { !$0.isOffDay }
+            .reduce(0.0) { $0 + $1.paidHours }
+        let payload: [String: Any] = [
+            "reason": reason,
+            "networkConnected": networkMonitor.isConnected,
+            "hasStore": hoursStore != nil,
+            "storeLoaded": hoursStore?.isLoaded ?? false,
+            "isPulling": isPulling,
+            "isRunningDailyRepairSync": isRunningDailyRepairSync,
+            "entryCount": entries.count,
+            "localHours": localHours,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        let ref = db.collection("users").document(uid)
+            .collection("debugEvents").document("repairGate")
+        FirestoreOperationLog.write(operation: "diagnostic.repairGate", uid: uid) { done in
+            ref.setData(payload, merge: true, completion: done)
+        } completion: { [weak self] result in
+            if case .failure(let error) = result {
+                DispatchQueue.main.async {
+                    self?.syncError = "Debug write failed: \(error.localizedDescription)"
+                }
             }
         }
     }
@@ -292,12 +581,18 @@ final class CloudSyncManager: ObservableObject {
             return
         }
         guard !isPulling else {
+            shouldRunDailyRepairAfterPull = true
             DispatchQueue.main.async { completion() }
             return
         }
         isPulling = true
         fetchRemoteAndMerge { [weak self] in
-            self?.isPulling = false
+            guard let self else { return }
+            self.isPulling = false
+            if self.shouldRunDailyRepairAfterPull {
+                self.shouldRunDailyRepairAfterPull = false
+                self.runDailyCloudRepairIfNeeded()
+            }
             completion()
         }
     }
@@ -332,40 +627,37 @@ final class CloudSyncManager: ObservableObject {
                 return
             }
             self.hoursStore?.applyRemoteGamificationAnchors(pulledGamification)
-            if let entries = pulledEntries {
-                self.hoursStore?.applyRemoteEntries(entries)
-            }
-            if let settings = pulledSettings {
-                self.hoursStore?.applyRemoteSettings(settings)
-            }
-            // After entries are applied (totalXP is now correct), synthesise a
-            // missing XP snapshot from the cloud-stored level so users whose
-            // prestigeXPSnapshots were wiped by the Codable-corruption bug are
-            // automatically restored to their previous level within the tier.
-            // `levelOverride` (set on gamification/current) takes priority and
-            // is cleared from Firestore after a single application so it acts
-            // as a one-shot admin correction that cannot be overwritten by the
-            // public profile listener race.
             if let anchors = pulledGamification {
-                // Persistent admin override — clear local floor when absent in cloud.
-                self.hoursStore?.applyAdminLevel(anchors.adminLevel)
+                self.hoursStore?.applyAdminLevel(anchors.adminFloorLevel)
+                self.hoursStore?.applyAdminPrestige(anchors.adminFloorPrestige)
                 if let adminTitle = anchors.adminEquippedTitle, !adminTitle.isEmpty {
                     self.hoursStore?.applyAdminEquippedTitle(adminTitle)
                 } else {
                     self.hoursStore?.applyAdminEquippedTitle(nil)
                 }
-                // One-shot levelOverride from gamification/current — upward recovery only.
-                if let override = anchors.levelOverride {
-                    self.hoursStore?.applySyntheticLevelSnapshot(storedLevel: override)
-                    self.clearLevelOverride()
-                } else if anchors.adminLevel == nil, anchors.storedLevel > 1 {
-                    // When adminLevel is set, level follows XP with a floor — do not
-                    // rewrite prestige snapshots from the public `level` field.
-                    self.hoursStore?.applySyntheticLevelSnapshot(storedLevel: anchors.storedLevel)
+                if anchors.levelOverride != nil || anchors.prestigeOverride != nil {
+                    self.hoursStore?.applyCloudGamificationProgression(anchors)
+                    if let store = self.hoursStore {
+                        self.reconcileProgressionOverrideWithCloud(
+                            store: store,
+                            hadLevelOverride: anchors.levelOverride != nil,
+                            hadPrestigeOverride: anchors.prestigeOverride != nil
+                        )
+                    }
+                } else if let cloudOffset = anchors.adminXPOffset,
+                          cloudOffset != self.hoursStore?.gamificationProfile.adminXPOffset {
+                    self.hoursStore?.applyCloudGamificationProgression(anchors)
                 }
             } else {
                 self.hoursStore?.applyAdminLevel(nil)
+                self.hoursStore?.applyAdminPrestige(nil)
                 self.hoursStore?.applyAdminEquippedTitle(nil)
+            }
+            if let entries = pulledEntries {
+                self.hoursStore?.applyRemoteEntries(entries)
+            }
+            if let settings = pulledSettings {
+                self.hoursStore?.applyRemoteSettings(settings)
             }
             // Use forceSyncProfileAfterPull instead of syncProfileSnapshotToCloud:
             // the regular version gates on hasAppliedRemoteEntries which may still
@@ -431,12 +723,31 @@ final class CloudSyncManager: ObservableObject {
                 UserDefaults.standard.set(false, forKey: self.pendingProfileSyncKey)
                 self.checkPendingChanges()
                 self.saveGamificationAnchors(store: store)
+                // Ask the server to recompute the friend-facing stats it owns
+                // (chequeHours, chequeDailySummary, weekly stats, company stats)
+                // for the current date/pay-period. This keeps the breakdown
+                // consistent with the summary and heals any stale values that a
+                // previous client snapshot may have left behind.
+                self.requestStatsRecompute()
                 completion(.success(()))
             } catch {
                 UserDefaults.standard.set(true, forKey: self.pendingProfileSyncKey)
                 self.checkPendingChanges()
                 completion(.failure(error))
             }
+        }
+    }
+
+    /// Fire-and-forget request for the server to recompute this user's
+    /// friend-facing stats. The server (`recomputeUserStats`) is the sole
+    /// writer of chequeHours, chequeDailySummary, weekly and company stats;
+    /// triggering it here ensures those stay fresh for the current pay-period
+    /// window even when no new time entry has been logged. Failures are
+    /// non-fatal — the server also recomputes on every time-entry write.
+    private func requestStatsRecompute() {
+        guard currentUID != nil, networkMonitor.isConnected else { return }
+        Task { [weak self] in
+            _ = try? await self?.functions.httpsCallable("recomputeUserStatsCallable").call([:])
         }
     }
 
@@ -459,10 +770,40 @@ final class CloudSyncManager: ObservableObject {
         }, completion: { _, _ in })
     }
 
-    private func clearLevelOverride() {
+    /// After this device consumes an admin level/prestige override, publish its
+    /// freshly-computed `adminXPOffset`/`totalXP`/`prestige` back to Firestore in
+    /// the SAME write that clears the override flag(s).
+    ///
+    /// This must NOT be split into "clear the flag" then separately "sync the
+    /// offset": clearing the flag alone re-fires this device's own gamification
+    /// listener with the SERVER's original (pre-reconciliation) `adminXPOffset`
+    /// still sitting in the doc. That original offset was computed by the
+    /// server from ITS last-synced `totalXP` baseline, which can differ
+    /// slightly from what this device just (correctly) computed the offset
+    /// against. The listener then sees "cloud offset != local offset" and
+    /// stomps the just-applied, correct level right back down — this was the
+    /// live "sets to 17 then reverts" bug. Writing both fields atomically means
+    /// the echoed-back snapshot always matches local state, so no mismatch is
+    /// ever observed.
+    private func reconcileProgressionOverrideWithCloud(
+        store: HoursStore,
+        hadLevelOverride: Bool,
+        hadPrestigeOverride: Bool
+    ) {
         guard let uid = currentUID else { return }
+        let profile = store.gamificationProfile
+        var payload: [String: Any] = [
+            "adminXPOffset": profile.adminXPOffset,
+            "totalXP": profile.totalXP,
+            "prestige": profile.prestige,
+            "prestigeXPSnapshots": profile.prestigeXPSnapshots,
+            "level": profile.level,
+            "updatedAt": FieldValue.serverTimestamp(),
+        ]
+        if hadLevelOverride { payload["levelOverride"] = FieldValue.delete() }
+        if hadPrestigeOverride { payload["prestigeOverride"] = FieldValue.delete() }
         db.collection("users").document(uid).collection("gamification").document("current")
-            .updateData(["levelOverride": FieldValue.delete()]) { _ in }
+            .setData(payload, merge: true) { _ in }
     }
 
     func saveGamificationAnchors(store: HoursStore, completion: @escaping (Result<Void, Error>) -> Void = { _ in }) {
@@ -470,19 +811,48 @@ final class CloudSyncManager: ObservableObject {
             completion(.success(()))
             return
         }
-        let profile = store.gamificationProfile
-        let payload: [String: Any] = [
-            "prestige": profile.prestige,
-            "prestigeXPSnapshots": profile.prestigeXPSnapshots,
-            "prestigeHourSnapshots": profile.prestigeHourSnapshots,
-            "bestStreak": profile.bestStreak,
-            "streakFreezes": profile.streakFreezes,
-            "equippedTitle": profile.equippedTitle ?? "",
-            "updatedAt": FieldValue.serverTimestamp()
-        ]
-        db.collection("users").document(uid).collection("gamification").document("current")
-            .setData(payload, merge: true) { error in
-                DispatchQueue.main.async {
+        let ref = db.collection("users").document(uid).collection("gamification").document("current")
+        ref.getDocument { [weak self] snapshot, error in
+            guard let self else {
+                DispatchQueue.main.async { completion(.failure(NSError(domain: "CloudSync", code: -1))) }
+                return
+            }
+            if let error {
+                DispatchQueue.main.async { completion(.failure(error)) }
+                return
+            }
+            DispatchQueue.main.async {
+                var hadLevelOverride = false
+                var hadPrestigeOverride = false
+                if let data = snapshot?.data(), let anchors = self.gamificationAnchors(from: data) {
+                    let consumed = self.reconcileGamificationWithCloudBeforePush(store: store, anchors: anchors)
+                    hadLevelOverride = consumed.hadLevelOverride
+                    hadPrestigeOverride = consumed.hadPrestigeOverride
+                }
+
+                let profile = store.gamificationProfile
+                let cloudOffset = snapshot.flatMap { self.firestoreOptionalInt($0.data() ?? [:], key: "adminXPOffset") } ?? 0
+                // Never stomp an admin-set offset the device hasn't adopted yet.
+                if !hadLevelOverride && !hadPrestigeOverride && cloudOffset != 0 && profile.adminXPOffset == 0 {
+                    completion(.success(()))
+                    return
+                }
+
+                var payload: [String: Any] = [
+                    "prestige": profile.prestige,
+                    "prestigeXPSnapshots": profile.prestigeXPSnapshots,
+                    "prestigeHourSnapshots": profile.prestigeHourSnapshots,
+                    "bestStreak": profile.bestStreak,
+                    "streakFreezes": profile.streakFreezes,
+                    "equippedTitle": profile.equippedTitle ?? "",
+                    "totalXP": profile.totalXP,
+                    "adminXPOffset": profile.adminXPOffset,
+                    "level": profile.level,
+                    "updatedAt": FieldValue.serverTimestamp()
+                ]
+                if hadLevelOverride { payload["levelOverride"] = FieldValue.delete() }
+                if hadPrestigeOverride { payload["prestigeOverride"] = FieldValue.delete() }
+                ref.setData(payload, merge: true) { error in
                     if let error {
                         completion(.failure(error))
                     } else {
@@ -491,6 +861,30 @@ final class CloudSyncManager: ObservableObject {
                     }
                 }
             }
+        }
+    }
+
+    /// Returns which override flag(s), if any, were just consumed so the
+    /// caller can clear them in the very same outgoing write — mirroring
+    /// `reconcileProgressionOverrideWithCloud`. Applying an override here
+    /// without ever clearing it would let it re-fire on every later
+    /// `saveGamificationAnchors` call (e.g. after the next shift is logged),
+    /// re-snapping the level back down to the admin-set value each time
+    /// instead of letting newly-earned XP progress past it.
+    private func reconcileGamificationWithCloudBeforePush(
+        store: HoursStore,
+        anchors: RemoteGamificationAnchors
+    ) -> (hadLevelOverride: Bool, hadPrestigeOverride: Bool) {
+        let cloudOffset = anchors.adminXPOffset ?? 0
+        let localOffset = store.gamificationProfile.adminXPOffset
+        if anchors.levelOverride != nil || anchors.prestigeOverride != nil {
+            store.applyCloudGamificationProgression(anchors)
+            return (anchors.levelOverride != nil, anchors.prestigeOverride != nil)
+        }
+        if cloudOffset != 0 && cloudOffset != localOffset {
+            store.applyCloudGamificationProgression(anchors)
+        }
+        return (false, false)
     }
 
     func fetchGamificationAnchors(completion: @escaping (Result<RemoteGamificationAnchors?, Error>) -> Void) {
@@ -557,14 +951,25 @@ final class CloudSyncManager: ObservableObject {
             if let s = v as? String, let i = Int(s), i > 0 { return i }
             return nil
         }()
-        // Persistent admin-level field on the public user doc — never written
-        // by the client so it survives all future syncs untouched.
-        let adminLevel = firestoreOptionalInt(data, key: "adminLevel")
+        let rawPrestigeOverride = data["prestigeOverride"]
+        let prestigeOverride: Int? = {
+            guard let v = rawPrestigeOverride else { return nil }
+            if let i = v as? Int, i >= 0 { return i }
+            if let i64 = v as? Int64, i64 >= 0 { return Int(i64) }
+            if let n = v as? NSNumber, n.intValue >= 0 { return n.intValue }
+            if let s = v as? String, let i = Int(s), i >= 0 { return i }
+            return nil
+        }()
+        // Admin-set floor fields on the user doc — never written by the client
+        // (only by the admin panel Cloud Function) so they survive all syncs.
+        let adminFloorLevel = firestoreOptionalInt(data, key: "adminFloorLevel")
+        let adminFloorPrestige = firestoreOptionalInt(data, key: "adminFloorPrestige")
+        let adminXPOffset = firestoreOptionalInt(data, key: "adminXPOffset")
         let adminEquippedTitle = (data["adminEquippedTitle"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let adminTitle = (adminEquippedTitle?.isEmpty == false) ? adminEquippedTitle : nil
 
-        guard prestige > 0 || highWater > 0 || !snapshots.isEmpty || bestStreak > 0 || levelOverride != nil || adminLevel != nil || adminTitle != nil else { return nil }
+        guard prestige > 0 || highWater > 0 || !snapshots.isEmpty || bestStreak > 0 || levelOverride != nil || prestigeOverride != nil || adminFloorLevel != nil || adminFloorPrestige != nil || adminTitle != nil || adminXPOffset != nil else { return nil }
 
         return RemoteGamificationAnchors(
             prestige: max(prestige, highWater),
@@ -577,7 +982,10 @@ final class CloudSyncManager: ObservableObject {
             updatedAt: updatedAt,
             storedLevel: storedLevel,
             levelOverride: levelOverride,
-            adminLevel: adminLevel,
+            prestigeOverride: prestigeOverride,
+            adminXPOffset: adminXPOffset,
+            adminFloorLevel: adminFloorLevel,
+            adminFloorPrestige: adminFloorPrestige,
             adminEquippedTitle: adminTitle
         )
     }
@@ -622,71 +1030,24 @@ final class CloudSyncManager: ObservableObject {
         }
     }
 
-    func confirmRemoteOverwrite() {
-        UserDefaults.standard.set(true, forKey: remoteOverwriteConfirmedKey)
-        showRemoteOverwriteAlert = false
-        if let uid = currentUID {
-            startCloudListeners(uid: uid)
-            pullFromCloud()
-        }
-    }
-
     // MARK: - Auth lifecycle
-
-    private let backfillKey = "friendships_backfill_complete_v1"
 
     private func handleSignedIn(uid: String) {
         currentUID = uid
         hasAppliedRemoteEntries = false
+        traceRepairGate(reason: "handleSignedIn")
         migrateLocalDataIfNeeded(uid: uid)
+        runDailyCloudRepairIfNeeded()
         Task { @MainActor in
             await PushNotificationService.shared.registerForPushIfSignedIn()
             if FirebaseMigrationFlags.useServerStats {
                 StatsListenerService.shared.startListening(uid: uid)
             }
-            if !UserDefaults.standard.bool(forKey: backfillKey) {
-                await backfillFriendships(uid: uid)
-            }
-        }
-    }
-
-    private func backfillFriendships(uid: String) async {
-        do {
-            let friendsSnap = try await db.collection("users").document(uid)
-                .collection("friends").getDocuments()
-            guard !friendsSnap.documents.isEmpty else {
-                UserDefaults.standard.set(true, forKey: backfillKey)
-                return
-            }
-            let batch = db.batch()
-            var count = 0
-            for doc in friendsSnap.documents {
-                let friendUid = doc.documentID
-                let sorted = [uid, friendUid].sorted()
-                let pairId = "\(sorted[0])_\(sorted[1])"
-                let ref = db.collection("friendships").document(pairId)
-                let existing = try await ref.getDocument()
-                if existing.exists { continue }
-                let reciprocal = try await db.collection("users").document(friendUid)
-                    .collection("friends").document(uid).getDocument()
-                if !reciprocal.exists { continue }
-                let addedAt = doc.data()["addedAt"] as? Timestamp ?? Timestamp(date: Date())
-                batch.setData([
-                    "userA": sorted[0],
-                    "userB": sorted[1],
-                    "createdAt": addedAt,
-                    "createdBy": uid
-                ], forDocument: ref)
-                count += 1
-            }
-            if count > 0 {
-                try await batch.commit()
-            }
-            UserDefaults.standard.set(true, forKey: backfillKey)
-        } catch {
-            #if DEBUG
-            print("Friendship backfill error: \(error.localizedDescription)")
-            #endif
+            TopTrackersService.shared.startListening()
+            // Friendship backfill is handled server-side by the reconcileFriendships
+            // callable (Admin SDK), invoked on every FriendsService.startListening.
+            // The former client-side backfill wrote friendship docs directly, which
+            // the tightened firestore.rules now (correctly) forbid.
         }
     }
 
@@ -705,6 +1066,12 @@ final class CloudSyncManager: ObservableObject {
         settingsListener?.remove()
         settingsListener = nil
         settingsListenerKey = nil
+        if let gamificationListenerKey {
+            FirebaseListenerRegistry.shared.remove(key: gamificationListenerKey)
+        }
+        gamificationListener?.remove()
+        gamificationListener = nil
+        gamificationListenerKey = nil
         if let uid {
             FirebaseListenerRegistry.shared.stopAll(for: uid)
         }
@@ -713,53 +1080,84 @@ final class CloudSyncManager: ObservableObject {
         isPulling = false
         isSyncing = false
         syncError = nil
-        showRemoteOverwriteAlert = false
-        Task { @MainActor in
-            ActivityFeedService.shared.stopListening()
-            FriendsBoardService.shared.stopListening()
-            FriendShiftNudgeService.shared.stopListening()
-            FriendsService.shared.stopListening()
-            StatsListenerService.shared.stopListening()
-            ProfilePhotoManager.shared.clearFriendCache()
+        Task { @MainActor [weak self] in
+            // Only tear the shared listener singletons down if the user is still
+            // signed out. If they signed back in (even as a different account)
+            // before this deferred task ran, that new session's startListening
+            // has already re-pointed these singletons at the new uid — tearing
+            // them down here would silently wipe the new user's live listeners
+            // and kill Friends/Activity until something re-triggered them.
+            // handleSignedIn sets currentUID synchronously on this same actor,
+            // so this guard reflects the latest sign-in state.
+            if self?.currentUID == nil {
+                ActivityFeedService.shared.stopListening()
+                FriendsBoardService.shared.stopListening()
+                FriendShiftNudgeService.shared.stopListening()
+                FriendsService.shared.stopListening()
+                StatsListenerService.shared.stopListening()
+                TopTrackersService.shared.stopListening()
+                ProfilePhotoManager.shared.clearFriendCache()
+            }
+            // The push token is keyed to the signing-out uid specifically, so
+            // clearing it is always correct regardless of any subsequent sign-in.
             if let uid {
                 await PushNotificationService.shared.clearTokenOnSignOut(uid: uid)
             }
         }
     }
 
+    /// Ensures whatever this device holds locally always ends up in the cloud
+    /// on sign-in — never left stranded on-device. This is always safe to do
+    /// automatically without asking the user, because entries are keyed by
+    /// their own stable UUID: `applyRemoteEntries` merges the cloud snapshot
+    /// with local entries additively (any entry present in only one side is
+    /// kept) and re-uploads anything local-only, so there is no path here
+    /// that can silently discard a shift, regardless of whether the account
+    /// already has cloud data from another device or a previous install.
     private func migrateLocalDataIfNeeded(uid: String) {
-        db.collection("users").document(uid).collection(entriesCollectionName()).limit(to: 1).getDocuments { [weak self] snapshot, error in
-            guard let self else { return }
-            DispatchQueue.main.async {
-                // Bail if the user signed out or switched accounts before this callback fired.
-                guard self.currentUID == uid else { return }
-                if error != nil {
-                    self.startCloudListeners(uid: uid)
-                    self.hoursStore?.syncProfileOnLogin()
-                    return
-                }
-                let remoteEmpty = snapshot?.documents.isEmpty ?? true
-                guard let store = self.hoursStore else { return }
+        let entriesRef = db.collection("users").document(uid).collection("entries")
+        let timeEntriesRef = db.collection("users").document(uid).collection("timeEntries")
 
-                if remoteEmpty, !store.entries.isEmpty {
-                    self.isSyncing = true
-                    self.syncAll(entries: store.entries, settings: store.paySettings) { [weak self] _ in
-                        guard let self, self.currentUID == uid else { return }
-                        self.isSyncing = false
-                        self.startCloudListeners(uid: uid)
-                        self.saveSettings(store.paySettings)
-                    }
-                } else if !remoteEmpty, !store.entries.isEmpty,
-                          !UserDefaults.standard.bool(forKey: self.remoteOverwriteConfirmedKey) {
-                    self.showRemoteOverwriteAlert = true
-                } else {
-                    self.startCloudListeners(uid: uid)
-                    if !remoteEmpty {
-                        self.pullFromCloud()
-                    } else {
-                        store.syncProfileSnapshotToCloud()
-                    }
+        entriesRef.limit(to: 1).getDocuments { [weak self] entriesSnap, _ in
+            guard let self else { return }
+            let hasLegacyEntries = !(entriesSnap?.documents.isEmpty ?? true)
+            if hasLegacyEntries {
+                self.finishMigrateLocalDataIfNeeded(uid: uid, remoteEmpty: false)
+                return
+            }
+            timeEntriesRef.limit(to: 1).getDocuments { [weak self] timeSnap, error in
+                guard let self else { return }
+                let remoteEmpty = (timeSnap?.documents.isEmpty ?? true)
+                self.finishMigrateLocalDataIfNeeded(uid: uid, remoteEmpty: remoteEmpty, loadError: error)
+            }
+        }
+    }
+
+    private func finishMigrateLocalDataIfNeeded(uid: String, remoteEmpty: Bool, loadError: Error? = nil) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            guard self.currentUID == uid else { return }
+            if loadError != nil {
+                self.startCloudListeners(uid: uid)
+                self.hoursStore?.syncProfileOnLogin()
+                return
+            }
+            guard let store = self.hoursStore else { return }
+
+            self.startCloudListeners(uid: uid)
+
+            let localEntries = store.allEntriesIncludingArchive()
+            if remoteEmpty, !localEntries.isEmpty {
+                self.isSyncing = true
+                self.syncAll(entries: localEntries, settings: store.paySettings) { [weak self] _ in
+                    guard let self, self.currentUID == uid else { return }
+                    self.isSyncing = false
+                    self.saveSettings(store.paySettings)
                 }
+            } else if !remoteEmpty {
+                self.pullFromCloud()
+            } else {
+                store.syncProfileSnapshotToCloud()
             }
         }
     }
@@ -767,6 +1165,59 @@ final class CloudSyncManager: ObservableObject {
     private func startCloudListeners(uid: String) {
         startEntriesListener(uid: uid)
         startSettingsListener(uid: uid)
+        startGamificationListener(uid: uid)
+    }
+
+    private func startGamificationListener(uid: String) {
+        gamificationListener?.remove()
+        let registration = db.collection("users").document(uid)
+            .collection("gamification").document("current")
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self else { return }
+                DispatchQueue.main.async {
+                    guard self.currentUID == uid else { return }
+                    if let error {
+                        FirestoreOperationLog.listenerError(
+                            owner: .cloudSync,
+                            purpose: "gamification",
+                            uid: uid,
+                            error: error
+                        )
+                        return
+                    }
+                    guard let data = snapshot?.data(),
+                          let anchors = self.gamificationAnchors(from: data) else {
+                        return
+                    }
+                    self.handleRemoteGamificationUpdate(anchors)
+                }
+            }
+        gamificationListener = registration
+        gamificationListenerKey = FirebaseListenerRegistry.shared.register(
+            owner: .cloudSync,
+            purpose: "gamification",
+            uid: uid,
+            registration: registration
+        )
+    }
+
+    private func handleRemoteGamificationUpdate(_ anchors: RemoteGamificationAnchors) {
+        guard let store = hoursStore else { return }
+
+        if anchors.levelOverride != nil || anchors.prestigeOverride != nil {
+            store.applyCloudGamificationProgression(anchors)
+            reconcileProgressionOverrideWithCloud(
+                store: store,
+                hadLevelOverride: anchors.levelOverride != nil,
+                hadPrestigeOverride: anchors.prestigeOverride != nil
+            )
+            return
+        }
+
+        let cloudOffset = anchors.adminXPOffset ?? 0
+        if cloudOffset != store.gamificationProfile.adminXPOffset {
+            store.applyCloudGamificationProgression(anchors)
+        }
     }
 
     private func startEntriesListener(uid: String) {
@@ -782,7 +1233,6 @@ final class CloudSyncManager: ObservableObject {
                         self.syncError = error.localizedDescription
                         return
                     }
-                    guard self.showRemoteOverwriteAlert == false else { return }
                     let entries = snapshot?.documents.compactMap { self.entry(from: $0.data()) } ?? []
                     self.hasAppliedRemoteEntries = true
                     self.hoursStore?.applyRemoteEntries(entries)
@@ -811,7 +1261,6 @@ final class CloudSyncManager: ObservableObject {
                         self.syncError = error.localizedDescription
                         return
                     }
-                    guard self.showRemoteOverwriteAlert == false else { return }
                     guard let data = snapshot?.data(),
                           let json = try? JSONSerialization.data(withJSONObject: data),
                           let settings = try? self.decoder.decode(PaySettings.self, from: json) else {
@@ -831,10 +1280,51 @@ final class CloudSyncManager: ObservableObject {
     }
 
     private func entriesCollectionName() -> String {
-        FirebaseMigrationFlags.useTimeEntriesPath ? "timeEntries" : "entries"
+        // Direct Firestore subcollection writes from some devices hang waiting
+        // for server ack on `timeEntries` / `debugEvents`. The legacy `entries`
+        // collection still syncs reliably on those accounts, and the server
+        // falls back to it whenever `timeEntries` is empty. Bulk repair uploads
+        // go through Cloud Functions instead (see uploadEntriesInBatches).
+        "entries"
     }
 
     // MARK: - Encoding
+
+    /// Firebase Callable encoding only accepts Foundation JSON types
+    /// (NSString/NSNumber/NSArray/NSDictionary). Swift Bool/String values
+    /// and Firestore FieldValue objects must be converted first.
+    private func functionsCallablePayload(_ value: Any) -> Any {
+        switch value {
+        case let string as String:
+            return string as NSString
+        case let number as NSNumber:
+            return number
+        case let int as Int:
+            return NSNumber(value: int)
+        case let int64 as Int64:
+            return NSNumber(value: int64)
+        case let double as Double:
+            return NSNumber(value: double)
+        case let float as Float:
+            return NSNumber(value: float)
+        case let bool as Bool:
+            return NSNumber(value: bool)
+        case let dict as [String: Any]:
+            return NSDictionary(dictionary: dict.mapValues { functionsCallablePayload($0) })
+        case let array as [Any]:
+            return NSArray(array: array.map { functionsCallablePayload($0) })
+        default:
+            return String(describing: value) as NSString
+        }
+    }
+
+    private func entryCallablePayload(_ entry: WorkEntry) -> [String: Any] {
+        guard let data = try? encoder.encode(entry),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return [:]
+        }
+        return dict
+    }
 
     private func entryFirestorePayload(_ entry: WorkEntry) -> [String: Any] {
         guard let data = try? encoder.encode(entry),
@@ -865,6 +1355,31 @@ final class CloudSyncManager: ObservableObject {
         savePendingDeletes(pending)
     }
 
+    /// Entry ids the user has deleted that must stay hidden until the server
+    /// confirms removal. Consulted by `HoursStore.applyRemoteEntries`.
+    func pendingDeletionIDs() -> Set<String> {
+        Set(getPendingDeletes())
+    }
+
+    /// Clears tombstones for entries the server no longer returns (deletion
+    /// confirmed). Keeps tombstones for ids still present remotely so the
+    /// deletion keeps applying until it fully propagates.
+    func reconcileTombstones(presentRemoteIDs: Set<String>) {
+        let pending = getPendingDeletes()
+        guard !pending.isEmpty else { return }
+        let stillPending = pending.filter { presentRemoteIDs.contains($0) }
+        if stillPending.count != pending.count {
+            savePendingDeletes(stillPending)
+        }
+    }
+
+    /// Cancels a pending deletion tombstone (e.g. when the same entry is saved).
+    private func clearDeleteTombstone(_ entryID: UUID) {
+        let pending = getPendingDeletes()
+        guard pending.contains(entryID.uuidString) else { return }
+        savePendingDeletes(pending.filter { $0 != entryID.uuidString })
+    }
+
     private func getPendingDeletes() -> [String] {
         UserDefaults.standard.stringArray(forKey: "pending_deletes") ?? []
     }
@@ -879,13 +1394,21 @@ final class CloudSyncManager: ObservableObject {
         let pending = getPendingDeletes()
         guard !pending.isEmpty else { return }
         let collection = entriesCollectionName()
-        var remaining = pending
         for idString in pending {
             db.collection("users").document(uid).collection(collection).document(idString)
                 .delete { [weak self] error in
-                    if error == nil {
-                        remaining.removeAll { $0 == idString }
-                        self?.savePendingDeletes(remaining)
+                    guard error == nil else { return }
+                    // Firestore runs completions on its own queue, so with 2+
+                    // pending deletes these fire concurrently. Hop to main and
+                    // re-read the tombstone list as the source of truth for each
+                    // read-modify-write. The previous version mutated one shared
+                    // `remaining` array from every completion off the main thread
+                    // — a data race that could drop a tombstone (leaving a deleted
+                    // entry hidden forever or retried endlessly) or crash.
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        let updated = self.getPendingDeletes().filter { $0 != idString }
+                        self.savePendingDeletes(updated)
                     }
                 }
         }
@@ -925,7 +1448,7 @@ final class CloudSyncManager: ObservableObject {
         let pendingProfile = UserDefaults.standard.bool(forKey: pendingProfileSyncKey)
         syncPendingDeletes()
         if pendingChanges > 0 {
-            syncAll(entries: store.entries, settings: store.paySettings) { _ in }
+            syncAll(entries: store.allEntriesIncludingArchive(), settings: store.paySettings) { _ in }
         } else if pendingProfile {
             saveProfileSnapshot(store: store) { _ in }
         }
@@ -958,6 +1481,7 @@ private struct ProfileSnapshotInputs {
     let chequeWindowCutoff: String
     let profilePhotoURL: String?
     let friendShiftAlerts: Bool
+    let countryCode: String
 
     @MainActor
     static func capture(from store: HoursStore) -> ProfileSnapshotInputs {
@@ -1043,12 +1567,12 @@ private struct ProfileSnapshotInputs {
             chequeWindowStart: chequeWindowStart,
             chequeWindowCutoff: chequeWindowCutoff,
             profilePhotoURL: ProfilePhotoManager.shared.remotePhotoURL,
-            friendShiftAlerts: SmartNotifier.shared.friendShiftNotificationsEnabled
+            friendShiftAlerts: SmartNotifier.shared.friendShiftNotificationsEnabled,
+            countryCode: CountryFlag.hasChosenCountry ? CountryFlag.resolvedCode : ""
         )
     }
 
     nonisolated func makePayload() -> [String: Any] {
-        let companyStartDate = companyStartTS > 0 ? Date(timeIntervalSince1970: companyStartTS) : nil
         // Server (Cloud Function recomputeUserStats) is the sole writer of:
         // level, prestige, totalXP, currentStreak, bestStreak, totalHours,
         // chequeHours, weeklyHours, weeklyShiftsLogged, weeklyDaysLogged, badgeCount.
@@ -1064,10 +1588,16 @@ private struct ProfileSnapshotInputs {
             ],
             "acceptInvites": acceptInvites,
             "friendShiftAlerts": friendShiftAlerts,
+            "clientSyncBuild": "repair-diagnostics-v4",
             "updatedAt": FieldValue.serverTimestamp(),
             "lookupEmail": FieldValue.delete(),
             "profileHoursDebug": FieldValue.delete()
         ]
+        if !countryCode.isEmpty {
+            fields["countryCode"] = countryCode
+        } else {
+            fields["countryCode"] = FieldValue.delete()
+        }
         if !companyName.isEmpty {
             fields["companyName"] = companyName
         } else {
@@ -1083,29 +1613,20 @@ private struct ProfileSnapshotInputs {
         } else {
             fields["companyStartDate"] = FieldValue.delete()
         }
-        if shareHours, (!companyName.isEmpty || companyStartDate != nil) {
-            fields["companyHoursLogged"] = companyHoursLogged
-            fields["companyDaysWorked"] = companyDaysWorked
-        } else {
-            fields["companyHoursLogged"] = FieldValue.delete()
-            fields["companyDaysWorked"] = FieldValue.delete()
-        }
         if let profilePhotoURL {
             fields["profilePhotoURL"] = profilePhotoURL
         } else {
             fields["profilePhotoURL"] = FieldValue.delete()
         }
-        if shareHours {
-            fields["chequeDailySummary"] = chequeDailySummary.map {
-                ["date": $0.date, "hours": $0.hours, "shifts": $0.shifts]
-            }
-            fields["chequeWindowStart"] = chequeWindowStart
-            fields["chequeWindowCutoff"] = chequeWindowCutoff
-        } else {
-            fields["chequeDailySummary"] = FieldValue.delete()
-            fields["chequeWindowStart"] = FieldValue.delete()
-            fields["chequeWindowCutoff"] = FieldValue.delete()
-        }
+        // Company stats (companyHoursLogged/companyDaysWorked) and the cheque
+        // breakdown (chequeDailySummary/chequeWindowStart/chequeWindowCutoff)
+        // are owned exclusively by the server (recomputeUserStats). The client
+        // must not write them: a stale client snapshot would clobber the
+        // server's fresh values, causing a friend's "This Cheque" daily
+        // breakdown to disagree with chequeHours. The server also clears these
+        // fields when shareHours is off, so privacy stays enforced.
+        // (companyName/companyOccupation/companyStartDate above are user inputs
+        //  the server reads, so those are still written here.)
         if shareBadges {
             fields["unlockedBadgeSummaries"] = unlockedBadges.map { badge in
                 [

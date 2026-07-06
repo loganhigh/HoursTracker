@@ -159,6 +159,7 @@ final class FriendsService: ObservableObject {
         if activeListeningUid == uid,
            friendIdsListener != nil || friendshipListenerA != nil {
             Task {
+                await refreshFriendIds()
                 await refreshFriendProfiles()
                 await refreshPendingRequests(uid: uid)
             }
@@ -171,6 +172,7 @@ final class FriendsService: ObservableObject {
         startRefreshTimer()
         startLoadingTimeout()
         Task { await ensureFriendCode(uid: uid) }
+        Task { await reconcileFriendships(uid: uid) }
 
         myProfileListener = db.collection("users").document(uid)
             .addSnapshotListener { [weak self] snapshot, _ in
@@ -262,6 +264,7 @@ final class FriendsService: ObservableObject {
                     guard let self, self.activeListeningUid == uid else { return }
                     if let error {
                         FirestoreOperationLog.listenerError(owner: .friendsService, purpose: "friendships.userA", uid: uid, error: error)
+                        self.errorMessage = "Couldn't load friends: \(error.localizedDescription)"
                         return
                     }
                     for doc in snapshot?.documents ?? [] {
@@ -291,6 +294,7 @@ final class FriendsService: ObservableObject {
                     guard let self, self.activeListeningUid == uid else { return }
                     if let error {
                         FirestoreOperationLog.listenerError(owner: .friendsService, purpose: "friendships.userB", uid: uid, error: error)
+                        self.errorMessage = "Couldn't load friends: \(error.localizedDescription)"
                         return
                     }
                     for doc in snapshot?.documents ?? [] {
@@ -439,49 +443,31 @@ final class FriendsService: ObservableObject {
         if let mine = myFriendCode, mine == code {
             throw FriendsError.cannotAddSelf
         }
-
-        let snapshot = try await db.collection("users")
-            .whereField("friendCode", isEqualTo: code)
-            .limit(to: 1)
-            .getDocuments(source: .server)
-
-        guard let targetDoc = snapshot.documents.first else {
-            throw FriendsError.userNotFound
+        do {
+            _ = try await functions.httpsCallable("sendFriendRequest")
+                .call(["code": code, "myName": myName])
+        } catch {
+            let nsError = error as NSError
+            let message = nsError.localizedDescription
+            if message.contains("already friends") || message.contains("already-exists") {
+                throw FriendsError.alreadyFriends
+            } else if message.contains("not found") || message.contains("No one found") {
+                throw FriendsError.userNotFound
+            } else if message.contains("yourself") {
+                throw FriendsError.cannotAddSelf
+            } else if message.contains("accepting") || message.contains("permission-denied") {
+                throw FriendsError.invitesDisabled
+            }
+            throw FriendsError.callableFailed(error)
         }
-        let targetUid = targetDoc.documentID
-        if targetUid == myUid {
-            throw FriendsError.cannotAddSelf
-        }
-
-        // Check legacy path (permissive read rules) for already-friends.
-        let existingFriendSnap = try await db.collection("users")
-            .document(myUid).collection("friends").document(targetUid)
-            .getDocument(source: .server)
-        if existingFriendSnap.exists {
-            throw FriendsError.alreadyFriends
-        }
-
-        // Honor the recipient's privacy flag. Defaults to `true` when the
-        // field is missing (older clients), which matches the rule defaults.
-        let targetData = targetDoc.data()
-        let accepts = (targetData["acceptInvites"] as? Bool) ?? true
-        guard accepts else {
-            throw FriendsError.invitesDisabled
-        }
-
-        try await db.collection("users").document(targetUid)
-            .collection("friendRequests").document(myUid)
-            .setData([
-                "fromUid": myUid,
-                "fromName": myName,
-                "sentAt": FieldValue.serverTimestamp()
-            ])
     }
 
     func acceptRequest(fromUid: String, myUid: String) async throws {
         do {
             _ = try await functions.httpsCallable("acceptFriendRequest")
                 .call(["fromUid": fromUid])
+            await refreshFriendIds()
+            await refreshFriendProfiles()
         } catch {
             throw FriendsError.callableFailed(error)
         }
@@ -527,11 +513,12 @@ final class FriendsService: ObservableObject {
 
     private func startRefreshTimer() {
         stopRefreshTimer()
-        // Poll every 10 s so friend stats stay fresh even when the Firestore
-        // WebSocket listener misses a push (common in simulators / VPNs).
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                await self?.refreshFriendProfiles()
+                guard let self else { return }
+                await self.refreshFriendProfiles()
+                await self.refreshPendingRequests()
+                await self.refreshFriendIds()
             }
         }
     }
@@ -574,6 +561,7 @@ final class FriendsService: ObservableObject {
             weeklyStatsListenerKeys.removeValue(forKey: removed)
             friendWeeklyStatsCache.removeValue(forKey: removed)
             friendAddedAtMap.removeValue(forKey: removed)
+            publicProfileRawCache.removeValue(forKey: removed)
         }
 
         pendingProfileLoads = wanted
@@ -626,35 +614,37 @@ final class FriendsService: ObservableObject {
             uid: uid,
             registration: registration
         )
-
-        if usePublic {
-            let weeklyReg = db.collection("publicProfiles").document(uid)
-                .collection("stats").document("currentWeek")
-                .addSnapshotListener { [weak self] snapshot, _ in
-                    Task { @MainActor in
-                        guard let self else { return }
-                        self.friendWeeklyStatsCache[uid] = snapshot?.data()
-                        self.mergePublicProfile(uid: uid, data: self.publicProfileRawCache[uid])
-                    }
-                }
-            weeklyStatsListeners[uid] = weeklyReg
-            weeklyStatsListenerKeys[uid] = FirebaseListenerRegistry.shared.register(
-                owner: .friendsService,
-                purpose: "publicProfile.weeklyStats",
-                uid: uid,
-                registration: weeklyReg
-            )
-        }
+        // Weekly stats are inlined into the main publicProfiles doc, so a single
+        // per-friend document listener carries everything — no second listener.
     }
 
     private var publicProfileRawCache: [String: [String: Any]] = [:]
 
     /// One-shot refresh of every subscribed friend profile — use after Activity
     /// or when Firestore snapshot data may lag behind activity events.
+    ///
+    /// Bounded by an overall timeout: Firestore `.server` reads have no built-in
+    /// timeout and suspend indefinitely on a stalled connection, which would
+    /// otherwise leave pull-to-refresh spinning forever. If the fetch doesn't
+    /// finish in time we abandon it (cache/live listeners still apply) so the UI
+    /// always resolves.
     func refreshFriendProfiles() async {
         let uids = Array(profileListeners.keys)
         guard !uids.isEmpty else { return }
         let usePublic = FirebaseMigrationFlags.usePublicProfilesForFriends
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { [weak self] in
+                await self?.performFriendProfileFetch(uids: uids, usePublic: usePublic)
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
+            }
+            await group.next()
+            group.cancelAll()
+        }
+    }
+
+    private func performFriendProfileFetch(uids: [String], usePublic: Bool) async {
         await withTaskGroup(of: Void.self) { group in
             for uid in uids {
                 group.addTask { [weak self] in
@@ -678,7 +668,7 @@ final class FriendsService: ObservableObject {
         }
     }
 
-    private func refreshPendingRequests(uid: String) async {
+    private func refreshPendingRequests(uid: String, surfaceErrors: Bool = false) async {
         do {
             let snapshot = try await db.collection("users").document(uid)
                 .collection("friendRequests").getDocuments(source: .server)
@@ -688,24 +678,108 @@ final class FriendsService: ObservableObject {
                 let sentAt = (data["sentAt"] as? Timestamp)?.dateValue()
                 return FriendRequestItem(fromUid: doc.documentID, fromName: name, sentAt: sentAt)
             }
-        } catch {}
+            if surfaceErrors { errorMessage = nil }
+        } catch {
+            // See refreshFriendIds: surface only for explicit user refreshes so a
+            // failed pull-to-refresh doesn't silently present stale requests.
+            if surfaceErrors { errorMessage = error.localizedDescription }
+        }
+    }
+
+    func refreshPendingRequests(surfaceErrors: Bool = false) async {
+        guard let uid = activeListeningUid else { return }
+        await refreshPendingRequests(uid: uid, surfaceErrors: surfaceErrors)
+    }
+
+    /// Asks the server to repair any half-written / asymmetric friendships for
+    /// this user (one side has the friend record but the other doesn't), then
+    /// re-pulls the friend list so any repaired friends appear immediately.
+    private func reconcileFriendships(uid: String) async {
+        guard NetworkMonitor.shared.isConnected else { return }
+        do {
+            _ = try await functions.httpsCallable("reconcileFriendships").call([:])
+            guard activeListeningUid == uid else { return }
+            await refreshFriendIds()
+            await refreshFriendProfiles()
+        } catch {
+            // Non-fatal — listeners and the periodic refresh still apply.
+        }
+    }
+
+    func refreshFriendIds(surfaceErrors: Bool = false) async {
+        guard let uid = activeListeningUid else { return }
+        do {
+            let legacySnap = try await db.collection("users").document(uid)
+                .collection("friends").getDocuments(source: .server)
+            for doc in legacySnap.documents {
+                if let ts = doc.data()["addedAt"] as? Timestamp {
+                    friendAddedAtMap[doc.documentID] = ts.dateValue()
+                }
+            }
+            legacyFriendIds = Set(legacySnap.documents.map(\.documentID))
+
+            if FirebaseMigrationFlags.useFriendshipsCollection {
+                let queryA = try await db.collection("friendships")
+                    .whereField("userA", isEqualTo: uid).getDocuments(source: .server)
+                let queryB = try await db.collection("friendships")
+                    .whereField("userB", isEqualTo: uid).getDocuments(source: .server)
+                for doc in queryA.documents + queryB.documents {
+                    let data = doc.data()
+                    if let other = FriendshipPairId.otherUid(in: data, myUid: uid),
+                       let created = data["createdAt"] as? Timestamp {
+                        friendAddedAtMap[other] = created.dateValue()
+                    }
+                }
+                friendshipIdsFromA = Set(queryA.documents.compactMap {
+                    FriendshipPairId.otherUid(in: $0.data(), myUid: uid)
+                })
+                friendshipIdsFromB = Set(queryB.documents.compactMap {
+                    FriendshipPairId.otherUid(in: $0.data(), myUid: uid)
+                })
+                mergeFriendshipIds()
+            } else {
+                friendIdsResolved = true
+                resubscribeProfiles(friendUids: Array(legacyFriendIds))
+            }
+            if surfaceErrors { errorMessage = nil }
+        } catch {
+            // A bare `catch {}` here previously hid pull-to-refresh failures: a
+            // failed manual refresh still completed its spinner and showed stale
+            // data with no indication anything went wrong. Surface the error only
+            // for explicit user-initiated refreshes; background/timer/reconcile
+            // callers stay silent (the listeners remain the primary data source).
+            if surfaceErrors { errorMessage = error.localizedDescription }
+        }
     }
 
     private func mergePublicProfile(uid: String, data: [String: Any]?) {
         guard let data else {
-            publicProfileRawCache.removeValue(forKey: uid)
-            friends.removeAll { $0.uid == uid }
+            // The friend's `publicProfiles` doc doesn't exist yet (e.g. they
+            // haven't recomputed since the single-source migration). Do NOT drop
+            // them from the list — the friendship still exists. Fall back to their
+            // `users/{uid}` doc so they stay visible with real data until their
+            // public doc is populated; only remove if neither doc exists.
+            Task { [weak self] in
+                guard let self else { return }
+                let snapshot = try? await self.db.collection("users").document(uid).getDocument()
+                await MainActor.run {
+                    // If the public doc arrived in the meantime, that wins.
+                    guard self.profileListeners[uid] != nil,
+                          self.publicProfileRawCache[uid] == nil else { return }
+                    if let fallback = snapshot?.data() {
+                        self.mergeProfile(uid: uid, data: fallback)
+                    } else {
+                        self.friends.removeAll { $0.uid == uid }
+                    }
+                    self.markProfileLoaded(uid: uid)
+                }
+            }
             return
         }
+        // The public doc is complete (weekly/month/year/cheque/badges all inline),
+        // so it maps straight through — no merging from a secondary stats doc.
         publicProfileRawCache[uid] = data
-        var merged = data
-        if let weekly = friendWeeklyStatsCache[uid] {
-            merged["weeklyHours"] = weekly["hours"]
-            merged["weeklyShiftsLogged"] = weekly["shifts"]
-            merged["weeklyDaysLogged"] = weekly["daysWorked"]
-            merged["currentStreak"] = weekly["currentStreak"]
-        }
-        mergeProfile(uid: uid, data: merged)
+        mergeProfile(uid: uid, data: data)
     }
 
     private func mergeProfile(uid: String, data: [String: Any]?) {
@@ -718,17 +792,25 @@ final class FriendsService: ObservableObject {
         let snapshots = firestoreIntArray(data, key: "prestigeXPSnapshots")
         let storedLevel = firestoreInt(data, key: "level", default: 1)
         let totalXP = firestoreOptionalInt(data, key: "totalXP")
-        // `adminLevel` is a Firestore-only floor never written by the client.
-        // Use whichever is higher — the override or the XP-calculated value —
-        // so natural progression still advances past the override once XP catches up.
-        let adminLevel = firestoreOptionalInt(data, key: "adminLevel")
-        let xpLevel = GamificationLevelCalculator.displayLevel(
-            totalXP: totalXP,
-            storedLevel: storedLevel,
-            prestige: prestige,
-            snapshots: snapshots
-        )
-        let level = max(adminLevel ?? 0, xpLevel)
+        let maxLevel = GamificationLevelCalculator.maxLevelForPrestige(prestige)
+        // publicProfiles.level is server-published from XP; only re-derive when
+        // the stored level is missing and we have totalXP.
+        let level: Int
+        if storedLevel > 1 {
+            level = min(maxLevel, max(storedLevel, 1))
+        } else if let totalXP {
+            level = min(
+                maxLevel,
+                GamificationLevelCalculator.displayLevel(
+                    totalXP: totalXP,
+                    storedLevel: storedLevel,
+                    prestige: prestige,
+                    snapshots: snapshots
+                )
+            )
+        } else {
+            level = 1
+        }
         let updatedAt = (data["updatedAt"] as? Timestamp)?.dateValue()
         let unlockedBadgeSummaries: [SharedBadgeSummary] = {
             guard let arr = data["unlockedBadgeSummaries"] as? [[String: Any]] else { return [] }
