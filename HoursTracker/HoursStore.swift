@@ -870,29 +870,8 @@ final class HoursStore: ObservableObject {
     }
 
     func monthOvertimeHours(monthDate: Date) -> Double {
-        // #region agent log
         let monthEntries = entries(inMonth: monthDate)
-        let wdAfter = paySettings.weekdayOvertimeAfterHours
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM"
-        let monthStr = formatter.string(from: monthDate)
-        DebugLog.log(location: "HoursStore.swift:monthOvertimeHours", message: "monthOvertimeHours entry", hypothesisId: "A", data: ["weekdayOvertimeAfterHours": wdAfter, "entryCount": monthEntries.count, "month": monthStr])
-        if let first = monthEntries.first {
-            let b1 = payBreakdown(for: first)
-            let wd1 = Calendar.current.component(.weekday, from: first.date)
-            DebugLog.log(location: "HoursStore.swift:monthOvertimeHours", message: "payBreakdown sample first", hypothesisId: "B", data: ["rawHours": first.paidHours, "weekday": wd1, "regularHours": b1.regularHours, "overtimeHours": b1.overtimeHours])
-        }
-        if monthEntries.count > 1 {
-            let b2 = payBreakdown(for: monthEntries[1])
-            let wd2 = Calendar.current.component(.weekday, from: monthEntries[1].date)
-            DebugLog.log(location: "HoursStore.swift:monthOvertimeHours", message: "payBreakdown sample second", hypothesisId: "B", data: ["rawHours": monthEntries[1].paidHours, "weekday": wd2, "regularHours": b2.regularHours, "overtimeHours": b2.overtimeHours])
-        }
-        // #endregion
-        let total = monthEntries.reduce(0) { $0 + payBreakdown(for: $1).overtimeHours }
-        // #region agent log
-        DebugLog.log(location: "HoursStore.swift:monthOvertimeHours", message: "monthOvertimeHours result", hypothesisId: "A", data: ["totalOvertime": total])
-        // #endregion
-        return total
+        return monthEntries.reduce(0) { $0 + payBreakdown(for: $1).overtimeHours }
     }
 
     func monthOvertimeHoursAt1_5(monthDate: Date) -> Double {
