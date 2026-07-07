@@ -251,34 +251,73 @@ struct CareerView: View {
         .background(AppTheme.Colors.bg.ignoresSafeArea())
         .navigationTitle("Career")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            // Career's lifetime hours must always match the global leaderboard,
+            // which is server-fed — make sure the server-stats listener is
+            // attached even if the sign-in callback never started it.
+            StatsListenerService.shared.ensureListening()
+        }
     }
 
     // MARK: - Hero
 
     private var heroSummary: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.system(size: 28, weight: .bold))
-                .foregroundStyle(AppTheme.Colors.accentGradient)
-            Text(hoursDisplay(totalHours))
-                .font(.system(size: 36, weight: .heavy, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.text)
-                .monospacedDigit()
-            Text("Lifetime hours logged")
-                .font(.system(size: 14, weight: .medium))
+        VStack(spacing: 12) {
+            Text("CAREER")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .tracking(1.6)
                 .foregroundStyle(AppTheme.Colors.subtext)
+
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(hoursDisplay(totalHours))
+                    .font(AppDesignSystem.Typography.heroNumerals(size: 44, weight: .heavy))
+                    .foregroundStyle(AppTheme.Colors.text)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
+
+            Text("Lifetime hours logged")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppTheme.Colors.faint)
         }
+        .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 20)
+        .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(AppTheme.Colors.accent.opacity(0.25), lineWidth: 1)
+            ZStack {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(AppTheme.Colors.card2)
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                AppTheme.Colors.accent.opacity(0.14),
+                                Color.clear,
+                                AppTheme.Colors.accent.opacity(0.05)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            AppTheme.Colors.accent.opacity(0.4),
+                            AppTheme.Colors.accent.opacity(0.08),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
                 )
         )
+        .shadow(color: AppTheme.Colors.accent.opacity(0.18), radius: 18, y: 8)
     }
 
     // MARK: - Company
