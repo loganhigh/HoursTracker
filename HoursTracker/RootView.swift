@@ -495,20 +495,14 @@ private struct HoursHomeView: View {
                 greetingHeader
                     .cardAppear(index: 0)
 
-                progressionCard
+                chequeHeroCard
                     .cardAppear(index: 1)
 
-                NavigationLink {
-                    PayCycleDetailView(store: store, initialCycle: currentPayCycle)
-                } label: {
-                    PayPeriodMiniCalendar(
-                        cycle: currentPayCycle,
-                        entries: periodEntries
-                    )
-                }
-                .buttonStyle(PremiumPressStyle())
-                .id(currentPayCycle)
-                .cardAppear(index: 2)
+                progressionCard
+                    .cardAppear(index: 2)
+
+                statTriplet
+                    .cardAppear(index: 3)
 
                 VStack(spacing: 10) {
                     PrimaryButton("Add Shift", systemImage: "plus") {
@@ -543,7 +537,7 @@ private struct HoursHomeView: View {
                         .tapBurst(trigger: holidayBurst)
                     }
                 }
-                .cardAppear(index: 3)
+                .cardAppear(index: 4)
 
                 // Hours Logged
                 homeSection("Hours Logged") {
@@ -603,7 +597,7 @@ private struct HoursHomeView: View {
                         }
                     }
                 }
-                .cardAppear(index: 4)
+                .cardAppear(index: 5)
 
                 // Monthly Overview (year-at-a-glance)
                 homeSection("Yearly Overview", boxed: true) {
@@ -616,7 +610,7 @@ private struct HoursHomeView: View {
                         MonthlyOverviewChart(data: monthlyHoursByMonth)
                     }
                 }
-                .cardAppear(index: 5)
+                .cardAppear(index: 6)
 
                 if !premium.isPremium {
                     BannerAdView()
@@ -636,40 +630,7 @@ private struct HoursHomeView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .cardAppear(index: 6)
-
-                // Best month highlight
-                if let bestText = bestMonthText {
-                    HStack(spacing: 10) {
-                        Image(systemName: "trophy.fill")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(Color(hex: 0xF59E0B))
-                            .shadow(color: Color(hex: 0xF59E0B).opacity(0.4), radius: 6)
-                        
-                        Text(bestText)
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color(hex: 0xF59E0B).opacity(0.08))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [Color(hex: 0xF59E0B).opacity(0.3), Color(hex: 0xF59E0B).opacity(0.08)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
-                    )
-                }
+                .cardAppear(index: 7)
 
                 Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
@@ -989,14 +950,7 @@ private struct HoursHomeView: View {
 
     private var progressionCard: some View {
         VStack(spacing: 12) {
-            PlayerProgressCard(
-                profile: store.displayedGamificationProfile(),
-                onPrestige: {
-                    if store.performPrestige() {
-                        showingPrestigeConfetti = true
-                    }
-                }
-            )
+            levelStrip
 
             if store.gamificationProfile.canPrestige {
                 PrestigeCallToAction(currentPrestige: store.gamificationProfile.prestige) {
@@ -1008,6 +962,309 @@ private struct HoursHomeView: View {
                 .animation(.spring(response: 0.4, dampingFraction: 0.75), value: store.gamificationProfile.canPrestige)
             }
         }
+    }
+
+    // MARK: - Cheque Hero (Hero Ledger)
+
+    private var periodHours: Double {
+        periodEntries.reduce(0) { $0 + $1.paidHours }
+    }
+
+    private var periodPay: Double {
+        periodEntries.reduce(0) { $0 + store.payBreakdown(for: $1).pay }
+    }
+
+    private var daysUntilPayday: Int {
+        let cal = Calendar.current
+        return max(0, cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: nextPayday)).day ?? 0)
+    }
+
+    private var paydayShortText: String {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f.string(from: nextPayday)
+    }
+
+    /// Progress the hero bar tracks: the hours goal when one is set,
+    /// otherwise how far through the pay period we are.
+    private var heroProgress: (value: Double, caption: String) {
+        if biweeklyGoalHours > 0 {
+            let p = min(max(periodHours / biweeklyGoalHours, 0), 1)
+            return (p, "\(Int((p * 100).rounded()))% of \(AppTheme.Format.hours(biweeklyGoalHours)) goal")
+        }
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let total = max(currentPayCycle.spanDays, 1)
+        let elapsed = max(0, min(cal.dateComponents([.day], from: cal.startOfDay(for: currentPayCycle.start), to: today).day ?? 0, total))
+        return (Double(elapsed) / Double(total), "Day \(min(elapsed + 1, total)) of \(total)")
+    }
+
+    private enum HeroDayState { case worked, off, empty }
+
+    /// One state per day from the cycle start through today (matches the
+    /// windowing PayPeriodMiniCalendar used).
+    private var heroDayStates: [HeroDayState] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        var workedDays: Set<Date> = []
+        var offDays: Set<Date> = []
+        for e in periodEntries {
+            let d = cal.startOfDay(for: e.date)
+            if e.isOffDay { offDays.insert(d) } else { workedDays.insert(d) }
+        }
+        let start = cal.startOfDay(for: currentPayCycle.start)
+        let lastCycleDay = cal.date(byAdding: .day, value: -1, to: cal.startOfDay(for: currentPayCycle.end)) ?? currentPayCycle.end
+        let cap = min(lastCycleDay, today)
+        let end = cap >= start ? cap : lastCycleDay
+        var states: [HeroDayState] = []
+        var day = start
+        while day <= end && states.count < 62 {
+            if workedDays.contains(day) { states.append(.worked) }
+            else if offDays.contains(day) { states.append(.off) }
+            else { states.append(.empty) }
+            guard let next = cal.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+        return states
+    }
+
+    private var chequeHeroCard: some View {
+        NavigationLink {
+            PayCycleDetailView(store: store, initialCycle: currentPayCycle)
+        } label: {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("THIS CHEQUE")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .tracking(1.6)
+                        .foregroundStyle(AppTheme.Colors.subtext)
+                    Spacer()
+                    Text(payPeriodRangeText)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppTheme.Colors.faint)
+                }
+
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    AnimatedMetricText(value: periodHours) { AppTheme.Format.hours($0, suffix: "") }
+                        .font(AppDesignSystem.Typography.heroNumerals(size: 44, weight: .heavy))
+                        .foregroundStyle(AppTheme.Colors.text)
+                    Text("hrs")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppTheme.Colors.subtext)
+                    Spacer(minLength: 8)
+                    if store.paySettings.showPayCalculations {
+                        AnimatedMetricText(currency: periodPay, code: store.paySettings.currencyCode)
+                            .font(AppDesignSystem.Typography.heroNumerals(size: 24, weight: .bold))
+                            .foregroundStyle(AppTheme.Colors.accent)
+                    }
+                }
+
+                heroDayStrip
+
+                VStack(alignment: .leading, spacing: 8) {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.white.opacity(0.08))
+                                .frame(height: 8)
+                            Capsule()
+                                .fill(AppTheme.Colors.accentGradient)
+                                .frame(width: max(8, geo.size.width * heroProgress.value), height: 8)
+                        }
+                    }
+                    .frame(height: 8)
+
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(AppTheme.Colors.accent)
+                            .frame(width: 6, height: 6)
+                        Text(daysUntilPayday == 0
+                             ? "Payday today"
+                             : "Payday in \(daysUntilPayday) \(daysUntilPayday == 1 ? "day" : "days")")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppTheme.Colors.text)
+                        Text("· \(paydayShortText)")
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(AppTheme.Colors.faint)
+                        Spacer()
+                        Text(heroProgress.caption)
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(AppTheme.Colors.subtext)
+                    }
+                }
+            }
+            .padding(20)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(AppTheme.Colors.card2)
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    AppTheme.Colors.accent.opacity(0.14),
+                                    Color.clear,
+                                    AppTheme.Colors.accent.opacity(0.05)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                AppTheme.Colors.accent.opacity(0.4),
+                                AppTheme.Colors.accent.opacity(0.08),
+                                Color.clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .shadow(color: AppTheme.Colors.accent.opacity(0.18), radius: 18, y: 8)
+        }
+        .buttonStyle(PremiumPressStyle())
+        .id(currentPayCycle)
+    }
+
+    private var heroDayStrip: some View {
+        HStack(spacing: 3) {
+            ForEach(Array(heroDayStates.enumerated()), id: \.offset) { _, state in
+                Capsule()
+                    .fill(
+                        state == .worked
+                            ? AnyShapeStyle(AppTheme.Colors.accentGradient)
+                            : AnyShapeStyle(Color.white.opacity(state == .off ? 0.18 : 0.07))
+                    )
+                    .frame(height: 5)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    // MARK: - Compact Level Strip
+
+    private var levelStrip: some View {
+        let profile = store.displayedGamificationProfile()
+        return NavigationLink {
+            CareerView(store: store)
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(stripPrestigeColor(profile).opacity(0.15))
+                        .frame(width: 30, height: 30)
+                    Image(systemName: PrestigeTheme.tier(for: profile.prestige).icon)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(stripPrestigeColor(profile))
+                }
+
+                Text("LVL \(profile.level)")
+                    .font(.system(size: 15, weight: .black, design: .rounded))
+                    .foregroundStyle(AppTheme.Colors.text)
+                    .layoutPriority(1)
+
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.white.opacity(0.08))
+                            .frame(height: 6)
+                        Capsule()
+                            .fill(AppTheme.Colors.accentGradient)
+                            .frame(width: max(6, geo.size.width * stripXPProgress(profile)), height: 6)
+                    }
+                    .frame(maxHeight: .infinity, alignment: .center)
+                }
+                .frame(height: 30)
+
+                if profile.currentStreak > 0 {
+                    HStack(spacing: 3) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color(hex: 0xF97316))
+                        Text("\(profile.currentStreak)")
+                            .font(.system(size: 14, weight: .black, design: .rounded))
+                            .foregroundStyle(AppTheme.Colors.text)
+                    }
+                    .layoutPriority(1)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppTheme.Colors.faint)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(AppTheme.Colors.card.opacity(0.55))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
+                    )
+            )
+        }
+        .buttonStyle(PremiumPressStyle())
+    }
+
+    private func stripPrestigeColor(_ profile: GamificationProfile) -> Color {
+        profile.prestige == 0 ? AppTheme.Colors.accent : PrestigeTheme.color(for: profile.prestige)
+    }
+
+    private func stripXPProgress(_ profile: GamificationProfile) -> Double {
+        guard profile.xpForNextLevel > 0 else { return 0 }
+        return min(max(Double(profile.xpIntoCurrentLevel) / Double(profile.xpForNextLevel), 0), 1)
+    }
+
+    // MARK: - Stat Triplet
+
+    private var statTriplet: some View {
+        HStack(spacing: 10) {
+            statTile(
+                label: "This Month",
+                value: AppTheme.Format.hours(store.monthTotalHours(monthDate: Date()))
+            )
+            statTile(
+                label: "Best Month",
+                value: bestMonthSoFar.map { AppTheme.Format.hours($0.hours) } ?? "—"
+            )
+            statTile(
+                label: "Streak",
+                value: "\(store.gamificationProfile.currentStreak)d"
+            )
+        }
+    }
+
+    private func statTile(label: String, value: String) -> some View {
+        VStack(spacing: 4) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .tracking(1.2)
+                .foregroundStyle(AppTheme.Colors.faint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text(value)
+                .font(AppDesignSystem.Typography.heroNumerals(size: 20, weight: .bold))
+                .foregroundStyle(AppTheme.Colors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(AppTheme.Colors.card.opacity(0.55))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
+                )
+        )
     }
     
     @ViewBuilder
