@@ -1230,8 +1230,13 @@ final class CloudSyncManager: ObservableObject {
                         return
                     }
                     let entries = snapshot?.documents.compactMap { self.entry(from: $0.data()) } ?? []
+                    // Tombstone reconciliation may only trust a snapshot that is
+                    // server-sourced AND free of latency-compensated local
+                    // mutations — a cached/pending-writes snapshot omits docs the
+                    // user deleted locally even when the server still has them.
+                    let isAuthoritative = (snapshot.map { !$0.metadata.isFromCache && !$0.metadata.hasPendingWrites }) ?? false
                     self.hasAppliedRemoteEntries = true
-                    self.hoursStore?.applyRemoteEntries(entries)
+                    self.hoursStore?.applyRemoteEntries(entries, isAuthoritativeSnapshot: isAuthoritative)
                     self.lastSyncDate = Date()
                     self.syncError = nil
                 }

@@ -189,7 +189,11 @@ final class HoursStore: ObservableObject {
 
     /// Merges Firestore entries into local data (keeps local-only shifts) and
     /// pushes an updated friends profile snapshot.
-    func applyRemoteEntries(_ remoteEntries: [WorkEntry]) {
+    ///
+    /// `isAuthoritativeSnapshot` must only be true for a listener snapshot that
+    /// came from the server with no pending local writes — it gates deletion-
+    /// tombstone reconciliation (see below).
+    func applyRemoteEntries(_ remoteEntries: [WorkEntry], isAuthoritativeSnapshot: Bool = false) {
         // Entries the user just deleted must stay gone even if a stale snapshot
         // (or an in-flight pull) still carries them. `pending_deletes` acts as a
         // tombstone set until the server confirms the removal.
@@ -235,9 +239,15 @@ final class HoursStore: ObservableObject {
         }
 
         // Clear tombstones the server has confirmed gone (absent from the raw
-        // snapshot). Tombstones for docs still present remotely are kept so the
-        // deletion keeps applying until it propagates.
-        cloudSync.reconcileTombstones(presentRemoteIDs: Set(remoteEntries.map { $0.id.uuidString }))
+        // snapshot) — but ONLY from an authoritative snapshot. Firestore's
+        // latency compensation removes a locally-deleted doc from cached
+        // snapshots immediately, before the server ever hears about the delete;
+        // treating that absence as "server confirmed" cleared the tombstone on
+        // devices whose write channel hangs, so the server delete never
+        // happened and the phantom doc inflated cloud totals forever.
+        if isAuthoritativeSnapshot {
+            cloudSync.reconcileTombstones(presentRemoteIDs: Set(remoteEntries.map { $0.id.uuidString }))
+        }
 
         syncProfileSnapshotToCloud()
     }
