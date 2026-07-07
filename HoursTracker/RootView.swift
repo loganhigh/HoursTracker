@@ -961,60 +961,65 @@ private struct HoursHomeView: View {
         NavigationLink {
             PayCycleDetailView(store: store, initialCycle: currentPayCycle)
         } label: {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(spacing: 16) {
                 VStack(spacing: 2) {
                     Text("THIS CHEQUE")
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .tracking(1.6)
                         .foregroundStyle(AppTheme.Colors.subtext)
-                    Text(payPeriodRangeText)
+                    Text(currentPayCycle.workRangeText())
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(AppTheme.Colors.faint)
                 }
                 .frame(maxWidth: .infinity)
 
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    AnimatedMetricText(value: periodHours) { AppTheme.Format.hours($0, suffix: "") }
-                        .font(AppDesignSystem.Typography.heroNumerals(size: 44, weight: .heavy))
-                        .foregroundStyle(AppTheme.Colors.text)
-                    Text("hrs")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                    Spacer(minLength: 8)
-                    if store.paySettings.showPayCalculations {
-                        AnimatedMetricText(currency: periodPay, code: store.paySettings.currencyCode)
-                            .font(AppDesignSystem.Typography.heroNumerals(size: 24, weight: .bold))
-                            .foregroundStyle(AppTheme.Colors.accent)
-                    }
-                }
-
-                heroDayStrip
-
-                VStack(alignment: .leading, spacing: 8) {
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(Color.white.opacity(0.08))
-                                .frame(height: 8)
-                            Capsule()
-                                .fill(AppTheme.Colors.accentGradient)
-                                .frame(width: max(8, geo.size.width * heroProgress.value), height: 8)
+                HStack(spacing: 0) {
+                    VStack(spacing: 4) {
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            AnimatedMetricText(value: periodHours) { AppTheme.Format.hours($0, suffix: "") }
+                                .font(AppDesignSystem.Typography.heroNumerals(size: 34, weight: .heavy))
+                                .foregroundStyle(AppTheme.Colors.text)
+                            Text("hrs")
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundStyle(AppTheme.Colors.subtext)
+                        }
+                        if store.paySettings.showPayCalculations {
+                            AnimatedMetricText(currency: periodPay, code: store.paySettings.currencyCode)
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundStyle(AppTheme.Colors.accent)
+                        } else {
+                            Text("this cheque")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(AppTheme.Colors.faint)
                         }
                     }
-                    .frame(height: 8)
+                    .frame(maxWidth: .infinity)
 
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(AppTheme.Colors.accent)
-                            .frame(width: 6, height: 6)
+                    Rectangle()
+                        .fill(AppTheme.Colors.stroke)
+                        .frame(width: 1, height: 44)
+
+                    VStack(spacing: 4) {
                         Text(daysUntilPayday == 0
-                             ? "Payday today"
-                             : "Payday in \(daysUntilPayday) \(daysUntilPayday == 1 ? "day" : "days")")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                             ? "Today"
+                             : "\(daysUntilPayday) \(daysUntilPayday == 1 ? "day" : "days")")
+                            .font(AppDesignSystem.Typography.heroNumerals(size: 34, weight: .heavy))
                             .foregroundStyle(AppTheme.Colors.text)
-                        Text("· \(paydayShortText)")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Text(daysUntilPayday == 0
+                             ? "payday · \(paydayShortText)"
+                             : "to payday · \(paydayShortText)")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
                             .foregroundStyle(AppTheme.Colors.faint)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+
+                VStack(spacing: 8) {
+                    heroDayStrip
+
+                    HStack {
                         Spacer()
                         Text(heroProgress.caption)
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -1063,15 +1068,15 @@ private struct HoursHomeView: View {
     }
 
     private var heroDayStrip: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             ForEach(Array(heroDayStates.enumerated()), id: \.offset) { _, state in
-                Capsule()
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
                     .fill(
                         state == .worked
                             ? AppTheme.Colors.success
-                            : AppTheme.Colors.danger.opacity(state == .off ? 0.9 : 0.35)
+                            : AppTheme.Colors.danger.opacity(state == .off ? 0.9 : 0.3)
                     )
-                    .frame(height: 5)
+                    .frame(height: 18)
                     .frame(maxWidth: .infinity)
             }
         }
@@ -1293,10 +1298,6 @@ private struct HoursHomeView: View {
         )
     }
     
-    private var payPeriodRangeText: String {
-        currentPayCycle.chequeRangeText(settings: store.paySettings)
-    }
-
     private func monthTitle(_ d: Date) -> String {
         let f = DateFormatter()
         f.dateFormat = "LLLL yyyy"

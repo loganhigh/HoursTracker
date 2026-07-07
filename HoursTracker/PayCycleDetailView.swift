@@ -223,7 +223,7 @@ struct PayCycleDetailView: View {
     }
 
     private var heroBlock: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(spacing: 16) {
             VStack(spacing: 2) {
                 Text(navigationTitle.uppercased())
                     .font(.system(size: 12, weight: .bold, design: .rounded))
@@ -236,57 +236,65 @@ struct PayCycleDetailView: View {
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
 
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                AnimatedMetricText(value: periodHours) { AppTheme.Format.hours($0, suffix: "") }
-                    .font(AppDesignSystem.Typography.heroNumerals(size: 44, weight: .heavy))
-                    .foregroundStyle(AppTheme.Colors.text)
-                Text("hrs")
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                Spacer(minLength: 8)
-                if store.paySettings.showPayCalculations {
-                    AnimatedMetricText(currency: periodPay, code: store.paySettings.currencyCode)
-                        .font(AppDesignSystem.Typography.heroNumerals(size: 24, weight: .bold))
-                        .foregroundStyle(AppTheme.Colors.accent)
-                }
-            }
-
-            HStack(spacing: 3) {
-                ForEach(Array(cycleDayStates.enumerated()), id: \.offset) { _, state in
-                    Capsule()
-                        .fill(
-                            state == .worked
-                                ? AppTheme.Colors.success
-                                : AppTheme.Colors.danger.opacity(state == .off ? 0.9 : 0.35)
-                        )
-                        .frame(height: 5)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-
-            HStack(spacing: 12) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(AppTheme.Colors.success)
-                        .frame(width: 6, height: 6)
-                    Text("\(daysWorked) \(daysWorked == 1 ? "day" : "days") worked")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(AppTheme.Colors.text)
-                }
-                if offDayCount > 0 {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(AppTheme.Colors.danger)
-                            .frame(width: 6, height: 6)
-                        Text("\(offDayCount) off")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
+            HStack(spacing: 0) {
+                VStack(spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        AnimatedMetricText(value: periodHours) { AppTheme.Format.hours($0, suffix: "") }
+                            .font(AppDesignSystem.Typography.heroNumerals(size: 34, weight: .heavy))
                             .foregroundStyle(AppTheme.Colors.text)
+                        Text("hrs")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppTheme.Colors.subtext)
+                    }
+                    if store.paySettings.showPayCalculations {
+                        AnimatedMetricText(currency: periodPay, code: store.paySettings.currencyCode)
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppTheme.Colors.accent)
+                    } else {
+                        Text("this cheque")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(AppTheme.Colors.faint)
                     }
                 }
-                Spacer()
-                Text("Day \(min(cycleDayProgress.elapsed + 1, cycleDayProgress.total)) of \(cycleDayProgress.total)")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.subtext)
+                .frame(maxWidth: .infinity)
+
+                Rectangle()
+                    .fill(AppTheme.Colors.stroke)
+                    .frame(width: 1, height: 44)
+
+                VStack(spacing: 4) {
+                    Text("\(daysWorked) \(daysWorked == 1 ? "day" : "days")")
+                        .font(AppDesignSystem.Typography.heroNumerals(size: 34, weight: .heavy))
+                        .foregroundStyle(AppTheme.Colors.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Text(offDayCount > 0 ? "worked · \(offDayCount) off" : "worked")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppTheme.Colors.faint)
+                }
+                .frame(maxWidth: .infinity)
+            }
+
+            VStack(spacing: 8) {
+                HStack(spacing: 4) {
+                    ForEach(Array(cycleDayStates.enumerated()), id: \.offset) { _, state in
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(
+                                state == .worked
+                                    ? AppTheme.Colors.success
+                                    : AppTheme.Colors.danger.opacity(state == .off ? 0.9 : 0.3)
+                            )
+                            .frame(height: 18)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+
+                HStack {
+                    Spacer()
+                    Text("Day \(min(cycleDayProgress.elapsed + 1, cycleDayProgress.total)) of \(cycleDayProgress.total)")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppTheme.Colors.subtext)
+                }
             }
         }
         .padding(20)
