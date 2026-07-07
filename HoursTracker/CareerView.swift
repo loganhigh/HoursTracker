@@ -138,20 +138,17 @@ struct CareerView: View {
         return (df.string(from: date), top.value)
     }
 
-    private var levelLabel: String {
-        let level = store.displayedLevel
-        let prestige = store.gamificationProfile.prestige
-        if prestige > 0 {
-            return "Lv \(level) • P\(prestige)"
-        }
-        return "Level \(level)"
-    }
 
     // MARK: - Body
 
     var body: some View {
         ScrollView {
             VStack(spacing: AppTheme.Spacing.xl) {
+                PlayerProgressCard(
+                    profile: store.displayedGamificationProfile(),
+                    onPrestige: {}
+                )
+
                 heroSummary
 
                 SectionCard(
@@ -270,19 +267,6 @@ struct CareerView: View {
             Text("Lifetime hours logged")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(AppTheme.Colors.subtext)
-            HStack(spacing: 6) {
-                Image(systemName: "star.circle.fill")
-                    .font(.system(size: 12, weight: .bold))
-                Text(levelLabel)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-            }
-            .foregroundStyle(AppTheme.Colors.accent)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                Capsule().fill(AppTheme.Colors.accent.opacity(0.15))
-            )
-            .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)

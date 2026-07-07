@@ -488,7 +488,6 @@ private struct SideMenuView: View {
 
     @AppStorage("profile_display_name") private var displayName: String = ""
     @EnvironmentObject private var authService: AuthService
-    @ObservedObject private var topTrackers = TopTrackersService.shared
     @State private var topSafeArea: CGFloat = 0
     @Environment(\.openURL) private var openURL
 
@@ -603,7 +602,6 @@ private struct SideMenuView: View {
                         }
                     }
 
-                    topTrackersSection
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, max(topSafeArea, 8) + 6)
@@ -611,7 +609,6 @@ private struct SideMenuView: View {
             }
 
         }
-        .onAppear { topTrackers.startListening() }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             GeometryReader { geo in
@@ -620,123 +617,6 @@ private struct SideMenuView: View {
         )
         .onPreferenceChange(SideMenuTopSafeAreaKey.self) { topSafeArea = $0 }
         .background(AppTheme.Colors.bg.ignoresSafeArea())
-    }
-
-    @ViewBuilder
-    private var topTrackersSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("TOP 5 HOUR TRACKERS")
-                .font(AppDesignSystem.Typography.sectionLabel)
-                .tracking(1)
-                .foregroundStyle(AppTheme.Colors.faint)
-
-            VStack(spacing: 0) {
-                if topTrackers.topTrackers.isEmpty {
-                    HStack {
-                        Text(topTrackers.hasLoaded ? "No rankings yet" : "Loading…")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(AppTheme.Colors.faint)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 16)
-                } else {
-                    ForEach(topTrackers.topTrackers.prefix(5)) { tracker in
-                        topTrackerRow(tracker: tracker)
-                        if tracker.id != topTrackers.topTrackers.prefix(5).last?.id {
-                            Divider()
-                                .overlay(AppTheme.Colors.stroke)
-                                .padding(.leading, 52)
-                        }
-                    }
-
-                    Button {
-                        menuController.close()
-                        menuController.globalLeaderboardSheet = true
-                    } label: {
-                        Text("See more")
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
-                            .foregroundStyle(AppTheme.Colors.accent)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .padding(.horizontal, 14)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(AppTheme.Colors.accent.opacity(0.1))
-                            )
-                    }
-                    .buttonStyle(InteractiveButtonStyle())
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 10)
-                    .padding(.top, 4)
-                }
-            }
-            .background(
-                RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
-                    .fill(AppTheme.Colors.card)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
-                    .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
-            )
-        }
-    }
-
-    private func rankColor(_ rank: Int) -> Color {
-        switch rank {
-        case 1: return Color(red: 0.98, green: 0.79, blue: 0.28) // gold
-        case 2: return Color(red: 0.75, green: 0.79, blue: 0.85) // silver
-        case 3: return Color(red: 0.83, green: 0.55, blue: 0.35) // bronze
-        default: return AppTheme.Colors.accent
-        }
-    }
-
-    private func topTrackerRow(tracker: TopTracker) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(rankColor(tracker.rank).opacity(tracker.rank <= 3 ? 0.22 : 0.12))
-                    .frame(width: 28, height: 28)
-                Text("\(tracker.rank)")
-                    .font(.system(size: 13, weight: .heavy, design: .rounded))
-                    .foregroundStyle(rankColor(tracker.rank))
-            }
-
-            HStack(spacing: 5) {
-                Text(tracker.name)
-                    .font(.system(size: 15, weight: tracker.rank <= 3 ? .semibold : .medium))
-                    .foregroundStyle(AppTheme.Colors.text)
-                    .lineLimit(1)
-                if let flag = CountryFlag.emoji(
-                    for: CountryFlag.leaderboardCode(
-                        trackerUid: tracker.uid,
-                        serverCode: tracker.countryCode,
-                        currentUid: authService.user?.uid
-                    )
-                ) {
-                    Text(flag)
-                        .font(.system(size: 15))
-                }
-            }
-
-            Spacer()
-
-            Text(hoursLabel(tracker.hours))
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(AppTheme.Colors.subtext)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .contentShape(Rectangle())
-    }
-
-    private func hoursLabel(_ hours: Double) -> String {
-        if hours >= 1000 {
-            return String(format: "%.0fh", hours)
-        }
-        return String(format: "%.1fh", hours)
     }
 
     private func drawerSection(title: String, @ViewBuilder rows: () -> some View) -> some View {

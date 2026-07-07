@@ -79,20 +79,6 @@ class SmartNotifier: ObservableObject {
         }
     }
 
-    /// Reminder with hours left to reach bi-weekly goal. Default on.
-    var goalReminderEnabled: Bool {
-        get {
-            let savedValue = UserDefaults.standard.object(forKey: "notifications_goal_reminder_enabled")
-            if let boolValue = savedValue as? Bool { return boolValue }
-            return true
-        }
-        set {
-            objectWillChange.send()
-            UserDefaults.standard.set(newValue, forKey: "notifications_goal_reminder_enabled")
-            if !newValue { cancelGoalReminder() }
-        }
-    }
-
     /// Streak notifications: at-risk warning + milestone celebrations. Default on.
     var streakNotificationsEnabled: Bool {
         get {
@@ -411,67 +397,12 @@ class SmartNotifier: ObservableObject {
         }
     }
 
-    // MARK: - Bi-weekly goal reminder (hours left)
+    // MARK: - Bi-weekly goal reminder (removed feature — cancel any pending)
 
     private static let goalReminderIdentifier = "goal_reminder"
 
-    func scheduleGoalReminderIfNeeded(entries: [WorkEntry], paySettings: PaySettings) {
-        guard goalReminderEnabled else {
-            cancelGoalReminder()
-            return
-        }
-        let goalHours = UserDefaults.standard.double(forKey: "biweeklyGoalHours")
-        guard goalHours > 0 else {
-            cancelGoalReminder()
-            return
-        }
-        let calendar = Calendar.current
-        guard paySettings.nextPayday != nil else {
-            cancelGoalReminder()
-            return
-        }
-        let current = PayCycleEngine.currentCycle(settings: paySettings, calendar: calendar)
-        let payPeriodStart = current.start
-        let payPeriodEnd = current.end
-        let periodHours = entries
-            .filter { $0.date >= payPeriodStart && $0.date < payPeriodEnd }
-            .reduce(0) { $0 + $1.paidHours }
-        let remaining = goalHours - periodHours
-        guard remaining > 0 else {
-            cancelGoalReminder()
-            return
-        }
-        Task {
-            let hasPermission = await notificationManager.hasPermission()
-            guard hasPermission else { return }
-            cancelGoalReminder()
-            let today = calendar.startOfDay(for: Date())
-            var dateComponents = DateComponents()
-            dateComponents.year = calendar.component(.year, from: today)
-            dateComponents.month = calendar.component(.month, from: today)
-            dateComponents.day = calendar.component(.day, from: today)
-            dateComponents.hour = dailyReminderHour
-            dateComponents.minute = 0
-            let hoursText = remaining >= 1 && remaining == floor(remaining)
-                ? "\(Int(remaining))h"
-                : String(format: "%.1fh", remaining)
-            let content = UNMutableNotificationContent()
-            content.title = "Bi-weekly goal"
-            content.body = "You're \(hoursText) short of your goal!"
-            content.sound = .default
-            content.badge = 1
-            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
-            let request = UNNotificationRequest(
-                identifier: Self.goalReminderIdentifier,
-                content: content,
-                trigger: trigger
-            )
-            do {
-                try await UNUserNotificationCenter.current().add(request)
-            } catch { }
-        }
-    }
-
+    /// The bi-weekly hours-goal feature was removed; this stays so app start
+    /// can clear any goal reminder scheduled by an older version.
     func cancelGoalReminder() {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [Self.goalReminderIdentifier])
     }

@@ -113,7 +113,7 @@ struct HoursTrackerApp: App {
                 WidgetDataManager.shared.reloadAllWidgets()
                 SmartNotifier.shared.scheduleDailyReminder()
                 SmartNotifier.shared.scheduleForgotHoursReminderIfNeeded(entries: store.entries)
-                SmartNotifier.shared.scheduleGoalReminderIfNeeded(entries: store.entries, paySettings: store.paySettings)
+                SmartNotifier.shared.cancelGoalReminder()
                 SmartNotifier.shared.scheduleMotivationReminderIfNeeded(entries: store.entries)
                 SmartNotifier.shared.scheduleStreakNotificationsIfNeeded(entries: store.entries, currentStreak: store.gamificationProfile.currentStreak)
                 Task { @MainActor in
@@ -211,7 +211,6 @@ private struct MainAppWithStartup: View {
             WeeklyMilestoneNotifier.shared.checkMilestones(for: store.entries)
             SmartNotifier.shared.scheduleDailyReminder()
             SmartNotifier.shared.scheduleForgotHoursReminderIfNeeded(entries: store.entries)
-            SmartNotifier.shared.scheduleGoalReminderIfNeeded(entries: store.entries, paySettings: store.paySettings)
             SmartNotifier.shared.scheduleMotivationReminderIfNeeded(entries: store.entries)
             SmartNotifier.shared.scheduleStreakNotificationsIfNeeded(entries: store.entries, currentStreak: store.gamificationProfile.currentStreak)
             SmartNotifier.shared.checkPayPeriodProgress(for: store.entries, paySettings: store.paySettings)

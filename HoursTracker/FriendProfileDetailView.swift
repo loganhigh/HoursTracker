@@ -203,22 +203,20 @@ struct FriendProfileDetailView: View {
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundStyle(AppTheme.Colors.subtext)
 
-            if friend.prestige > 0 {
-                HStack(spacing: 6) {
-                    Image(systemName: tier.icon)
-                        .font(.system(size: 12, weight: .bold))
-                    Text("Prestige \(friend.prestige)")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                }
-                .foregroundStyle(tier.primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule()
-                        .fill(tier.primary.opacity(0.14))
-                        .overlay(Capsule().stroke(tier.primary.opacity(0.45), lineWidth: 1))
-                )
+            HStack(spacing: 6) {
+                Image(systemName: tier.icon)
+                    .font(.system(size: 12, weight: .bold))
+                Text("Prestige \(friend.prestige)")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
             }
+            .foregroundStyle(tier.primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(tier.primary.opacity(0.14))
+                    .overlay(Capsule().stroke(tier.primary.opacity(0.45), lineWidth: 1))
+            )
 
             if !friend.equippedTitle.isEmpty, friend.privacy.shareBadges {
                 Text(friend.equippedTitle)

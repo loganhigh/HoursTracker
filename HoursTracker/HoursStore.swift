@@ -596,7 +596,6 @@ final class HoursStore: ObservableObject {
         SmartNotifier.shared.checkPayPeriodProgress(for: entries, paySettings: paySettings)
         SmartNotifier.shared.cancelDailyReminderIfNeeded(for: entry.date, entries: entries)
         SmartNotifier.shared.cancelForgotHoursReminderIfNeeded(for: entry.date, entries: entries)
-        SmartNotifier.shared.scheduleGoalReminderIfNeeded(entries: entries, paySettings: paySettings)
         SmartNotifier.shared.scheduleMotivationReminderIfNeeded(entries: entries)
         SmartNotifier.shared.scheduleStreakNotificationsIfNeeded(entries: entries, currentStreak: gamificationProfile.currentStreak)
         
@@ -619,7 +618,6 @@ final class HoursStore: ObservableObject {
         SmartNotifier.shared.checkPayPeriodProgress(for: entries, paySettings: paySettings)
         SmartNotifier.shared.cancelDailyReminderIfNeeded(for: entry.date, entries: entries)
         SmartNotifier.shared.cancelForgotHoursReminderIfNeeded(for: entry.date, entries: entries)
-        SmartNotifier.shared.scheduleGoalReminderIfNeeded(entries: entries, paySettings: paySettings)
         SmartNotifier.shared.scheduleMotivationReminderIfNeeded(entries: entries)
         SmartNotifier.shared.scheduleStreakNotificationsIfNeeded(entries: entries, currentStreak: gamificationProfile.currentStreak)
         

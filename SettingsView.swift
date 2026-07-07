@@ -1362,9 +1362,6 @@ private struct NotificationsSheet: View {
                     Toggle("Did you work today?", isOn: $smartNotifier.forgotHoursReminderEnabled)
                         .tint(AppTheme.Colors.accent)
                     
-                    Toggle("Goal reminder", isOn: $smartNotifier.goalReminderEnabled)
-                        .tint(AppTheme.Colors.accent)
-
                     Toggle("Streak alerts", isOn: $smartNotifier.streakNotificationsEnabled)
                         .tint(AppTheme.Colors.accent)
 
@@ -1388,7 +1385,7 @@ private struct NotificationsSheet: View {
                         }
                     }
                 } footer: {
-                    Text("Get notified about milestones, progress, daily reminders, motivation quotes, streak alerts, friend shifts (e.g. \"Jacob worked 13h today\"), \"Did you work today?\" and how many hours you have left to reach your bi-weekly goal.")
+                    Text("Get notified about milestones, progress, daily reminders, motivation quotes, streak alerts, friend shifts (e.g. \"Jacob worked 13h today\") and \"Did you work today?\".")
                 }
             }
             .scrollContentBackground(.hidden)
@@ -1410,14 +1407,12 @@ private struct NotificationsSheet: View {
             }
             .onAppear {
                 let entries = store.entries
-                let paySettings = store.paySettings
                 let streak = store.gamificationProfile.currentStreak
                 Task {
                     let granted = await SmartNotifier.shared.requestPermissionsIfNeeded()
                     if granted {
                         SmartNotifier.shared.scheduleDailyReminder()
                         SmartNotifier.shared.scheduleForgotHoursReminderIfNeeded(entries: entries)
-                        SmartNotifier.shared.scheduleGoalReminderIfNeeded(entries: entries, paySettings: paySettings)
                         SmartNotifier.shared.scheduleMotivationReminderIfNeeded(entries: entries)
                         SmartNotifier.shared.scheduleStreakNotificationsIfNeeded(entries: entries, currentStreak: streak)
                         // Re-schedule anniversary if company data exists

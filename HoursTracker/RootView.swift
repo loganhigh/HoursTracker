@@ -181,6 +181,7 @@ private struct HoursHomeView: View {
     @Environment(\.sideMenu) private var sideMenu
     @ObservedObject private var friendsService = FriendsService.shared
     @ObservedObject private var statsListener = StatsListenerService.shared
+    @ObservedObject private var topTrackers = TopTrackersService.shared
 
     @State private var showingAdd = false
     @State private var showTrackingHint = false
@@ -189,12 +190,7 @@ private struct HoursHomeView: View {
     
     @AppStorage("company_name") private var companyName: String = ""
     @AppStorage("company_occupation") private var occupation: String = ""
-    @AppStorage("profile_display_name") private var displayName: String = ""
-    @AppStorage("biweeklyGoalHours") private var biweeklyGoalHours: Double = 0
-    @AppStorage("header_icon_name") private var headerIconName: String = "IconStrong"
-    @State private var showingGoalEditor = false
     @State private var addButtonVisible = true
-    @State private var showingHeaderIconPicker = false
     @State private var showingPrestigeConfetti = false
     @State private var showPaydayConfetti = false
     @State private var showPersonalBestBanner = false
@@ -492,17 +488,14 @@ private struct HoursHomeView: View {
             ScrollView {
             VStack(spacing: AppDesignSystem.Spacing.xxl) {
 
-                greetingHeader
+                chequeHeroCard
                     .cardAppear(index: 0)
 
-                chequeHeroCard
+                progressionCard
                     .cardAppear(index: 1)
 
-                progressionCard
-                    .cardAppear(index: 2)
-
                 statTriplet
-                    .cardAppear(index: 3)
+                    .cardAppear(index: 2)
 
                 VStack(spacing: 10) {
                     PrimaryButton("Add Shift", systemImage: "plus") {
@@ -537,7 +530,7 @@ private struct HoursHomeView: View {
                         .tapBurst(trigger: holidayBurst)
                     }
                 }
-                .cardAppear(index: 4)
+                .cardAppear(index: 3)
 
                 // Hours Logged
                 homeSection("Hours Logged") {
@@ -597,7 +590,7 @@ private struct HoursHomeView: View {
                         }
                     }
                 }
-                .cardAppear(index: 5)
+                .cardAppear(index: 4)
 
                 // Monthly Overview (year-at-a-glance)
                 homeSection("Yearly Overview", boxed: true) {
@@ -610,7 +603,7 @@ private struct HoursHomeView: View {
                         MonthlyOverviewChart(data: monthlyHoursByMonth)
                     }
                 }
-                .cardAppear(index: 6)
+                .cardAppear(index: 5)
 
                 if !premium.isPremium {
                     BannerAdView()
@@ -630,7 +623,10 @@ private struct HoursHomeView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .cardAppear(index: 7)
+                .cardAppear(index: 6)
+
+                homeTopTrackersSection
+                    .cardAppear(index: 7)
 
                 Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
@@ -648,6 +644,7 @@ private struct HoursHomeView: View {
             store.advanceNextPaydayIfNeeded()
             checkPaydayConfetti()
             store.syncProfileSnapshotToCloud()
+            topTrackers.startListening()
         }
         .task(id: authSubscriptionKey) {
             refreshFriendsSubscription()
@@ -851,8 +848,8 @@ private struct HoursHomeView: View {
         boxed: Bool = false,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(spacing: 12) {
+            VStack(spacing: 2) {
                 Text(title.uppercased())
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .tracking(1.6)
@@ -863,8 +860,8 @@ private struct HoursHomeView: View {
                         .foregroundStyle(AppTheme.Colors.faint)
                 }
             }
-            .padding(.leading, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, alignment: .center)
 
             if boxed {
                 content()
@@ -883,69 +880,6 @@ private struct HoursHomeView: View {
             }
         }
         .frame(maxWidth: .infinity)
-    }
-
-    /// Chrome-less greeting row: time-of-day greeting over the first name,
-    /// with the tappable avatar (header icon picker) on the trailing edge.
-    private var greetingHeader: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(timeOfDayGreeting.uppercased())
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .tracking(1.6)
-                    .foregroundStyle(AppTheme.Colors.subtext)
-
-                Text(displayName.isEmpty ? "Grinder" : (displayName.components(separatedBy: " ").first ?? displayName))
-                    .font(.system(size: 28, weight: .heavy, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.text)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-
-            Spacer(minLength: 12)
-
-            Button {
-                Haptics.lightTap()
-                showingHeaderIconPicker = true
-            } label: {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [AppTheme.Colors.accent.opacity(0.2), AppTheme.Colors.accent.opacity(0.06)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 52, height: 52)
-
-                    Circle()
-                        .stroke(AppTheme.Colors.accent.opacity(0.3), lineWidth: 1.5)
-                        .frame(width: 52, height: 52)
-
-                    headerIconView
-                }
-                .shadow(color: AppTheme.Colors.accent.opacity(0.15), radius: 8)
-            }
-            .buttonStyle(InteractiveButtonStyle())
-            .accessibilityLabel("Change header icon")
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 4)
-        .sheet(isPresented: $showingHeaderIconPicker) {
-            HeaderIconPickerSheet(selectedIconName: $headerIconName) {
-                showingHeaderIconPicker = false
-            }
-        }
-    }
-
-    private var timeOfDayGreeting: String {
-        switch Calendar.current.component(.hour, from: Date()) {
-        case 5..<12: return "Good morning"
-        case 12..<17: return "Good afternoon"
-        case 17..<22: return "Good evening"
-        default: return "Working late"
-        }
     }
 
     private var progressionCard: some View {
@@ -985,13 +919,8 @@ private struct HoursHomeView: View {
         return f.string(from: nextPayday)
     }
 
-    /// Progress the hero bar tracks: the hours goal when one is set,
-    /// otherwise how far through the pay period we are.
+    /// How far through the pay period we are.
     private var heroProgress: (value: Double, caption: String) {
-        if biweeklyGoalHours > 0 {
-            let p = min(max(periodHours / biweeklyGoalHours, 0), 1)
-            return (p, "\(Int((p * 100).rounded()))% of \(AppTheme.Format.hours(biweeklyGoalHours)) goal")
-        }
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
         let total = max(currentPayCycle.spanDays, 1)
@@ -1033,16 +962,16 @@ private struct HoursHomeView: View {
             PayCycleDetailView(store: store, initialCycle: currentPayCycle)
         } label: {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .firstTextBaseline) {
+                VStack(spacing: 2) {
                     Text("THIS CHEQUE")
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .tracking(1.6)
                         .foregroundStyle(AppTheme.Colors.subtext)
-                    Spacer()
                     Text(payPeriodRangeText)
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(AppTheme.Colors.faint)
                 }
+                .frame(maxWidth: .infinity)
 
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     AnimatedMetricText(value: periodHours) { AppTheme.Format.hours($0, suffix: "") }
@@ -1139,8 +1068,8 @@ private struct HoursHomeView: View {
                 Capsule()
                     .fill(
                         state == .worked
-                            ? AnyShapeStyle(AppTheme.Colors.accentGradient)
-                            : AnyShapeStyle(Color.white.opacity(state == .off ? 0.18 : 0.07))
+                            ? AppTheme.Colors.success
+                            : AppTheme.Colors.danger.opacity(state == .off ? 0.9 : 0.35)
                     )
                     .frame(height: 5)
                     .frame(maxWidth: .infinity)
@@ -1213,6 +1142,103 @@ private struct HoursHomeView: View {
         .buttonStyle(PremiumPressStyle())
     }
 
+    // MARK: - Top 5 Hour Trackers (moved from the side menu)
+
+    private var homeTopTrackersSection: some View {
+        homeSection("Top 5 Hour Trackers", boxed: true) {
+            VStack(spacing: 0) {
+                if topTrackers.topTrackers.isEmpty {
+                    Text(topTrackers.hasLoaded ? "No rankings yet" : "Loading…")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AppTheme.Colors.faint)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                } else {
+                    ForEach(topTrackers.topTrackers.prefix(5)) { tracker in
+                        topTrackerRow(tracker: tracker)
+                        if tracker.id != topTrackers.topTrackers.prefix(5).last?.id {
+                            Divider()
+                                .overlay(AppTheme.Colors.stroke)
+                                .padding(.leading, 40)
+                        }
+                    }
+
+                    Button {
+                        Haptics.lightTap()
+                        sideMenu.globalLeaderboardSheet = true
+                    } label: {
+                        Text("See more")
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundStyle(AppTheme.Colors.accent)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(AppTheme.Colors.accent.opacity(0.1))
+                            )
+                    }
+                    .buttonStyle(InteractiveButtonStyle())
+                    .padding(.top, 8)
+                }
+            }
+        }
+    }
+
+    private func topTrackerRankColor(_ rank: Int) -> Color {
+        switch rank {
+        case 1: return Color(red: 0.98, green: 0.79, blue: 0.28) // gold
+        case 2: return Color(red: 0.75, green: 0.79, blue: 0.85) // silver
+        case 3: return Color(red: 0.83, green: 0.55, blue: 0.35) // bronze
+        default: return AppTheme.Colors.accent
+        }
+    }
+
+    private func topTrackerHoursLabel(_ hours: Double) -> String {
+        if hours >= 1000 {
+            return String(format: "%.0fh", hours)
+        }
+        return String(format: "%.1fh", hours)
+    }
+
+    private func topTrackerRow(tracker: TopTracker) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(topTrackerRankColor(tracker.rank).opacity(tracker.rank <= 3 ? 0.22 : 0.12))
+                    .frame(width: 28, height: 28)
+                Text("\(tracker.rank)")
+                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .foregroundStyle(topTrackerRankColor(tracker.rank))
+            }
+
+            HStack(spacing: 5) {
+                Text(tracker.name)
+                    .font(.system(size: 15, weight: tracker.rank <= 3 ? .semibold : .medium))
+                    .foregroundStyle(AppTheme.Colors.text)
+                    .lineLimit(1)
+                if let flag = CountryFlag.emoji(
+                    for: CountryFlag.leaderboardCode(
+                        trackerUid: tracker.uid,
+                        serverCode: tracker.countryCode,
+                        currentUid: authService.user?.uid
+                    )
+                ) {
+                    Text(flag)
+                        .font(.system(size: 15))
+                }
+            }
+
+            Spacer()
+
+            Text(topTrackerHoursLabel(tracker.hours))
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(AppTheme.Colors.subtext)
+        }
+        .padding(.vertical, 8)
+    }
+
     private func stripPrestigeColor(_ profile: GamificationProfile) -> Color {
         profile.prestige == 0 ? AppTheme.Colors.accent : PrestigeTheme.color(for: profile.prestige)
     }
@@ -1267,20 +1293,6 @@ private struct HoursHomeView: View {
         )
     }
     
-    @ViewBuilder
-    private var headerIconView: some View {
-        if headerIconName == "IconStrong" || headerIconName.isEmpty {
-            Image("IconStrong")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 28, height: 28)
-        } else {
-            Image(systemName: headerIconName)
-                .font(.system(size: 26, weight: .medium))
-                .foregroundStyle(AppTheme.Colors.accent)
-        }
-    }
-
     private var payPeriodRangeText: String {
         currentPayCycle.chequeRangeText(settings: store.paySettings)
     }
@@ -1742,281 +1754,6 @@ private struct MonthlyOverviewChart: View {
         }
         .padding(.vertical, 8)
         .onAppear { appeared = true }
-    }
-}
-
-// MARK: - Bi-weekly Goal Progress Card
-private struct BiweeklyGoalProgressCard: View {
-    let loggedHoursThisPayPeriod: Double
-    let goalHours: Double?
-    let onEditGoal: () -> Void
-    
-    @State private var animatedProgress: Double = 0
-    @State private var celebrationScale: CGFloat = 1.0
-    @State private var showSparkles: Bool = false
-    
-    private var progress: Double {
-        guard let goal = goalHours, goal > 0 else { return 0 }
-        return min(max(loggedHoursThisPayPeriod / goal, 0), 1)
-    }
-    
-    private var subtitleText: (String, String?, String)? {
-        guard let goal = goalHours, goal > 0 else {
-            return ("Set a goal to track your bi-weekly progress.", nil, "")
-        }
-        if loggedHoursThisPayPeriod >= goal {
-            return ("Goal met!", nil, "")
-        }
-        let remaining = goal - loggedHoursThisPayPeriod
-        return ("You're ", AppTheme.Format.hours(remaining), " " + L.shortOfGoal)
-    }
-    
-    var body: some View {
-        VStack(spacing: 16) {
-            // Goal setter
-            if let goal = goalHours, goal > 0 {
-                Button(action: onEditGoal) {
-                    HStack {
-                        Text("\(L.biWeeklyHourGoal): \(AppTheme.Format.hours(goal))")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(AppTheme.Colors.text)
-                        Text(L.edit)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(AppTheme.Colors.accent)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.plain)
-            } else {
-                Button(action: onEditGoal) {
-                    Text("Set Your Hour Goal This Cheque")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(AppTheme.Colors.accent)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(InteractiveButtonStyle())
-            }
-            
-            // Circular progress ring
-            ZStack {
-                Circle()
-                    .stroke(AppTheme.Colors.stroke.opacity(0.4), lineWidth: 10)
-                    .frame(width: 110, height: 110)
-                Circle()
-                    .trim(from: 0, to: animatedProgress)
-                    .stroke(
-                        LinearGradient(
-                            colors: animatedProgress >= 1.0
-                                ? [Color(hex: 0xF59E0B), Color(hex: 0xEF4444)]
-                                : [AppTheme.Colors.accent, AppTheme.Colors.accent2, AppTheme.Colors.accentHighlight],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        style: StrokeStyle(lineWidth: 10, lineCap: .round)
-                    )
-                    .frame(width: 110, height: 110)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.easeInOut(duration: 0.5), value: animatedProgress)
-                    .shadow(color: animatedProgress >= 1.0 ? Color(hex: 0xF59E0B).opacity(0.5) : AppTheme.Colors.accent.opacity(0.3), radius: 8)
-                
-                // Sparkle effect when goal is met
-                if showSparkles && animatedProgress >= 1.0 {
-                    ForEach(0..<8, id: \.self) { index in
-                        Circle()
-                            .fill(AppTheme.Colors.accent)
-                            .frame(width: 6, height: 6)
-                            .offset(x: cos(Double(index) * .pi / 4) * 70, y: sin(Double(index) * .pi / 4) * 70)
-                            .opacity(showSparkles ? 0 : 1)
-                            .animation(.easeOut(duration: 0.8).delay(Double(index) * 0.05), value: showSparkles)
-                    }
-                }
-                
-                VStack(spacing: 2) {
-                    Text(AppTheme.Format.hours(loggedHoursThisPayPeriod))
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                    if let goal = goalHours, goal > 0 {
-                        Text("of \(AppTheme.Format.hours(goal))")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppTheme.Colors.subtext)
-                    }
-                }
-            }
-            .scaleEffect(celebrationScale)
-            .padding(.vertical, 8)
-            
-            // Subtitle - larger and more prominent for goal status
-            if let (prefix, highlight, suffix) = subtitleText {
-                HStack(spacing: 0) {
-                    Text(prefix)
-                        .font(.system(size: 19, weight: .bold))
-                        .foregroundStyle(loggedHoursThisPayPeriod >= (goalHours ?? 0) && (goalHours ?? 0) > 0 ? AppTheme.Colors.accent : AppTheme.Colors.subtext)
-                    
-                    if let highlight = highlight {
-                        Text(highlight)
-                            .font(.system(size: 19, weight: .bold))
-                            .foregroundStyle(AppTheme.Colors.accent)
-                    }
-                    
-                    Text(suffix)
-                        .font(.system(size: 19, weight: .bold))
-                        .foregroundStyle(loggedHoursThisPayPeriod >= (goalHours ?? 0) && (goalHours ?? 0) > 0 ? AppTheme.Colors.accent : AppTheme.Colors.subtext)
-                }
-                .multilineTextAlignment(.center)
-                .animation(.easeInOut(duration: 0.3), value: loggedHoursThisPayPeriod)
-            }
-        }
-        .padding(.vertical, 8)
-        .onAppear {
-            animatedProgress = progress
-            if progress >= 1.0 {
-                triggerCelebration()
-            }
-        }
-        .onChange(of: progress) { oldValue, newValue in
-            animatedProgress = newValue
-            
-            // Trigger celebration when goal is reached
-            if newValue >= 1.0 && oldValue < 1.0 {
-                triggerCelebration()
-            }
-        }
-    }
-    
-    private func triggerCelebration() {
-        // Scale animation
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-            celebrationScale = 1.15
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                celebrationScale = 1.0
-            }
-        }
-        
-        // Sparkle animation
-        showSparkles = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation {
-                showSparkles = true
-            }
-        }
-    }
-}
-
-// MARK: - Header Icon Picker Sheet
-private struct HeaderIconPickerSheet: View {
-    @Binding var selectedIconName: String
-    let onDismiss: () -> Void
-    
-    private static let iconOptions: [(name: String, isAsset: Bool)] = [
-        ("IconStrong", true),
-        ("figure.strengthtraining.traditional", false),
-        ("dumbbell.fill", false),
-        ("bolt.fill", false),
-        ("flame.fill", false),
-        ("star.fill", false),
-        ("heart.fill", false),
-        ("trophy.fill", false),
-        ("medal.fill", false),
-        ("leaf.fill", false),
-    ]
-    
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 16)], spacing: 16) {
-                    ForEach(Self.iconOptions, id: \.name) { option in
-                        Button {
-                            selectedIconName = option.name
-                            Haptics.lightTap()
-                            onDismiss()
-                        } label: {
-                            ZStack {
-                                Circle()
-                                    .fill(selectedIconName == option.name ? AppTheme.Colors.accent.opacity(0.25) : AppTheme.Colors.accent.opacity(0.12))
-                                    .frame(width: 64, height: 64)
-                                
-                                if option.isAsset {
-                                    Image(option.name)
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 32, height: 32)
-                                } else {
-                                    Image(systemName: option.name)
-                                        .font(.system(size: 28, weight: .medium))
-                                        .foregroundStyle(AppTheme.Colors.accent)
-                                }
-                            }
-                        }
-                        .buttonStyle(InteractiveButtonStyle())
-                    }
-                }
-                .padding(20)
-            }
-            .scrollContentBackground(.hidden)
-            .background(AppTheme.Colors.bg.ignoresSafeArea())
-            .navigationTitle("Choose icon")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { onDismiss() }
-                        .fontWeight(.semibold)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Bi-weekly Goal Editor Sheet
-private struct BiweeklyGoalEditorSheet: View {
-    @Binding var goalHours: Double
-    let onDismiss: () -> Void
-    
-    @State private var editedHours: Double
-    @FocusState private var isTextFieldFocused: Bool
-    
-    init(goalHours: Binding<Double>, onDismiss: @escaping () -> Void) {
-        self._goalHours = goalHours
-        self.onDismiss = onDismiss
-        self._editedHours = State(initialValue: goalHours.wrappedValue > 0 ? goalHours.wrappedValue : 40)
-    }
-    
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("Hours", value: $editedHours, format: .number)
-                        .keyboardType(.decimalPad)
-                        .focused($isTextFieldFocused)
-                        .onChange(of: editedHours) { _, newValue in
-                            editedHours = max(0, min(200, newValue))
-                        }
-                } header: {
-                    Text("Bi-weekly goal (hours)")
-                }
-            }
-            .navigationTitle("Bi-weekly Goal")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    isTextFieldFocused = true
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        onDismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        goalHours = editedHours > 0 ? editedHours : 0
-                        onDismiss()
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -2519,7 +2256,7 @@ private func copyAllGroupedText(for entries: [WorkEntry]) -> String {
 
 // MARK: - Player Progress Card (Game-Style)
 
-private struct PlayerProgressCard: View {
+struct PlayerProgressCard: View {
     let profile: GamificationProfile
     var onPrestige: () -> Void
 
