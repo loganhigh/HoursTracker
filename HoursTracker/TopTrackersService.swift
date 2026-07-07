@@ -315,11 +315,11 @@ struct GlobalLeaderboardView: View {
                                 }
                             }
                             .background(
-                                RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
-                                    .fill(AppTheme.Colors.card)
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .fill(AppTheme.Colors.card.opacity(0.55))
                             )
                             .overlay(
-                                RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
                                     .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
                             )
                         }
@@ -343,19 +343,63 @@ struct GlobalLeaderboardView: View {
     }
 
     private var summaryHeader: some View {
-        VStack(spacing: 6) {
-            Text("\(topTrackers.allTrackers.count) trackers ranked")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+        VStack(spacing: 12) {
+            Text("YOUR RANK")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .tracking(1.6)
                 .foregroundStyle(AppTheme.Colors.subtext)
 
-            if let myTracker {
-                Text("You are #\(myTracker.rank)")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.accent)
-            }
+            Text(myTracker.map { "#\($0.rank)" } ?? "—")
+                .font(AppDesignSystem.Typography.heroNumerals(size: 44, weight: .heavy))
+                .foregroundStyle(AppTheme.Colors.text)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+
+            Text(
+                myTracker.map { "\(hoursLabel($0.hours)) · of \(topTrackers.allTrackers.count) trackers ranked" }
+                    ?? "\(topTrackers.allTrackers.count) trackers ranked"
+            )
+            .font(.system(size: 13, weight: .semibold, design: .rounded))
+            .foregroundStyle(AppTheme.Colors.faint)
         }
+        .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 4)
+        .padding(20)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(AppTheme.Colors.card2)
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                AppTheme.Colors.accent.opacity(0.14),
+                                Color.clear,
+                                AppTheme.Colors.accent.opacity(0.05)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            AppTheme.Colors.accent.opacity(0.4),
+                            AppTheme.Colors.accent.opacity(0.08),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: AppTheme.Colors.accent.opacity(0.18), radius: 18, y: 8)
     }
 
     private func leaderboardRow(_ tracker: TopTracker) -> some View {

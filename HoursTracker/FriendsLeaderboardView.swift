@@ -62,7 +62,7 @@ struct FriendsLeaderboardView: View {
             }
             .background(AppTheme.Colors.bg.ignoresSafeArea())
             .navigationTitle("Leaderboard")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -161,7 +161,8 @@ struct FriendsLeaderboardView: View {
         SectionCard(
             title: "Standings",
             subtitle: selected.subtitle,
-            trailing: nil
+            trailing: nil,
+            centerHeader: true
         ) {
             VStack(spacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
