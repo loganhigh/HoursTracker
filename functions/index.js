@@ -753,17 +753,25 @@ exports.onTimeEntryWritten = onDocumentWritten(
     const after = event.data?.after?.exists ? event.data.after.data() : null;
     const beforeEntry = before ? { id: event.params.entryId, ...before } : null;
     const afterEntry = after ? { id: event.params.entryId, ...after } : null;
+    let result;
     try {
       // Do NOT run the FULL leaderboard rebuild here. This trigger fires on
       // every shift create/edit/delete by every user, and updateGlobalLeaderboard
       // scans the ENTIRE publicProfiles collection — making Firestore reads grow
       // as O(users x writes). The full rebuild stays on its own schedule
       // (`leaderboardRefresh` below, which also owns rank-move notifications).
-      await recomputeUserStats(db, uid, { beforeEntry, afterEntry, skipLeaderboardUpdate: true });
+      result = await recomputeUserStats(db, uid, { beforeEntry, afterEntry, skipLeaderboardUpdate: true });
     } catch (err) {
       console.error(`recomputeUserStats failed uid=${uid}:`, err?.message || err);
       throw err;
     }
+    // A client sync burst can write dozens of entry docs at once, firing this
+    // trigger for each. Only the invocation whose recompute WON the fence
+    // patches the board — superseded runs bail here. Without this gate every
+    // invocation raced the same transaction and they aborted each other
+    // (observed live: ~25 concurrent deltas, all 'ABORTED: cross-transaction
+    // contention').
+    if (result?.skipped) return;
     // Instant board update: surgically patch just this user's row into the
     // broadcast doc (2 reads + 1 write) so connected clients see the move
     // immediately instead of waiting for the 15-minute rebuild. Best-effort —
@@ -1027,11 +1035,15 @@ exports.recomputeUserStatsCallable = onCall(
     // Skip the FULL leaderboard rebuild (O(all-users) reads) that used to run
     // here on every app-open profile sync — the cheap per-user delta patch
     // keeps the board current, and the 15-minute leaderboardRefresh reconciles.
-    await recomputeUserStats(db, uid, { skipLeaderboardUpdate: true });
-    try {
-      await applyLeaderboardDeltaForUser(db, uid);
-    } catch (err) {
-      console.warn(`applyLeaderboardDeltaForUser (callable) failed uid=${uid}:`, err?.message || err);
+    const result = await recomputeUserStats(db, uid, { skipLeaderboardUpdate: true });
+    // Same burst gate as onTimeEntryWritten: a superseded recompute must not
+    // race the winner's board patch.
+    if (!result?.skipped) {
+      try {
+        await applyLeaderboardDeltaForUser(db, uid);
+      } catch (err) {
+        console.warn(`applyLeaderboardDeltaForUser (callable) failed uid=${uid}:`, err?.message || err);
+      }
     }
     return { ok: true, uid };
   }
