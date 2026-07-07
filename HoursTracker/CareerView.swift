@@ -8,6 +8,8 @@ struct CareerView: View {
     @AppStorage("company_start_date_ts") private var companyStartDateTS: Double = 0
     @AppStorage("company_occupation") private var companyOccupation: String = ""
 
+    @ObservedObject private var statsListener = StatsListenerService.shared
+
     // MARK: - Source data
 
     private var workEntries: [WorkEntry] {
@@ -18,7 +20,12 @@ struct CareerView: View {
     }
 
     private var totalHours: Double {
-        workEntries.reduce(0) { $0 + $1.paidHours }
+        // Prefer server-computed total so Career and Leaderboard always match.
+        // Falls back to local sum when offline or not signed in.
+        if let serverTotal = statsListener.lifetimeStats?.totalHours, serverTotal > 0 {
+            return serverTotal
+        }
+        return workEntries.reduce(0) { $0 + $1.paidHours }
     }
 
     private var averageShiftHours: Double {
