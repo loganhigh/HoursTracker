@@ -13,11 +13,6 @@ struct PayCycleDetailView: View {
     @State private var didCopyAll = false
     @State private var copyAllBurst = 0
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.semanticColors) private var theme
-
-    private var prestigeTier: PrestigeTheme.Tier {
-        PrestigeTheme.tier(for: store.gamificationProfile.prestige)
-    }
 
     init(
         store: HoursStore,
@@ -92,10 +87,6 @@ struct PayCycleDetailView: View {
         }
     }
 
-    private var cycleStrip: [PayCycle] {
-        store.recentPayCycles(count: 8)
-    }
-
     var body: some View {
         ZStack {
             AppTheme.Colors.bg.ignoresSafeArea()
@@ -116,6 +107,13 @@ struct PayCycleDetailView: View {
                         .padding(.vertical, 8)
                     } else {
                         VStack(spacing: 10) {
+                            Text("SHIFTS")
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .tracking(1.6)
+                                .foregroundStyle(AppTheme.Colors.subtext)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.top, 2)
+
                             ForEach(sortedCycleEntries) { entry in
                                 NavigationLink {
                                     EntryEditorView(store: store, mode: .edit(entry))
@@ -195,158 +193,137 @@ struct PayCycleDetailView: View {
         return Set(workEntries.map { cal.startOfDay(for: $0.date) }).count
     }
 
-    private var totalCycleDays: Int { max(1, selectedCycle.spanDays) }
+    private enum CycleDayState { case worked, off, empty }
 
-    private var hoursFraction: Double {
-        let target = max(1, Double(totalCycleDays) * 8.0)
-        return min(1, max(0, periodHours / target))
-    }
-
-    private var daysFraction: Double {
-        min(1, max(0, Double(daysWorked) / Double(totalCycleDays)))
-    }
-
-    // MARK: - This week (within selected cheque)
-
-    private var chequeWeekInterval: DateInterval? {
-        let week = WeeklyStatsCalculator.currentWeekInterval()
-        let start = max(week.start, selectedCycle.start)
-        let end = min(week.end, selectedCycle.end)
-        guard start < end else { return nil }
-        return DateInterval(start: start, end: end)
-    }
-
-    private var chequeWeekWorkEntries: [WorkEntry] {
-        guard let interval = chequeWeekInterval else { return [] }
-        return workEntries.filter { interval.contains($0.date) }
-    }
-
-    private var chequeWeekHours: Double {
-        chequeWeekWorkEntries.reduce(0) { $0 + $1.paidHours }
-    }
-
-    private var chequeWeekDaysWorked: Int {
+    /// One state per day of the cycle: capped at today while the cycle is
+    /// live, the full span once it has ended (mirrors the Home hero strip).
+    private var cycleDayStates: [CycleDayState] {
         let cal = Calendar.current
-        return Set(chequeWeekWorkEntries.map { cal.startOfDay(for: $0.date) }).count
-    }
-
-    private var chequeWeekDaySpan: Int {
-        guard let interval = chequeWeekInterval else { return 7 }
-        let cal = Calendar.current
-        let startDay = cal.startOfDay(for: interval.start)
-        let endDay = cal.startOfDay(for: interval.end)
-        let days = cal.dateComponents([.day], from: startDay, to: endDay).day ?? 7
-        return max(1, days)
-    }
-
-    private var chequeWeekDaysFraction: Double {
-        min(1, max(0, Double(chequeWeekDaysWorked) / Double(chequeWeekDaySpan)))
-    }
-
-    private var chequeWeekHoursFraction: Double {
-        let target = max(1, Double(chequeWeekDaySpan) * 8.0)
-        return min(1, max(0, chequeWeekHours / target))
-    }
-
-    private var chequeWeekSubtitle: String {
-        guard let interval = chequeWeekInterval else { return "This week" }
-        let fmt = DateFormatter()
-        fmt.dateFormat = "MMM d"
-        let cal = Calendar.current
-        let lastIncluded = cal.date(byAdding: .day, value: -1, to: interval.end) ?? interval.end
-        return "\(fmt.string(from: interval.start)) – \(fmt.string(from: lastIncluded)) · this week"
+        let today = cal.startOfDay(for: Date())
+        var workedDays: Set<Date> = []
+        var offDays: Set<Date> = []
+        for e in cycleEntries {
+            let d = cal.startOfDay(for: e.date)
+            if e.isOffDay { offDays.insert(d) } else { workedDays.insert(d) }
+        }
+        let start = cal.startOfDay(for: selectedCycle.start)
+        let lastCycleDay = cal.date(byAdding: .day, value: -1, to: cal.startOfDay(for: selectedCycle.end)) ?? selectedCycle.end
+        let cap = min(lastCycleDay, today)
+        let end = cap >= start ? cap : lastCycleDay
+        var states: [CycleDayState] = []
+        var day = start
+        while day <= end && states.count < 62 {
+            if workedDays.contains(day) { states.append(.worked) }
+            else if offDays.contains(day) { states.append(.off) }
+            else { states.append(.empty) }
+            guard let next = cal.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+        return states
     }
 
     private var heroBlock: some View {
-        VStack(spacing: 16) {
-            Text(subtitleLine)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.subtext)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(spacing: 2) {
+                Text(navigationTitle.uppercased())
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .tracking(1.6)
+                    .foregroundStyle(AppTheme.Colors.subtext)
+                Text(subtitleLine)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppTheme.Colors.faint)
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
 
-            if store.paySettings.showPayCalculations {
-                Text(formattedCurrency(periodPay))
-                    .font(AppDesignSystem.Typography.heroNumerals(size: 24, weight: .bold))
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                AnimatedMetricText(value: periodHours) { AppTheme.Format.hours($0, suffix: "") }
+                    .font(AppDesignSystem.Typography.heroNumerals(size: 44, weight: .heavy))
                     .foregroundStyle(AppTheme.Colors.text)
-                    .frame(maxWidth: .infinity)
+                Text("hrs")
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppTheme.Colors.subtext)
+                Spacer(minLength: 8)
+                if store.paySettings.showPayCalculations {
+                    AnimatedMetricText(currency: periodPay, code: store.paySettings.currencyCode)
+                        .font(AppDesignSystem.Typography.heroNumerals(size: 24, weight: .bold))
+                        .foregroundStyle(AppTheme.Colors.accent)
+                }
             }
 
-            HStack(spacing: 18) {
-                PayCycleStatRing(
-                    progress: daysFraction,
-                    value: "\(daysWorked)",
-                    caption: daysWorked == 1 ? "day worked" : "days worked",
-                    ringColors: prestigeTier.daysRingColors
-                )
-                PayCycleStatRing(
-                    progress: hoursFraction,
-                    value: AppTheme.Format.hours(periodHours),
-                    caption: "this cheque",
-                    ringColors: prestigeTier.hoursRingColors
-                )
+            HStack(spacing: 3) {
+                ForEach(Array(cycleDayStates.enumerated()), id: \.offset) { _, state in
+                    Capsule()
+                        .fill(
+                            state == .worked
+                                ? AppTheme.Colors.success
+                                : AppTheme.Colors.danger.opacity(state == .off ? 0.9 : 0.35)
+                        )
+                        .frame(height: 5)
+                        .frame(maxWidth: .infinity)
+                }
             }
-            .padding(.vertical, 4)
-            .frame(maxWidth: .infinity)
+
+            HStack(spacing: 12) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(AppTheme.Colors.success)
+                        .frame(width: 6, height: 6)
+                    Text("\(daysWorked) \(daysWorked == 1 ? "day" : "days") worked")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppTheme.Colors.text)
+                }
+                if offDayCount > 0 {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(AppTheme.Colors.danger)
+                            .frame(width: 6, height: 6)
+                        Text("\(offDayCount) off")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppTheme.Colors.text)
+                    }
+                }
+                Spacer()
+                Text("Day \(min(cycleDayProgress.elapsed + 1, cycleDayProgress.total)) of \(cycleDayProgress.total)")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppTheme.Colors.subtext)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(AppDesignSystem.Spacing.md)
-        .background(PayCycleCardStyle.cardBackground(theme: theme))
-        .overlay(PayCycleCardStyle.cardBorder(theme: theme))
-        .shadow(color: theme.accent.opacity(0.25), radius: 14, y: 6)
-        .id(store.gamificationProfile.prestige)
-    }
-
-    private var chequeWeekHeroBlock: some View {
-        payCycleRingsCard(
-            subtitle: chequeWeekSubtitle,
-            daysWorked: chequeWeekDaysWorked,
-            daysFraction: chequeWeekDaysFraction,
-            daysCaption: chequeWeekDaysWorked == 1 ? "day this week" : "days this week",
-            hours: chequeWeekHours,
-            hoursFraction: chequeWeekHoursFraction,
-            hoursCaption: "hours this week"
+        .padding(20)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(AppTheme.Colors.card2)
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                AppTheme.Colors.accent.opacity(0.14),
+                                Color.clear,
+                                AppTheme.Colors.accent.opacity(0.05)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
         )
-    }
-
-    private func payCycleRingsCard(
-        subtitle: String,
-        daysWorked: Int,
-        daysFraction: Double,
-        daysCaption: String,
-        hours: Double,
-        hoursFraction: Double,
-        hoursCaption: String
-    ) -> some View {
-        VStack(spacing: 16) {
-            Text(subtitle)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.subtext)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-
-            HStack(spacing: 18) {
-                PayCycleStatRing(
-                    progress: daysFraction,
-                    value: "\(daysWorked)",
-                    caption: daysCaption,
-                    ringColors: prestigeTier.daysRingColors
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            AppTheme.Colors.accent.opacity(0.4),
+                            AppTheme.Colors.accent.opacity(0.08),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
                 )
-                PayCycleStatRing(
-                    progress: hoursFraction,
-                    value: AppTheme.Format.hours(hours),
-                    caption: hoursCaption,
-                    ringColors: prestigeTier.hoursRingColors
-                )
-            }
-            .padding(.vertical, 4)
-            .frame(maxWidth: .infinity)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(AppDesignSystem.Spacing.md)
-        .background(PayCycleCardStyle.cardBackground(theme: theme))
-        .overlay(PayCycleCardStyle.cardBorder(theme: theme))
-        .shadow(color: theme.accent.opacity(0.25), radius: 14, y: 6)
+        )
+        .shadow(color: AppTheme.Colors.accent.opacity(0.18), radius: 18, y: 8)
     }
 
     private var subtitleLine: String {
@@ -358,15 +335,12 @@ struct PayCycleDetailView: View {
             title: "Summary",
             subtitle: nil,
             trailing: nil,
-            centerHeader: false
+            centerHeader: true
         ) {
             VStack(alignment: .leading, spacing: 12) {
                 breakdownRow(title: "Regular hours", value: AppTheme.Format.hours(aggregatedRegular, suffix: ""))
                 breakdownRow(title: "Overtime hours", value: AppTheme.Format.hours(aggregatedOT, suffix: ""))
-                Text("OFF DAYS - \(offDayCount)")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.danger)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                breakdownRow(title: "Off days", value: "\(offDayCount)", valueColor: offDayCount > 0 ? AppTheme.Colors.danger : AppTheme.Colors.text)
                 if store.paySettings.showPayCalculations {
                     breakdownRow(title: "Estimated pay", value: formattedCurrency(periodPay))
                 }
@@ -380,7 +354,7 @@ struct PayCycleDetailView: View {
         }
     }
 
-    private func breakdownRow(title: String, value: String) -> some View {
+    private func breakdownRow(title: String, value: String, valueColor: Color = AppTheme.Colors.text) -> some View {
         HStack {
             Text(title)
                 .font(.system(size: 14, weight: .medium, design: .rounded))
@@ -388,52 +362,8 @@ struct PayCycleDetailView: View {
             Spacer()
             Text(value)
                 .font(AppDesignSystem.Typography.heroNumerals(size: 17, weight: .bold))
-                .foregroundStyle(AppTheme.Colors.text)
+                .foregroundStyle(valueColor)
         }
-    }
-
-    private var cyclePickerStrip: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "Recent cycles", subtitle: "Tap to compare")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(cycleStrip) { c in
-                        let isSel = c.start == selectedCycle.start && c.end == selectedCycle.end
-                        Button {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                                selectedCycle = c
-                            }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(shortRange(c))
-                                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                                    .foregroundStyle(isSel ? .white : AppTheme.Colors.text)
-                                Text(hoursIn(c))
-                                    .font(AppDesignSystem.Typography.heroNumerals(size: 14, weight: .bold))
-                                    .foregroundStyle(isSel ? .white.opacity(0.95) : AppTheme.Colors.accent)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(isSel ? AnyShapeStyle(AppTheme.Colors.accentGradient) : AnyShapeStyle(AppTheme.Colors.card2))
-                                    .shadow(color: isSel ? AppTheme.Colors.accent.opacity(0.4) : Color.clear, radius: 6, y: 2)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        }
-    }
-
-    private func shortRange(_ c: PayCycle) -> String {
-        c.workRangeText()
-    }
-
-    private func hoursIn(_ c: PayCycle) -> String {
-        let h = PayCycleEngine.entries(store.entries, in: c).reduce(0) { $0 + $1.paidHours }
-        return AppTheme.Format.hours(h)
     }
 
     private func formattedCurrency(_ value: Double) -> String {
