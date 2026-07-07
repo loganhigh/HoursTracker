@@ -1024,7 +1024,15 @@ exports.recomputeUserStatsCallable = onCall(
     if (uid !== request.auth.uid) {
       throw new HttpsError("permission-denied", "Can only recompute your own stats.");
     }
-    await recomputeUserStats(db, uid);
+    // Skip the FULL leaderboard rebuild (O(all-users) reads) that used to run
+    // here on every app-open profile sync — the cheap per-user delta patch
+    // keeps the board current, and the 15-minute leaderboardRefresh reconciles.
+    await recomputeUserStats(db, uid, { skipLeaderboardUpdate: true });
+    try {
+      await applyLeaderboardDeltaForUser(db, uid);
+    } catch (err) {
+      console.warn(`applyLeaderboardDeltaForUser (callable) failed uid=${uid}:`, err?.message || err);
+    }
     return { ok: true, uid };
   }
 );
