@@ -1,4 +1,5 @@
 import Foundation
+import FirebaseAuth
 import FirebaseFirestore
 import Combine
 
@@ -23,8 +24,22 @@ final class StatsListenerService: ObservableObject {
 
     private init() {}
 
+    /// Idempotent: resolves the signed-in uid and attaches the listeners if
+    /// they aren't already running. Screens that display server stats (Career,
+    /// pay-cycle hero) call this on appear so a missed sign-in callback or a
+    /// stale legacy kill-switch can never leave them silently reading local
+    /// sums while the leaderboard shows server totals.
+    func ensureListening() {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        startListening(uid: uid)
+    }
+
+    // Note: deliberately NOT gated on FirebaseMigrationFlags.useServerStats.
+    // That kill-switch predates the server-stats migration being complete — the
+    // global leaderboard and friend profiles are server-fed regardless, so a
+    // device-local opt-out here only desynced Career's lifetime hours from the
+    // leaderboard (751.45 vs 784.95 class of bug).
     func startListening(uid: String) {
-        guard FirebaseMigrationFlags.useServerStats else { return }
         if activeUid == uid, weekKey != nil { return }
         stopListening()
         activeUid = uid
@@ -109,7 +124,6 @@ final class StatsListenerService: ObservableObject {
     }
 
     func markEntryWritePending() {
-        guard FirebaseMigrationFlags.useServerStats else { return }
         isPendingReconcile = true
     }
 
