@@ -33,6 +33,16 @@ struct SettingsView: View {
         settings.nextCutoff ?? paydayDate
     }
 
+    /// Centered small-caps section header — same language as the Home sections.
+    private func settingsHeader(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 12, weight: .bold, design: .rounded))
+            .tracking(1.6)
+            .foregroundStyle(AppTheme.Colors.subtext)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .textCase(nil)
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -59,7 +69,7 @@ struct SettingsView: View {
                     } label: {
                         HStack {
                             Text("Next payday")
-                                .foregroundStyle(AppTheme.Colors.accent)
+                                .foregroundStyle(AppTheme.Colors.text)
                             Spacer()
                             Text(paydayDate.formatted(date: .abbreviated, time: .omitted))
                                 .foregroundStyle(AppTheme.Colors.accent)
@@ -83,7 +93,7 @@ struct SettingsView: View {
                         } label: {
                             HStack {
                                 Text("Cutoff date")
-                                    .foregroundStyle(AppTheme.Colors.accent)
+                                    .foregroundStyle(AppTheme.Colors.text)
                                 Spacer()
                                 Text(
                                     settings.nextCutoff?.formatted(date: .abbreviated, time: .omitted)
@@ -94,8 +104,9 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("Pay Cycle")
+                    settingsHeader("Pay Cycle")
                 }
+                .listRowBackground(AppTheme.Colors.card.opacity(0.55))
 
                 // MARK: - Overtime Rules
                 Section {
@@ -168,10 +179,11 @@ struct SettingsView: View {
                     }
 
                 } header: {
-                    Text("Overtime Rules")
+                    settingsHeader("Overtime Rules")
                 } footer: {
                     Text(settings.overtimeType.description)
                 }
+                .listRowBackground(AppTheme.Colors.card.opacity(0.55))
 
                 // MARK: - Friends Privacy
                 Section {
@@ -186,9 +198,12 @@ struct SettingsView: View {
                             Spacer()
                         }
                     }
+                } header: {
+                    settingsHeader("Friends")
                 } footer: {
                     Text("Friends only see what you share. Toggle anything off to hide it instantly.")
                 }
+                .listRowBackground(AppTheme.Colors.card.opacity(0.55))
 
                 // Certificates removed from Settings for now — revisit later.
 
@@ -208,11 +223,12 @@ struct SettingsView: View {
                                 .foregroundStyle(Color(uiColor: .systemGray3))
                         }
                     }
-                    
+                } header: {
+                    settingsHeader("Notifications")
+                } footer: {
                     Text("Manage notification preferences")
-                        .font(.footnote)
-                        .foregroundStyle(AppTheme.Colors.subtext)
                 }
+                .listRowBackground(AppTheme.Colors.card.opacity(0.55))
 
                 // MARK: - Data & Backup
                 Section {
@@ -231,11 +247,12 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("Data & Backup")
+                    settingsHeader("Data & Backup")
                 } footer: {
                     Text("Automatically archives previous years and starts fresh each new year. Export all records or a selected month/year anytime.")
                         .padding(.bottom, 12)
                 }
+                .listRowBackground(AppTheme.Colors.card.opacity(0.55))
 
                 // Backup & Restore section removed for now — revisit later.
 
@@ -258,10 +275,11 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 4)
                 } header: {
-                    Text("Privacy & Security")
+                    settingsHeader("Privacy & Security")
                 } footer: {
                     Text("Delete All Data removes local entries and settings on this device only. To permanently delete your account and synced cloud data, use Account → Delete account.")
                 }
+                .listRowBackground(AppTheme.Colors.card.opacity(0.55))
 
                 if DeveloperConfig.isCEO(uid: authService.user?.uid) {
                     Section {
@@ -276,6 +294,7 @@ struct SettingsView: View {
                             }
                         }
                     }
+                    .listRowBackground(AppTheme.Colors.card.opacity(0.55))
                 }
 
                 Section {
@@ -289,8 +308,9 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("Local data")
+                    settingsHeader("Local Data")
                 }
+                .listRowBackground(AppTheme.Colors.card.opacity(0.55))
             }
             .scrollContentBackground(.hidden)
             .navigationTitle("Settings")
