@@ -305,35 +305,60 @@ struct FriendProfileDetailView: View {
 
     private func lifetimeHero(friend: FriendProfile) -> some View {
         let tier = friend.prestigeTier
-        return VStack(spacing: 6) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.system(size: 28, weight: .bold))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: tier.gradient,
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
+        return VStack(spacing: 12) {
+            Text("CAREER")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .tracking(1.6)
+                .foregroundStyle(AppTheme.Colors.subtext)
+
             Text(hoursDisplay(friend.totalHours))
-                .font(.system(size: 36, weight: .heavy, design: .rounded))
+                .font(AppDesignSystem.Typography.heroNumerals(size: 44, weight: .heavy))
                 .foregroundStyle(AppTheme.Colors.text)
                 .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+
             Text("Lifetime hours logged")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(AppTheme.Colors.subtext)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppTheme.Colors.faint)
         }
+        .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 20)
+        .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(tier.primary.opacity(0.35), lineWidth: 1)
+            ZStack {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(AppTheme.Colors.card2)
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                tier.primary.opacity(0.14),
+                                Color.clear,
+                                tier.primary.opacity(0.05)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            tier.primary.opacity(0.4),
+                            tier.primary.opacity(0.08),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
                 )
         )
+        .shadow(color: tier.primary.opacity(0.18), radius: 18, y: 8)
     }
 
     private func careerStatsCard(friend: FriendProfile) -> some View {

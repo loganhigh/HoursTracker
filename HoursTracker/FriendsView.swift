@@ -30,7 +30,7 @@ struct FriendsView: View {
             }
             .background(AppTheme.Colors.bg.ignoresSafeArea())
             .navigationTitle("Friends")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -212,34 +212,53 @@ struct FriendsView: View {
         }
         .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(AppTheme.Colors.card)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(
-                            LinearGradient(
-                                colors: [AppTheme.Colors.accent.opacity(0.55), AppTheme.Colors.accent.opacity(0.08)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1.5
+            ZStack {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(AppTheme.Colors.card2)
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                AppTheme.Colors.accent.opacity(0.14),
+                                Color.clear,
+                                AppTheme.Colors.accent.opacity(0.05)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
                         )
-                )
-                .shadow(color: AppTheme.Colors.glow.opacity(0.22), radius: 18, y: 8)
+                    )
+            }
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            AppTheme.Colors.accent.opacity(0.4),
+                            AppTheme.Colors.accent.opacity(0.08),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: AppTheme.Colors.accent.opacity(0.18), radius: 18, y: 8)
     }
 
-    /// Section header with centered title/subtitle for the Friends screen.
+    /// Section header with centered title/subtitle for the Friends screen —
+    /// same small-caps language as the Home sections.
     private func centeredSectionHeader(title: String, subtitle: String?) -> some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 2) {
             Text(title.uppercased())
-                .font(AppDesignSystem.Typography.sectionLabel)
-                .tracking(1.2)
-                .foregroundStyle(AppTheme.Colors.text.opacity(0.85))
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .tracking(1.6)
+                .foregroundStyle(AppTheme.Colors.subtext)
             if let subtitle {
                 Text(subtitle)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
+                    .foregroundStyle(AppTheme.Colors.faint)
             }
         }
         .frame(maxWidth: .infinity)
@@ -520,8 +539,8 @@ struct FriendStatsRow: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(AppTheme.Colors.card)
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(AppTheme.Colors.stroke, lineWidth: 1))
+                .fill(AppTheme.Colors.card.opacity(0.55))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(AppTheme.Colors.stroke, lineWidth: 0.5))
         )
         .contentShape(Rectangle())
         .onTapGesture {
