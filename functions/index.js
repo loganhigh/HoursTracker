@@ -966,6 +966,44 @@ exports.clientCloudWriteHealthCheck = onCall(
   }
 );
 
+/** Stable JSON: object keys sorted so equal values stringify identically. */
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return "[" + value.map(stableStringify).join(",") + "]";
+  }
+  if (value && typeof value === "object") {
+    return "{" + Object.keys(value).sort()
+      .map((k) => JSON.stringify(k) + ":" + stableStringify(value[k]))
+      .join(",") + "}";
+  }
+  return JSON.stringify(value);
+}
+
+/** Timestamps → epoch ms so callable-number vs SDK-Timestamp writes compare equal. */
+function normalizedCompareValue(v) {
+  if (v && typeof v.toMillis === "function") return v.toMillis();
+  if (v && typeof v === "object" && typeof v._seconds === "number") {
+    return v._seconds * 1000 + Math.floor((v._nanoseconds || 0) / 1e6);
+  }
+  return v;
+}
+
+/**
+ * True when every field of the incoming payload (minus updatedAt) already has
+ * the same value in the stored doc. Only payload fields are compared because
+ * the write is merge:true — extra stored fields would be untouched anyway.
+ */
+function entryUnchanged(existingData, payloadRaw) {
+  if (!existingData) return false;
+  for (const key of Object.keys(payloadRaw)) {
+    if (key === "updatedAt") continue;
+    const a = stableStringify(normalizedCompareValue(payloadRaw[key]));
+    const b = stableStringify(normalizedCompareValue(existingData[key]));
+    if (a !== b) return false;
+  }
+  return true;
+}
+
 /** Bulk upload time entries when direct Firestore writes hang on-device. */
 exports.clientUploadTimeEntriesBatch = onCall(
   { region: "us-central1", memory: "512MiB", timeoutSeconds: 120 },
@@ -982,9 +1020,37 @@ exports.clientUploadTimeEntriesBatch = onCall(
       throw new HttpsError("invalid-argument", "Max 200 entries per batch.");
     }
 
+    const candidates = [];
+    for (const raw of entries) {
+      if (!raw || typeof raw !== "object") continue;
+      const entryId = String(raw.id || raw.entryId || "").trim();
+      if (!entryId) continue;
+      candidates.push({ entryId, raw });
+    }
+    if (candidates.length === 0) {
+      return { status: "ok", uploaded: 0, skipped: 0 };
+    }
+
+    // Change detection: the daily client repair re-uploads the user's ENTIRE
+    // history (observed live: one shift logged at midnight rewrote all 143
+    // entry docs with identical timestamps, firing onTimeEntryWritten for
+    // every one — recompute storm + transaction contention). Reads cost a
+    // fraction of writes, and a skipped write fires no trigger at all, so
+    // read-before-write here collapses the daily repair to (usually) zero
+    // writes while remaining a true repair for missing/diverged docs.
+    const timeRefs = candidates.map(({ entryId }) =>
+      db.collection("users").doc(uid).collection("timeEntries").doc(entryId)
+    );
+    const existingSnaps = await db.getAll(...timeRefs);
+    const existingById = new Map();
+    for (const snap of existingSnaps) {
+      if (snap.exists) existingById.set(snap.id, snap.data());
+    }
+
     let batch = db.batch();
     let ops = 0;
     let written = 0;
+    let skipped = 0;
 
     const commitIfNeeded = async (force = false) => {
       if (ops === 0) return;
@@ -994,10 +1060,11 @@ exports.clientUploadTimeEntriesBatch = onCall(
       ops = 0;
     };
 
-    for (const raw of entries) {
-      if (!raw || typeof raw !== "object") continue;
-      const entryId = String(raw.id || raw.entryId || "").trim();
-      if (!entryId) continue;
+    for (const { entryId, raw } of candidates) {
+      if (entryUnchanged(existingById.get(entryId), raw)) {
+        skipped += 1;
+        continue;
+      }
       const payload = {
         ...raw,
         updatedAt: FieldValue.serverTimestamp(),
@@ -1017,7 +1084,7 @@ exports.clientUploadTimeEntriesBatch = onCall(
     if (written > 0) {
       await recomputeUserStats(db, uid, { skipFence: true, skipLeaderboardUpdate: true });
     }
-    return { status: "ok", uploaded: written };
+    return { status: "ok", uploaded: written, skipped };
   }
 );
 
