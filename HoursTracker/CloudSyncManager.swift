@@ -166,50 +166,22 @@ final class CloudSyncManager: ObservableObject {
     func deleteEntry(_ entry: WorkEntry, completion: @escaping (Result<Void, Error>) -> Void) {
         // Tombstone immediately (persisted) so a stale snapshot or the
         // applyRemoteEntries re-upload path can't resurrect the entry before the
-        // server delete lands. Cleared by reconcileTombstones once a snapshot
-        // confirms the doc is gone.
+        // server delete lands. Cleared by syncPendingDeletes on server-confirmed
+        // deletion, or by reconcileTombstones once a snapshot shows the doc gone.
+        //
+        // The delete itself goes through the clientDeleteTimeEntriesBatch
+        // callable (Admin SDK) rather than a direct Firestore SDK delete: on
+        // devices where the SDK write channel hangs — the documented reason
+        // clientUploadTimeEntriesBatch exists for saves — a direct delete never
+        // completes, the tombstone retried the same hanging path forever, and
+        // the phantom doc kept inflating the cloud total and leaderboard row.
         queueDeleteForSync(entry.id)
-        guard let uid = currentUID else {
+        guard currentUID != nil, networkMonitor.isConnected else {
             completion(.success(()))
             return
         }
-        guard networkMonitor.isConnected else {
-            completion(.success(()))
-            return
-        }
-        let primaryCollection = entriesCollectionName()
-        let primaryRef = db.collection("users").document(uid)
-            .collection(primaryCollection).document(entry.id.uuidString)
-
-        FirestoreOperationLog.write(operation: "deleteEntry.\(primaryCollection)", uid: uid) { done in
-            primaryRef.delete(completion: done)
-        } completion: { [weak self] result in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                switch result {
-                case .failure(let error):
-                    // Leave the tombstone queued; syncPendingDeletes retries it.
-                    completion(.failure(error))
-                case .success:
-                    if FirebaseMigrationFlags.useLegacyEntryMirror {
-                        self.db.collection("users").document(uid)
-                            .collection("entries").document(entry.id.uuidString)
-                            .delete()
-                    }
-                    if FirebaseMigrationFlags.useServerStats {
-                        Task { @MainActor in
-                            StatsListenerService.shared.markEntryWritePending()
-                        }
-                    }
-                    if !FirebaseMigrationFlags.skipProfileSnapshotOnEntryCRUD,
-                       let store = self.hoursStore {
-                        self.saveProfileSnapshot(store: store)
-                    }
-                    self.scheduleStatsRecomputeDebounced()
-                    completion(.success(()))
-                }
-            }
-        }
+        syncPendingDeletes()
+        completion(.success(()))
     }
 
     // MARK: - Full sync
@@ -1413,28 +1385,39 @@ final class CloudSyncManager: ObservableObject {
         checkPendingChanges()
     }
 
+    private var isSyncingPendingDeletes = false
+
+    /// Pushes queued deletion tombstones through the server-side
+    /// clientDeleteTimeEntriesBatch callable (which also recomputes stats and
+    /// patches the leaderboard). Chunked at the callable's 200-id cap and
+    /// re-entrancy-guarded; tombstones are only cleared after the server
+    /// confirms, so a failed call just retries on the next foreground/online
+    /// tick.
     private func syncPendingDeletes() {
-        guard let uid = currentUID, networkMonitor.isConnected else { return }
+        guard currentUID != nil, networkMonitor.isConnected else { return }
+        guard !isSyncingPendingDeletes else { return }
         let pending = getPendingDeletes()
         guard !pending.isEmpty else { return }
-        let collection = entriesCollectionName()
-        for idString in pending {
-            db.collection("users").document(uid).collection(collection).document(idString)
-                .delete { [weak self] error in
-                    guard error == nil else { return }
-                    // Firestore runs completions on its own queue, so with 2+
-                    // pending deletes these fire concurrently. Hop to main and
-                    // re-read the tombstone list as the source of truth for each
-                    // read-modify-write. The previous version mutated one shared
-                    // `remaining` array from every completion off the main thread
-                    // — a data race that could drop a tombstone (leaving a deleted
-                    // entry hidden forever or retried endlessly) or crash.
-                    DispatchQueue.main.async {
-                        guard let self else { return }
-                        let updated = self.getPendingDeletes().filter { $0 != idString }
-                        self.savePendingDeletes(updated)
-                    }
+        isSyncingPendingDeletes = true
+        let chunk = Array(pending.prefix(200))
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await self.functions.httpsCallable("clientDeleteTimeEntriesBatch").call(
+                    self.functionsCallablePayload(["entryIds": chunk])
+                )
+                let chunkSet = Set(chunk)
+                let remaining = self.getPendingDeletes().filter { !chunkSet.contains($0) }
+                self.savePendingDeletes(remaining)
+                StatsListenerService.shared.markEntryWritePending()
+                self.isSyncingPendingDeletes = false
+                if !remaining.isEmpty {
+                    self.syncPendingDeletes()
                 }
+            } catch {
+                // Leave the tombstones queued; retried on the next sync tick.
+                self.isSyncingPendingDeletes = false
+            }
         }
     }
 

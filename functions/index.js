@@ -1088,6 +1088,61 @@ exports.clientUploadTimeEntriesBatch = onCall(
   }
 );
 
+/**
+ * Bulk delete time entries when direct Firestore deletes hang on-device —
+ * the same failure mode clientUploadTimeEntriesBatch works around for writes.
+ * Without this, a delete's client tombstone retries the hanging SDK path
+ * forever, the phantom doc survives in the cloud, and the user's lifetime
+ * total / leaderboard row stays inflated (observed live: entry deleted in the
+ * app, doc still present, board stuck at the pre-delete total).
+ */
+exports.clientDeleteTimeEntriesBatch = onCall(
+  { region: "us-central1", memory: "512MiB", timeoutSeconds: 120 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Sign in required.");
+    }
+    const uid = request.auth.uid;
+    const entryIds = request.data?.entryIds;
+    if (!Array.isArray(entryIds) || entryIds.length === 0) {
+      throw new HttpsError("invalid-argument", "entryIds array is required.");
+    }
+    if (entryIds.length > 200) {
+      throw new HttpsError("invalid-argument", "Max 200 entryIds per batch.");
+    }
+
+    let batch = db.batch();
+    let ops = 0;
+    let deleted = 0;
+    for (const rawId of entryIds) {
+      const entryId = String(rawId || "").trim();
+      if (!entryId) continue;
+      batch.delete(db.collection("users").doc(uid).collection("timeEntries").doc(entryId));
+      batch.delete(db.collection("users").doc(uid).collection("entries").doc(entryId));
+      ops += 2;
+      deleted += 1;
+      if (ops >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        ops = 0;
+      }
+    }
+    if (ops > 0) {
+      await batch.commit();
+    }
+
+    if (deleted > 0) {
+      await recomputeUserStats(db, uid, { skipFence: true, skipLeaderboardUpdate: true });
+      try {
+        await applyLeaderboardDeltaForUser(db, uid);
+      } catch (err) {
+        console.warn(`applyLeaderboardDeltaForUser (delete callable) failed uid=${uid}:`, err?.message || err);
+      }
+    }
+    return { status: "ok", deleted };
+  }
+);
+
 /** Admin/support callable to repair a user's stats from all timeEntries. */
 exports.recomputeUserStatsCallable = onCall(
   { region: "us-central1" },

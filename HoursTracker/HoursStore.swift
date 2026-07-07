@@ -647,6 +647,11 @@ final class HoursStore: ObservableObject {
         recalculateGamification(eventHint: "Month entries removed")
         save(syncProfile: false)
         WeeklyMilestoneNotifier.shared.checkMilestones(for: entries)
+        // Tombstone + push each cloud deletion — without this the cloud docs
+        // survived a month wipe and kept inflating server totals forever.
+        for entry in monthEntries {
+            cloudSync.deleteEntry(entry) { _ in }
+        }
     }
     
     // MARK: - Cloud Sync
