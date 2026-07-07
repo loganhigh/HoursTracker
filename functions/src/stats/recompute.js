@@ -823,6 +823,93 @@ async function enrichLeaderboardCountryCodes(db, entries) {
   }
 }
 
+// Cap the broadcast `all` array (see the long rationale where it's applied in
+// updateGlobalLeaderboard). Shared with the per-user delta patch below.
+const BROADCAST_RANK_LIMIT = 100;
+
+/**
+ * Instantly patch ONE user's row into the existing `leaderboards/global` doc
+ * after their stats recompute, without rescanning publicProfiles.
+ *
+ * This is the "shift logged → board moves now" path: a transaction reads the
+ * board doc plus this user's publicProfiles doc (2 reads), upserts their row,
+ * re-sorts the broadcast slice, and rewrites ranks (1 write) — O(1) per shift
+ * write, vs the O(all-users) full rebuild. Every connected client's snapshot
+ * listener then delivers the change immediately.
+ *
+ * Deliberate limits, all reconciled by the 15-minute `leaderboardRefresh`
+ * full rebuild (which stays the sole source of rank-move notifications):
+ * - `publicProfiles.totalHours` is the source value, so privacy gating is
+ *   inherited (it's 0 when hours aren't shared → row is removed).
+ * - A user below the broadcast cutoff who logs hours but still doesn't beat
+ *   rank 100 leaves the doc unchanged (their exact rank only lives in the
+ *   paged fallback query).
+ * - `totalRanked` is only clamped upward, never recounted here.
+ */
+async function applyLeaderboardDeltaForUser(db, uid) {
+  const boardRef = db.collection("leaderboards").doc("global");
+  const profileRef = db.collection("publicProfiles").doc(uid);
+  await db.runTransaction(async (tx) => {
+    const [boardSnap, profileSnap] = await Promise.all([
+      tx.get(boardRef),
+      tx.get(profileRef),
+    ]);
+    // No board yet — the scheduled/full rebuild owns creation.
+    if (!boardSnap.exists) return;
+
+    const board = boardSnap.data() || {};
+    const all = Array.isArray(board.all) ? board.all.slice() : [];
+    const profile = profileSnap.exists ? profileSnap.data() : null;
+    const hours = profile
+      ? Math.round((Number(profile.totalHours) || 0) * 100) / 100
+      : 0;
+    const idx = all.findIndex((e) => e && e.uid === uid);
+
+    if (hours <= 0) {
+      if (idx === -1) return; // not on the board, nothing to change
+      all.splice(idx, 1);
+    } else {
+      const entry = {
+        uid,
+        name: firstNameOnly(profile.displayName),
+        hours,
+        countryCode: String(profile.countryCode || "").trim().toUpperCase(),
+      };
+      if (idx >= 0) {
+        all[idx] = { ...all[idx], ...entry };
+      } else {
+        const last = all[all.length - 1];
+        if (all.length >= BROADCAST_RANK_LIMIT && last && hours <= (Number(last.hours) || 0)) {
+          return; // still below the broadcast cutoff — slice unchanged
+        }
+        all.push(entry);
+      }
+    }
+
+    all.sort((a, b) => (Number(b.hours) || 0) - (Number(a.hours) || 0));
+    const trimmed = all
+      .slice(0, BROADCAST_RANK_LIMIT)
+      .map((e, i) => ({ ...e, rank: i + 1 }));
+    const top = trimmed.slice(0, 5).map(({ uid: u, name, hours: h, countryCode }) => ({
+      uid: u,
+      name,
+      hours: h,
+      countryCode,
+    }));
+
+    tx.set(
+      boardRef,
+      {
+        top,
+        all: trimmed,
+        totalRanked: Math.max(Number(board.totalRanked) || 0, trimmed.length),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  });
+}
+
 /**
  * Recompute the global lifetime-hours leaderboard and write it to a single
  * public doc `leaderboards/global`. Every client reads just this one doc.
@@ -881,7 +968,6 @@ async function updateGlobalLeaderboard(db) {
   // rankings beyond what the doc carries, so a bounded slice here is sufficient
   // for the visible board while keeping the doc tiny and the cost flat.
   // `totalRanked` still reports the true full count.
-  const BROADCAST_RANK_LIMIT = 100;
   const broadcastAll = all.slice(0, BROADCAST_RANK_LIMIT);
 
   // Capture the outgoing ranking before overwriting so callers can diff ranks
@@ -911,6 +997,7 @@ async function updateGlobalLeaderboard(db) {
 module.exports = {
   recomputeUserStats,
   updateGlobalLeaderboard,
+  applyLeaderboardDeltaForUser,
   totalXPAtLevelStart,
   buildSnapshotsForPrestige,
   deriveProgressionFromEntryXP,

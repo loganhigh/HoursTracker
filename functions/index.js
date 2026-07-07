@@ -12,6 +12,7 @@ const functionsV1 = require("firebase-functions/v1");
 const {
   recomputeUserStats,
   updateGlobalLeaderboard,
+  applyLeaderboardDeltaForUser,
   totalXPAtLevelStart,
   buildSnapshotsForPrestige,
   deriveProgressionFromEntryXP,
@@ -753,15 +754,24 @@ exports.onTimeEntryWritten = onDocumentWritten(
     const beforeEntry = before ? { id: event.params.entryId, ...before } : null;
     const afterEntry = after ? { id: event.params.entryId, ...after } : null;
     try {
-      // Do NOT rebuild the global leaderboard here. This trigger fires on every
-      // shift create/edit/delete by every user, and updateGlobalLeaderboard
+      // Do NOT run the FULL leaderboard rebuild here. This trigger fires on
+      // every shift create/edit/delete by every user, and updateGlobalLeaderboard
       // scans the ENTIRE publicProfiles collection — making Firestore reads grow
-      // as O(users x writes). The leaderboard is refreshed on its own schedule
-      // by `leaderboardRefresh` (below) and by the daily bulk refresh instead.
+      // as O(users x writes). The full rebuild stays on its own schedule
+      // (`leaderboardRefresh` below, which also owns rank-move notifications).
       await recomputeUserStats(db, uid, { beforeEntry, afterEntry, skipLeaderboardUpdate: true });
     } catch (err) {
       console.error(`recomputeUserStats failed uid=${uid}:`, err?.message || err);
       throw err;
+    }
+    // Instant board update: surgically patch just this user's row into the
+    // broadcast doc (2 reads + 1 write) so connected clients see the move
+    // immediately instead of waiting for the 15-minute rebuild. Best-effort —
+    // the scheduled rebuild reconciles anything this path can't know.
+    try {
+      await applyLeaderboardDeltaForUser(db, uid);
+    } catch (err) {
+      console.warn(`applyLeaderboardDeltaForUser failed uid=${uid}:`, err?.message || err);
     }
   }
 );
