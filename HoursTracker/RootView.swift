@@ -492,8 +492,11 @@ private struct HoursHomeView: View {
             ScrollView {
             VStack(spacing: AppDesignSystem.Spacing.xxl) {
 
-                progressionCard
+                greetingHeader
                     .cardAppear(index: 0)
+
+                progressionCard
+                    .cardAppear(index: 1)
 
                 NavigationLink {
                     PayCycleDetailView(store: store, initialCycle: currentPayCycle)
@@ -505,7 +508,7 @@ private struct HoursHomeView: View {
                 }
                 .buttonStyle(PremiumPressStyle())
                 .id(currentPayCycle)
-                .cardAppear(index: 1)
+                .cardAppear(index: 2)
 
                 VStack(spacing: 10) {
                     PrimaryButton("Add Shift", systemImage: "plus") {
@@ -540,7 +543,7 @@ private struct HoursHomeView: View {
                         .tapBurst(trigger: holidayBurst)
                     }
                 }
-                .cardAppear(index: 2)
+                .cardAppear(index: 3)
 
                 // Hours Logged
                 homeSection("Hours Logged") {
@@ -600,7 +603,7 @@ private struct HoursHomeView: View {
                         }
                     }
                 }
-                .cardAppear(index: 3)
+                .cardAppear(index: 4)
 
                 // Monthly Overview (year-at-a-glance)
                 homeSection("Yearly Overview", boxed: true) {
@@ -613,7 +616,7 @@ private struct HoursHomeView: View {
                         MonthlyOverviewChart(data: monthlyHoursByMonth)
                     }
                 }
-                .cardAppear(index: 4)
+                .cardAppear(index: 5)
 
                 if !premium.isPremium {
                     BannerAdView()
@@ -633,7 +636,7 @@ private struct HoursHomeView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .cardAppear(index: 5)
+                .cardAppear(index: 6)
 
                 // Best month highlight
                 if let bestText = bestMonthText {
@@ -668,7 +671,7 @@ private struct HoursHomeView: View {
                     )
                 }
 
-                Text("2.0")
+                Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundStyle(AppTheme.Colors.subtext.opacity(0.4))
                     .tracking(1.5)
@@ -876,8 +879,9 @@ private struct HoursHomeView: View {
         .buttonStyle(TapBurstButtonStyle())
     }
 
-    /// Minimal section: a small uppercase label over content. When `boxed`, the
-    /// content sits in a subtle hairline surface; otherwise it floats on the
+    /// Minimal section: a left-aligned small-caps label over content — quiet,
+    /// editorial hierarchy instead of pill chrome. When `boxed`, the content
+    /// sits in a subtle hairline surface; otherwise it floats on the
     /// background for maximum air (rows supply their own backgrounds).
     @ViewBuilder
     private func homeSection<Content: View>(
@@ -886,30 +890,20 @@ private struct HoursHomeView: View {
         boxed: Bool = false,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(spacing: 12) {
-            VStack(spacing: 2) {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title.uppercased())
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .tracking(1.6)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppTheme.Colors.subtext)
                 if let subtitle {
                     Text(subtitle)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppTheme.Colors.faint)
                 }
             }
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 9)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(AppTheme.Colors.card.opacity(0.7))
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
-                    )
-            )
-            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.leading, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if boxed {
                 content()
@@ -930,64 +924,66 @@ private struct HoursHomeView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var headerCard: some View {
-        AppCard {
-            HStack(alignment: .center, spacing: 14) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Welcome back")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
-                    
-                    Text(displayName.isEmpty ? "Grinder" : (displayName.components(separatedBy: " ").first ?? displayName))
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                    
-                    if store.currentWorkStreak() >= 2 {
-                        HStack(spacing: 5) {
-                            Image(systemName: "flame.fill")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(Color(hex: 0xF97316))
-                            Text("\(store.currentWorkStreak()) day streak")
-                                .font(.system(size: 14, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color(hex: 0xF97316))
-                        }
-                    }
-                }
-                
-                Spacer(minLength: 12)
-                
-                Button {
-                    showingHeaderIconPicker = true
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [AppTheme.Colors.accent.opacity(0.2), AppTheme.Colors.accent.opacity(0.06)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .frame(width: 52, height: 52)
-                        
-                        Circle()
-                            .stroke(AppTheme.Colors.accent.opacity(0.3), lineWidth: 1.5)
-                            .frame(width: 52, height: 52)
-                        
-                        headerIconView
-                    }
-                    .shadow(color: AppTheme.Colors.accent.opacity(0.15), radius: 8)
-                }
-                .buttonStyle(InteractiveButtonStyle())
+    /// Chrome-less greeting row: time-of-day greeting over the first name,
+    /// with the tappable avatar (header icon picker) on the trailing edge.
+    private var greetingHeader: some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(timeOfDayGreeting.uppercased())
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .tracking(1.6)
+                    .foregroundStyle(AppTheme.Colors.subtext)
+
+                Text(displayName.isEmpty ? "Grinder" : (displayName.components(separatedBy: " ").first ?? displayName))
+                    .font(.system(size: 28, weight: .heavy, design: .rounded))
+                    .foregroundStyle(AppTheme.Colors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
-            .frame(maxWidth: .infinity, alignment: .center)
+
+            Spacer(minLength: 12)
+
+            Button {
+                Haptics.lightTap()
+                showingHeaderIconPicker = true
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [AppTheme.Colors.accent.opacity(0.2), AppTheme.Colors.accent.opacity(0.06)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 52, height: 52)
+
+                    Circle()
+                        .stroke(AppTheme.Colors.accent.opacity(0.3), lineWidth: 1.5)
+                        .frame(width: 52, height: 52)
+
+                    headerIconView
+                }
+                .shadow(color: AppTheme.Colors.accent.opacity(0.15), radius: 8)
+            }
+            .buttonStyle(InteractiveButtonStyle())
+            .accessibilityLabel("Change header icon")
         }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 4)
         .sheet(isPresented: $showingHeaderIconPicker) {
             HeaderIconPickerSheet(selectedIconName: $headerIconName) {
                 showingHeaderIconPicker = false
             }
+        }
+    }
+
+    private var timeOfDayGreeting: String {
+        switch Calendar.current.component(.hour, from: Date()) {
+        case 5..<12: return "Good morning"
+        case 12..<17: return "Good afternoon"
+        case 17..<22: return "Good evening"
+        default: return "Working late"
         }
     }
 
@@ -2270,6 +2266,7 @@ private struct PlayerProgressCard: View {
     let profile: GamificationProfile
     var onPrestige: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var animatedProgress: Double = 0
     @State private var shineOffset: CGFloat = -200
     @State private var flamePulse: CGFloat = 1.0
@@ -2392,6 +2389,7 @@ private struct PlayerProgressCard: View {
         }
         .buttonStyle(InteractiveButtonStyle())
         .onAppear {
+            guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                 prestigePulse = 1.08
             }
@@ -2658,13 +2656,14 @@ private struct PlayerProgressCard: View {
     // MARK: - Animations
 
     private func startShineLoop() {
+        guard !reduceMotion else { return }
         withAnimation(.linear(duration: 2.5).repeatForever(autoreverses: false)) {
             shineOffset = 400
         }
     }
 
     private func startFlamePulse() {
-        guard profile.currentStreak > 0 else { return }
+        guard !reduceMotion, profile.currentStreak > 0 else { return }
         let intensity: CGFloat = profile.currentStreak >= 30 ? 1.35 : (profile.currentStreak >= 7 ? 1.25 : 1.12)
         let speed: Double = profile.currentStreak >= 30 ? 0.45 : (profile.currentStreak >= 7 ? 0.6 : 1.0)
         withAnimation(.easeInOut(duration: speed).repeatForever(autoreverses: true)) {
@@ -2673,6 +2672,7 @@ private struct PlayerProgressCard: View {
     }
 
     private func startPrestigeGlow() {
+        guard !reduceMotion else { return }
         withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
             prestigeGlow = 0.9
         }
