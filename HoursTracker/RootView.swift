@@ -205,8 +205,14 @@ private struct HoursHomeView: View {
     @State private var showXPGain = false
     @State private var showLevelUp = false
     @State private var levelUpNumber = 0
-    @State private var previousLevel = 0
     @State private var previousXP = 0
+    /// Highest level ever celebrated with a Level Up card, per prestige run.
+    /// Local totalXP includes daily/weekly challenge XP that resets at day/week
+    /// boundaries, so the computed level can dip overnight and re-cross the
+    /// same threshold the next shift — this ratchet ensures each level is
+    /// celebrated at most once until prestige resets the run.
+    @AppStorage("level_up_celebrated_hwm_v1") private var celebratedLevelHWM = 0
+    @AppStorage("level_up_celebrated_prestige_v1") private var celebratedPrestige = -1
     @State private var levelUpPlayer: AVAudioPlayer?
     @State private var showOffDayToast = false
     @State private var offDayToastMessage = ""
@@ -309,6 +315,35 @@ private struct HoursHomeView: View {
                 withAnimation { showPersonalBestBanner = false }
             }
         }
+    }
+
+    // MARK: - Level-Up Celebration
+
+    /// Shows the Level Up card only when the displayed level exceeds the
+    /// highest level already celebrated in this prestige run. The ratchet
+    /// (persisted in UserDefaults) absorbs the daily/weekly challenge-XP
+    /// resets that make the locally computed level dip and re-cross the same
+    /// threshold — the source of phantom "Level Up" cards.
+    private func evaluateLevelUpCelebration(celebrate: Bool) {
+        let displayed = store.displayedLevel
+        let prestige = store.displayedPrestige
+        guard displayed > 0 else { return }
+
+        if prestige != celebratedPrestige {
+            // New prestige run (or first launch on this device): re-baseline
+            // silently. Prestige has its own celebration flow.
+            celebratedPrestige = prestige
+            celebratedLevelHWM = displayed
+            return
+        }
+        guard displayed > celebratedLevelHWM else { return }
+        let hadBaseline = celebratedLevelHWM > 0
+        celebratedLevelHWM = displayed
+        guard celebrate, hadBaseline else { return }
+        levelUpNumber = displayed
+        Haptics.success()
+        playLevelUpSound()
+        showLevelUp = true
     }
 
     // MARK: - Level-Up Sound
@@ -757,19 +792,8 @@ private struct HoursHomeView: View {
             }
             previousXP = newXP
         }
-        .onChange(of: store.gamificationProfile.level) { oldLvl, newLvl in
-            let oldDisplayed = max(store.adminLevelOverride ?? 0, oldLvl)
-            let newDisplayed = store.displayedLevel
-            if newDisplayed > oldDisplayed && oldDisplayed > 0 {
-                levelUpNumber = newDisplayed
-                Haptics.success()
-                playLevelUpSound()
-                showLevelUp = true
-            }
-            previousLevel = newDisplayed
-        }
-        .onChange(of: store.adminLevelOverride) { _, _ in
-            previousLevel = store.displayedLevel
+        .onChange(of: store.displayedLevel) { _, _ in
+            evaluateLevelUpCelebration(celebrate: true)
         }
         .onChange(of: store.gamificationProfile.currentStreak) { oldStreak, newStreak in
             let milestones = [7, 14, 30, 60, 100]
@@ -787,7 +811,9 @@ private struct HoursHomeView: View {
         }
         .onAppear {
             previousXP = store.gamificationProfile.totalXP
-            previousLevel = store.displayedLevel
+            // Baseline the celebration ratchet silently — never celebrate a
+            // level the user merely re-loaded the app at.
+            evaluateLevelUpCelebration(celebrate: false)
             lastKnownStreak = store.gamificationProfile.currentStreak
             checkPersonalBest()
         }
