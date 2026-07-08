@@ -18,12 +18,18 @@ enum GamificationLevelCalculator {
         let clampedPrestige = min(max(prestige, 0), 10)
 
         for p in 0..<clampedPrestige {
+            let cap = maxLevelForPrestige(p)
+            let fullRunXP = (1...cap).reduce(0) { $0 + xpRequiredForLevel($1) }
             let runXP: Int
             if p < snapshots.count {
-                runXP = snapshots[p] - (p > 0 ? snapshots[p - 1] : 0)
+                // A snapshot records the user's ENTIRE XP at prestige time, which
+                // can exceed the standard run cost when they banked XP sitting at
+                // max level before pressing Prestige. Deduct at most the standard
+                // cost so the banked surplus carries into the next run instead of
+                // being confiscated (matches the pre-2.0 math users levelled under).
+                runXP = min(snapshots[p] - (p > 0 ? snapshots[p - 1] : 0), fullRunXP)
             } else {
-                let cap = maxLevelForPrestige(p)
-                runXP = (1...cap).reduce(0) { $0 + xpRequiredForLevel($1) }
+                runXP = fullRunXP
             }
             xpPool = max(0, xpPool - runXP)
         }
@@ -75,12 +81,15 @@ enum GamificationLevelCalculator {
         let clampedPrestige = min(max(prestige, 0), 10)
         var total = 0
         for p in 0..<clampedPrestige {
+            let fullRunXP = (1...maxLevelForPrestige(p)).reduce(0) { $0 + xpRequiredForLevel($1) }
             if p < snapshots.count {
                 let snap = snapshots[p]
                 let prev = p > 0 ? snapshots[p - 1] : 0
-                total += snap - prev
+                // Same cap as levelState: banked XP beyond the standard run cost
+                // is not part of the run's cost.
+                total += min(snap - prev, fullRunXP)
             } else {
-                total += (1...maxLevelForPrestige(p)).reduce(0) { $0 + xpRequiredForLevel($1) }
+                total += fullRunXP
             }
         }
         for level in 1..<clampedLevel {

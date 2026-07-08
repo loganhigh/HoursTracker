@@ -307,7 +307,12 @@ function levelStateFromXP(totalXP, prestige = 0, snapshots = []) {
     if (p < snapshots.length) {
       const snap = Number(snapshots[p]) || 0;
       const prev = p > 0 ? Number(snapshots[p - 1]) || 0 : 0;
-      runXP = snap - prev;
+      // A snapshot records the user's ENTIRE XP at prestige time, which can
+      // exceed the standard run cost when they banked XP sitting at max level
+      // before pressing Prestige. Deduct at most the standard cost so the
+      // banked surplus carries into the next run instead of being confiscated
+      // (matches the pre-2.0 client math users levelled under).
+      runXP = Math.min(snap - prev, totalXPForFullPrestigeRun());
     } else {
       runXP = totalXPForFullPrestigeRun();
     }
@@ -345,7 +350,9 @@ function totalXPAtLevelStart(targetLevel, prestige = 0, snapshots = []) {
     if (p < clean.length) {
       const snap = clean[p];
       const prev = p > 0 ? clean[p - 1] : 0;
-      total += snap - prev;
+      // Same cap as levelStateFromXP: banked XP beyond the standard run cost
+      // is not part of the run's cost.
+      total += Math.min(snap - prev, totalXPForFullPrestigeRun());
     } else {
       total += totalXPForFullPrestigeRun();
     }
