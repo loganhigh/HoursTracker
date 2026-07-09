@@ -934,6 +934,7 @@ async function recomputeUserStats(db, uid, options = {}) {
     const clientBreakdown = gamification.xpBreakdown;
     const parts = [
       `xpShadow uid=${uid}`,
+      `result=${shadowLevel === clientLevel ? "MATCH" : "MISMATCH"}`,
       `clientXP=${xpResolution.clientTotalXP}`,
       `serverXP=${xpResolution.trackedTotalXP}`,
       `drift=${xpResolution.trackedTotalXP - xpResolution.clientTotalXP}`,
