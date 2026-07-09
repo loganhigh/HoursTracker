@@ -707,9 +707,19 @@ final class CloudSyncManager: ObservableObject {
             completion(.failure(NSError(domain: "CloudSync", code: -2, userInfo: [NSLocalizedDescriptionKey: "Settings encode failed"])))
             return
         }
+        // Same watchdog as saveEntry: on devices where the direct SDK write
+        // channel hangs, this setData never completes — the cloud paySettings
+        // doc went stale for WEEKS, so the server computed the friend-facing
+        // cheque window from an old payday ("the payday I set doesn't stick").
+        // If the direct write hasn't confirmed in 5s, save via the callable.
+        let watchdog = DispatchWorkItem { [weak self] in
+            self?.savePaySettingsViaCallable(json)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0, execute: watchdog)
         db.collection("users").document(uid).collection("paySettings").document("current")
             .setData(json, merge: true) { error in
                 DispatchQueue.main.async {
+                    watchdog.cancel()
                     if let error {
                         UserDefaults.standard.set(true, forKey: "pending_settings_sync")
                         completion(.failure(error))
@@ -719,6 +729,26 @@ final class CloudSyncManager: ObservableObject {
                     }
                 }
             }
+    }
+
+    /// Fallback for a stalled direct pay-settings write (see the watchdog in
+    /// `saveSettings`): saves through the clientSavePaySettings callable, which
+    /// also recomputes the friend-facing cheque window server-side.
+    private func savePaySettingsViaCallable(_ settings: [String: Any]) {
+        guard currentUID != nil, networkMonitor.isConnected else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await self.functions.httpsCallable("clientSavePaySettings").call(
+                    self.functionsCallablePayload(["settings": settings])
+                )
+                UserDefaults.standard.set(false, forKey: "pending_settings_sync")
+                AppLogger.db.info("saveSettings watchdog: direct write stalled >5s; settings saved via callable")
+            } catch {
+                UserDefaults.standard.set(true, forKey: "pending_settings_sync")
+                AppLogger.db.warning("saveSettings watchdog: callable fallback failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     func saveProfileSnapshot(store: HoursStore, completion: @escaping (Result<Void, Error>) -> Void = { _ in }) {

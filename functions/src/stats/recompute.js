@@ -767,10 +767,15 @@ async function recomputeUserStats(db, uid, options = {}) {
 
   // Per-day breakdown for the current pay cheque (computed here so it can be
   // written into BOTH the public single-source doc and the legacy mirror).
+  // The pay period's `periodEnd` is EXCLUSIVE (it is the payday); the last
+  // worked day of the cheque — the cutoff users see — is one day earlier.
+  // Publishing periodEnd as the cutoff showed friends a period ending on
+  // payday itself, one day later than the owner's own app displays.
+  const lastPeriodDay = new Date(payPeriod.periodEnd.getTime() - MS_DAY);
   const chequeDailySummary = (() => {
     if (!privacy.shareHours) return [];
     const today = startOfDay(now);
-    const cutoff = payPeriod.periodEnd < today ? payPeriod.periodEnd : today;
+    const cutoff = lastPeriodDay < today ? lastPeriodDay : today;
     const grouped = {};
     for (const entry of entries) {
       const d = entryDate(entry);
@@ -836,7 +841,7 @@ async function recomputeUserStats(db, uid, options = {}) {
     companyDaysWorked: privacy.shareHours ? companyDaysWorked : 0,
     chequeDailySummary,
     chequeWindowStart: privacy.shareHours ? isoDate(payPeriod.periodStart) : "",
-    chequeWindowCutoff: privacy.shareHours ? isoDate(payPeriod.periodEnd) : "",
+    chequeWindowCutoff: privacy.shareHours ? isoDate(lastPeriodDay) : "",
     unlockedBadgeSummaries,
     badgeCount,
     updatedAt,

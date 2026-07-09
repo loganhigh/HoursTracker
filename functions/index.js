@@ -1143,6 +1143,42 @@ exports.clientDeleteTimeEntriesBatch = onCall(
   }
 );
 
+/**
+ * Reliable pay-settings save for devices whose direct Firestore SDK writes
+ * hang — the same failure mode clientUploadTimeEntriesBatch and
+ * clientDeleteTimeEntriesBatch work around. Without this, a changed payday
+ * never reached users/{uid}/paySettings/current, so the server kept computing
+ * the friend-facing cheque window (chequeWindowStart/Cutoff, daily summary)
+ * from settings that could be weeks stale — "the payday I set doesn't stick."
+ * Writes the settings, then recomputes so the published window updates
+ * immediately.
+ */
+exports.clientSavePaySettings = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Sign in required.");
+    }
+    const uid = request.auth.uid;
+    const settings = request.data?.settings;
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+      throw new HttpsError("invalid-argument", "settings object is required.");
+    }
+    if (JSON.stringify(settings).length > 20000) {
+      throw new HttpsError("invalid-argument", "settings payload too large.");
+    }
+    await db
+      .collection("users")
+      .doc(uid)
+      .collection("paySettings")
+      .doc("current")
+      .set(settings, { merge: true });
+    console.log(`clientSavePaySettings uid=${uid} saved; recomputing cheque window`);
+    await recomputeUserStats(db, uid, { skipLeaderboardUpdate: true });
+    return { ok: true };
+  }
+);
+
 /** Admin/support callable to repair a user's stats from all timeEntries. */
 exports.recomputeUserStatsCallable = onCall(
   { region: "us-central1" },
