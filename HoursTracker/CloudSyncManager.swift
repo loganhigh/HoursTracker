@@ -1356,10 +1356,16 @@ final class CloudSyncManager: ObservableObject {
         savePendingDeletes(pending)
     }
 
-    /// Entry ids the user has deleted that must stay hidden until the server
-    /// confirms removal. Consulted by `HoursStore.applyRemoteEntries`.
+    /// Entry ids the user has deleted that must stay hidden until an
+    /// authoritative snapshot confirms removal. Consulted by
+    /// `HoursStore.applyRemoteEntries`. Includes both queued deletes and
+    /// server-confirmed ones — after the delete callable succeeds, the client
+    /// SDK's cache still holds the doc until the listener receives the next
+    /// server snapshot, so dropping the tombstone at callable success let a
+    /// relaunch's cache-sourced snapshot resurrect the entry (and the
+    /// local-only re-upload path then re-created the doc on the server).
     func pendingDeletionIDs() -> Set<String> {
-        Set(getPendingDeletes())
+        Set(getPendingDeletes()).union(getConfirmedDeletes())
     }
 
     /// Clears tombstones for entries the server no longer returns (deletion
@@ -1367,18 +1373,32 @@ final class CloudSyncManager: ObservableObject {
     /// deletion keeps applying until it fully propagates.
     func reconcileTombstones(presentRemoteIDs: Set<String>) {
         let pending = getPendingDeletes()
-        guard !pending.isEmpty else { return }
-        let stillPending = pending.filter { presentRemoteIDs.contains($0) }
-        if stillPending.count != pending.count {
-            savePendingDeletes(stillPending)
+        if !pending.isEmpty {
+            let stillPending = pending.filter { presentRemoteIDs.contains($0) }
+            if stillPending.count != pending.count {
+                savePendingDeletes(stillPending)
+            }
+        }
+        let confirmed = getConfirmedDeletes()
+        if !confirmed.isEmpty {
+            let stillConfirmed = confirmed.filter { presentRemoteIDs.contains($0) }
+            if stillConfirmed.count != confirmed.count {
+                saveConfirmedDeletes(stillConfirmed)
+            }
         }
     }
 
     /// Cancels a pending deletion tombstone (e.g. when the same entry is saved).
     private func clearDeleteTombstone(_ entryID: UUID) {
+        let id = entryID.uuidString
         let pending = getPendingDeletes()
-        guard pending.contains(entryID.uuidString) else { return }
-        savePendingDeletes(pending.filter { $0 != entryID.uuidString })
+        if pending.contains(id) {
+            savePendingDeletes(pending.filter { $0 != id })
+        }
+        let confirmed = getConfirmedDeletes()
+        if confirmed.contains(id) {
+            saveConfirmedDeletes(confirmed.filter { $0 != id })
+        }
     }
 
     private func getPendingDeletes() -> [String] {
@@ -1388,6 +1408,19 @@ final class CloudSyncManager: ObservableObject {
     private func savePendingDeletes(_ ids: [String]) {
         UserDefaults.standard.set(ids, forKey: "pending_deletes")
         checkPendingChanges()
+    }
+
+    /// Ids the delete callable has confirmed removed server-side but that an
+    /// authoritative listener snapshot hasn't yet shown as absent. They must
+    /// keep filtering snapshots (the SDK cache can still carry the doc) but
+    /// no longer need the callable retried, so they don't count as pending
+    /// changes.
+    private func getConfirmedDeletes() -> [String] {
+        UserDefaults.standard.stringArray(forKey: "confirmed_delete_tombstones") ?? []
+    }
+
+    private func saveConfirmedDeletes(_ ids: [String]) {
+        UserDefaults.standard.set(ids, forKey: "confirmed_delete_tombstones")
     }
 
     private var isSyncingPendingDeletes = false
@@ -1413,6 +1446,15 @@ final class CloudSyncManager: ObservableObject {
                 )
                 let chunkSet = Set(chunk)
                 let remaining = self.getPendingDeletes().filter { !chunkSet.contains($0) }
+                // Server confirmed — but keep the ids as tombstones until an
+                // authoritative snapshot shows them gone. The SDK cache still
+                // has the docs, and a relaunch replays that cache as the first
+                // snapshot; without the tombstone it resurrects the entries.
+                var confirmed = self.getConfirmedDeletes()
+                for id in chunk where !confirmed.contains(id) {
+                    confirmed.append(id)
+                }
+                self.saveConfirmedDeletes(confirmed)
                 self.savePendingDeletes(remaining)
                 StatsListenerService.shared.markEntryWritePending()
                 self.isSyncingPendingDeletes = false
