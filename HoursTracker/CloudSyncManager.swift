@@ -731,6 +731,34 @@ final class CloudSyncManager: ObservableObject {
             }
     }
 
+    /// Fallback for a stalled direct gamification-anchors write (see the
+    /// watchdog in `saveGamificationAnchors`): saves through the
+    /// clientSaveGamificationAnchors callable, which also recomputes so the
+    /// published level updates immediately.
+    private func saveGamificationAnchorsViaCallable(
+        _ anchors: [String: Any],
+        clearLevelOverride: Bool,
+        clearPrestigeOverride: Bool,
+        store: HoursStore
+    ) {
+        guard currentUID != nil, networkMonitor.isConnected else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                var payload: [String: Any] = ["anchors": anchors]
+                if clearLevelOverride { payload["clearLevelOverride"] = true }
+                if clearPrestigeOverride { payload["clearPrestigeOverride"] = true }
+                _ = try await self.functions.httpsCallable("clientSaveGamificationAnchors").call(
+                    self.functionsCallablePayload(payload)
+                )
+                store.markGamificationCloudSynced()
+                AppLogger.db.info("saveGamificationAnchors watchdog: direct write stalled >5s; anchors saved via callable")
+            } catch {
+                AppLogger.db.warning("saveGamificationAnchors watchdog: callable fallback failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
     /// Fallback for a stalled direct pay-settings write (see the watchdog in
     /// `saveSettings`): saves through the clientSavePaySettings callable, which
     /// also recomputes the friend-facing cheque window server-side.
@@ -946,7 +974,29 @@ final class CloudSyncManager: ObservableObject {
                 ]
                 if hadLevelOverride { payload["levelOverride"] = FieldValue.delete() }
                 if hadPrestigeOverride { payload["prestigeOverride"] = FieldValue.delete() }
+
+                // Same watchdog as saveEntry/saveSettings: on devices where
+                // the direct SDK write channel stalls, this setData never
+                // confirms — the XP push silently freezes and the published
+                // level pins at a stale value ("stuck at 12") while shifts
+                // keep syncing fine via their own watchdog. FieldValue
+                // sentinels can't cross the callable boundary, so override
+                // clears travel as flags instead.
+                let callableAnchors = payload.filter { !($0.value is FieldValue) }
+                let clearLevel = hadLevelOverride
+                let clearPrestige = hadPrestigeOverride
+                let watchdog = DispatchWorkItem { [weak self] in
+                    self?.saveGamificationAnchorsViaCallable(
+                        callableAnchors,
+                        clearLevelOverride: clearLevel,
+                        clearPrestigeOverride: clearPrestige,
+                        store: store
+                    )
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0, execute: watchdog)
+
                 ref.setData(payload, merge: true) { error in
+                    watchdog.cancel()
                     if let error {
                         completion(.failure(error))
                     } else {

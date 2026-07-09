@@ -1179,6 +1179,66 @@ exports.clientSavePaySettings = onCall(
   }
 );
 
+/**
+ * Reliable gamification-anchors save (totalXP/prestige/snapshots/…) for
+ * devices whose direct Firestore SDK writes hang — the last un-watchdogged
+ * write on the level path. Without this, a device with a stalled write
+ * channel could log shifts (entry watchdog) but never land its XP push, so
+ * users/{uid}/gamification/current.totalXP froze and the published level
+ * stayed pinned at a stale value ("stuck at 12") no matter how much XP the
+ * device actually computed. Whitelisted + clamped, then recomputes so the
+ * published level updates immediately.
+ */
+exports.clientSaveGamificationAnchors = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Sign in required.");
+    }
+    const uid = request.auth.uid;
+    const anchors = request.data?.anchors;
+    if (!anchors || typeof anchors !== "object" || Array.isArray(anchors)) {
+      throw new HttpsError("invalid-argument", "anchors object is required.");
+    }
+    const ALLOWED = new Set([
+      "totalXP", "prestige", "prestigeXPSnapshots", "prestigeHourSnapshots",
+      "bestStreak", "streakFreezes", "equippedTitle", "adminXPOffset",
+      "level", "xpBreakdown",
+    ]);
+    const update = {};
+    for (const [key, value] of Object.entries(anchors)) {
+      if (ALLOWED.has(key)) update[key] = value;
+    }
+    if (Object.keys(update).length === 0) {
+      throw new HttpsError("invalid-argument", "no allowed anchor fields present.");
+    }
+    // Same sanity clamps recomputeUserStats applies on read (a corrupted
+    // giant value must never enter the doc; see MAX_SANE_* in recompute.js).
+    if ("totalXP" in update) {
+      update.totalXP = Math.min(50_000_000, Math.max(0, Math.floor(Number(update.totalXP) || 0)));
+    }
+    if ("prestige" in update) {
+      update.prestige = Math.min(10, Math.max(0, Math.floor(Number(update.prestige) || 0)));
+    }
+    if (request.data?.clearLevelOverride === true) {
+      update.levelOverride = FieldValue.delete();
+    }
+    if (request.data?.clearPrestigeOverride === true) {
+      update.prestigeOverride = FieldValue.delete();
+    }
+    update.updatedAt = FieldValue.serverTimestamp();
+    await db
+      .collection("users")
+      .doc(uid)
+      .collection("gamification")
+      .doc("current")
+      .set(update, { merge: true });
+    console.log(`clientSaveGamificationAnchors uid=${uid} totalXP=${update.totalXP ?? "n/a"} saved; recomputing`);
+    await recomputeUserStats(db, uid, { skipLeaderboardUpdate: true });
+    return { ok: true };
+  }
+);
+
 /** Admin/support callable to repair a user's stats from all timeEntries. */
 exports.recomputeUserStatsCallable = onCall(
   { region: "us-central1" },
