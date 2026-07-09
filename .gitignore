@@ -75,3 +75,6 @@ agentdb.rvf
 agentdb.rvf.lock
 ruvector.db
 firepit-log.txt
+
+# XP shadow-migration health report history (local monitoring artifact)
+scripts/shadow-health/
