@@ -728,36 +728,40 @@ async function recomputeUserStats(db, uid, options = {}) {
   };
   batch.set(db.collection("publicProfiles").doc(uid), publicProfile, { merge: true });
 
-  const legacyMirror = {
-    weeklyHours: privacy.shareHours ? week.hours : 0,
-    weeklyShiftsLogged: privacy.shareHours ? week.shifts : 0,
-    weeklyDaysLogged: privacy.shareHours ? week.daysWorked : 0,
-    currentStreak: streak,
-    bestStreak: best,
-    totalHours,
-    chequeHours: payPeriod.hours,
-    level,
-    prestige,
-    totalXP,
-    badgeCount,
-    updatedAt,
-  };
-  if (privacy.shareHours) {
-    legacyMirror.companyHoursLogged = companyHoursLogged;
-    legacyMirror.companyDaysWorked = companyDaysWorked;
-    legacyMirror.chequeDailySummary = chequeDailySummary;
-    legacyMirror.chequeWindowStart = isoDate(payPeriod.periodStart);
-    legacyMirror.chequeWindowCutoff = isoDate(payPeriod.periodEnd);
-  } else {
-    // The client no longer writes these fields, so the server is the sole
-    // manager — clear them when hours aren't shared to enforce privacy.
-    legacyMirror.companyHoursLogged = FieldValue.delete();
-    legacyMirror.companyDaysWorked = FieldValue.delete();
-    legacyMirror.chequeDailySummary = FieldValue.delete();
-    legacyMirror.chequeWindowStart = FieldValue.delete();
-    legacyMirror.chequeWindowCutoff = FieldValue.delete();
+  // The users/{uid} "legacy mirror" of these stats is retired. publicProfiles
+  // is the single friend-facing projection and users/{uid}/stats/* the single
+  // private one; the mirror was a second copy that could disagree — and,
+  // because users/{uid} is readable by ANY signed-in user (friend-code
+  // lookup), it exposed privacy-gated cheque/company data that previously had
+  // to be cleared field-by-field whenever sharing was turned off. So the
+  // derived-stats fields are actively DELETED here (one write per user, then
+  // the scrub is a no-op) rather than left frozen. level/prestige/totalXP are
+  // deliberately kept frozen: they are the recovery hints and the XP fallback
+  // for accounts that predate the gamification doc, and they carry no
+  // privacy-gated data (publicProfiles publishes level/prestige regardless of
+  // shareHours). The mergePublicProfile missing-doc fallback stays safe: a
+  // user is only scrubbed by a recompute that creates their publicProfiles
+  // doc in the same batch, so the fallback is never needed for scrubbed users.
+  // badgeCount is deliberately NOT in this list: despite being republished by
+  // the mirror it is also an INPUT — for accounts whose gamification doc has
+  // no unlockedBadges array, users/{uid}.badgeCount is the only badge source
+  // the server has (see the badgeCount derivation above).
+  const retiredMirrorFields = [
+    "weeklyHours", "weeklyShiftsLogged", "weeklyDaysLogged",
+    "currentStreak", "bestStreak", "totalHours", "chequeHours",
+    "companyHoursLogged", "companyDaysWorked",
+    "chequeDailySummary", "chequeWindowStart", "chequeWindowCutoff",
+  ];
+  const staleMirrorFields = retiredMirrorFields.filter(
+    (field) => userData[field] !== undefined
+  );
+  if (staleMirrorFields.length > 0) {
+    const scrub = {};
+    for (const field of staleMirrorFields) {
+      scrub[field] = FieldValue.delete();
+    }
+    batch.set(userRef, scrub, { merge: true });
   }
-  batch.set(userRef, legacyMirror, { merge: true });
 
   if (snapshotSanitize.cleared) {
     batch.update(

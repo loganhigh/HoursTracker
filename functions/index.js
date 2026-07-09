@@ -1513,8 +1513,10 @@ exports.adminSetUserProgression = onCall(
       adminFloorPrestige:
         u.adminFloorPrestige != null ? Number(u.adminFloorPrestige) : null,
       adminEquippedTitle: u.adminEquippedTitle || "",
-      level: Number(u.level) || null,
-      prestige: Number(u.prestige) || null,
+      // publicProfiles carries the live server-computed values; the users-doc
+      // copies are frozen legacy mirror fields kept only as recovery hints.
+      level: Number(p.level) || Number(u.level) || null,
+      prestige: Number(p.prestige) || Number(u.prestige) || null,
       equippedTitle:
         p.equippedTitle || u.adminEquippedTitle || u.equippedTitle || "",
       countryCode: String(u.countryCode || p.countryCode || "").trim().toUpperCase(),
