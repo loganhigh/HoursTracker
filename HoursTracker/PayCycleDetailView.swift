@@ -12,6 +12,7 @@ struct PayCycleDetailView: View {
     @State private var showShare = false
     @State private var didCopyAll = false
     @State private var copyAllBurst = 0
+    @State private var showingPrestigeInfo = false
     @Environment(\.dismiss) private var dismiss
 
     init(
@@ -183,6 +184,9 @@ struct PayCycleDetailView: View {
                 payPeriodOverride: (selectedCycle.start, selectedCycle.end)
             )
         }
+        .sheet(isPresented: $showingPrestigeInfo) {
+            PrestigeInfoSheet(currentPrestige: store.displayedGamificationProfile().prestige)
+        }
         .onAppear {
             selectedCycle = initialCycle
         }
@@ -250,10 +254,6 @@ struct PayCycleDetailView: View {
                         AnimatedMetricText(currency: periodPay, code: store.paySettings.currencyCode)
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .foregroundStyle(AppTheme.Colors.accent)
-                    } else {
-                        Text("this cheque")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(AppTheme.Colors.faint)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -262,40 +262,31 @@ struct PayCycleDetailView: View {
                     .fill(AppTheme.Colors.stroke)
                     .frame(width: 1, height: 44)
 
-                VStack(spacing: 4) {
-                    Text("\(daysWorked) \(daysWorked == 1 ? "day" : "days")")
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(daysWorked)")
                         .font(AppDesignSystem.Typography.heroNumerals(size: 34, weight: .heavy))
                         .foregroundStyle(AppTheme.Colors.text)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    Text(offDayCount > 0 ? "worked · \(offDayCount) off" : "worked")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(AppTheme.Colors.faint)
+                    Text(daysWorked == 1 ? "day" : "days")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppTheme.Colors.subtext)
                 }
                 .frame(maxWidth: .infinity)
             }
 
-            VStack(spacing: 8) {
-                HStack(spacing: 4) {
-                    ForEach(Array(cycleDayStates.enumerated()), id: \.offset) { _, state in
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(
-                                state == .worked
-                                    ? AppTheme.Colors.success
-                                    : AppTheme.Colors.danger.opacity(state == .off ? 0.9 : 0.3)
-                            )
-                            .frame(height: 18)
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-
-                HStack {
-                    Spacer()
-                    Text("Day \(min(cycleDayProgress.elapsed + 1, cycleDayProgress.total)) of \(cycleDayProgress.total)")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                }
+            let _profile = store.displayedGamificationProfile()
+            let _tier = PrestigeTheme.tier(for: _profile.prestige)
+            Button {
+                showingPrestigeInfo = true
+            } label: {
+                Label(
+                    _profile.prestige == 0 ? "Unranked" : "Prestige \(_profile.prestige) (\(_tier.name))",
+                    systemImage: _tier.icon
+                )
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(_profile.prestige == 0 ? AppTheme.Colors.subtext : _tier.primary)
+                .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.plain)
         }
         .padding(20)
         .background(

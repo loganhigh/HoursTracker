@@ -72,7 +72,12 @@ struct FriendProfile: Identifiable, Equatable, Hashable {
     }
 
     var rankTitle: String {
-        GamificationLevelCalculator.rankTitle(forLevel: level, prestige: prestige)
+        let title = GamificationLevelCalculator.rankTitle(forLevel: level, prestige: prestige)
+        // Never reveal prestige readiness to friends — show the previous rank instead.
+        if title.hasSuffix("Prestige Ready") {
+            return GamificationLevelCalculator.rankTitle(forLevel: level - 1, prestige: prestige)
+        }
+        return title
     }
 
     var prestigeTier: PrestigeTheme.Tier {

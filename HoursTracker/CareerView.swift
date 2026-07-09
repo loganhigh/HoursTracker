@@ -144,11 +144,6 @@ struct CareerView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: AppTheme.Spacing.xl) {
-                PlayerProgressCard(
-                    profile: store.displayedGamificationProfile(),
-                    onPrestige: {}
-                )
-
                 heroSummary
 
                 SectionCard(

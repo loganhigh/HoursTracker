@@ -220,6 +220,7 @@ private struct HoursHomeView: View {
     @State private var holidayBurst = 0
     @StateObject private var badgeUnlockTracker = BadgeUnlockTracker()
     @State private var badgeUnlockPresentation: BadgeUnlockPresentation?
+    @State private var showingPrestigeInfoFromHeroCard = false
 
     private struct BadgeUnlockPresentation: Identifiable {
         let id: String
@@ -335,19 +336,7 @@ private struct HoursHomeView: View {
         guard displayed > celebratedLevelHWM else { return }
         let hadBaseline = celebratedLevelHWM > 0
         celebratedLevelHWM = displayed
-        guard celebrate, hadBaseline else { return }
-        levelUpNumber = displayed
-        Haptics.success()
-        playLevelUpSound()
-        showLevelUp = true
-    }
-
-    // MARK: - Level-Up Sound
-    private func playLevelUpSound() {
-        guard let url = Bundle.main.url(forResource: "level_up", withExtension: "caf") else { return }
-        levelUpPlayer = try? AVAudioPlayer(contentsOf: url)
-        levelUpPlayer?.volume = 1.0
-        levelUpPlayer?.play()
+        // Level-up popup and sound removed — ratchet still advances silently.
     }
 
     // MARK: - Friends + activity subscriptions
@@ -736,6 +725,9 @@ private struct HoursHomeView: View {
             SettingsView(store: store, settings: $store.paySettings)
                 .environmentObject(authService)
         }
+        .sheet(isPresented: $showingPrestigeInfoFromHeroCard) {
+            PrestigeInfoSheet(currentPrestige: store.displayedGamificationProfile().prestige)
+        }
         .fullScreenCover(isPresented: $showingPrestigeConfetti) {
             PrestigeCelebrationView(
                 prestige: store.gamificationProfile.prestige,
@@ -784,24 +776,12 @@ private struct HoursHomeView: View {
             badgeUnlockTracker.markCelebrated(badge)
             let label = badge.replacingOccurrences(of: "_", with: " ").capitalized
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                guard !showLevelUp else { return }
                 badgeUnlockPresentation = BadgeUnlockPresentation(id: badge, displayName: label)
             }
         }
         .sheet(item: $badgeUnlockPresentation) { presentation in
             BadgeUnlockCelebrationSheet(badgeName: presentation.displayName)
         }
-        .overlay {
-            if showLevelUp {
-                LevelUpOverlay(level: levelUpNumber) {
-                    showLevelUp = false
-                }
-                .ignoresSafeArea()
-                .transition(.opacity)
-                .zIndex(100)
-            }
-        }
-
     }
 
     // MARK: - Minimal home building blocks
@@ -908,6 +888,11 @@ private struct HoursHomeView: View {
         periodEntries.reduce(0) { $0 + store.payBreakdown(for: $1).pay }
     }
 
+    private var periodDaysWorked: Int {
+        let cal = Calendar.current
+        return Set(periodEntries.filter { !$0.isOffDay }.map { cal.startOfDay(for: $0.date) }).count
+    }
+
     private var daysUntilPayday: Int {
         let cal = Calendar.current
         return max(0, cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: nextPayday)).day ?? 0)
@@ -987,10 +972,6 @@ private struct HoursHomeView: View {
                             AnimatedMetricText(currency: periodPay, code: store.paySettings.currencyCode)
                                 .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundStyle(AppTheme.Colors.accent)
-                        } else {
-                            Text("this cheque")
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundStyle(AppTheme.Colors.faint)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -999,33 +980,31 @@ private struct HoursHomeView: View {
                         .fill(AppTheme.Colors.stroke)
                         .frame(width: 1, height: 44)
 
-                    VStack(spacing: 4) {
-                        Text(daysUntilPayday == 0
-                             ? "Today"
-                             : "\(daysUntilPayday) \(daysUntilPayday == 1 ? "day" : "days")")
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("\(periodDaysWorked)")
                             .font(AppDesignSystem.Typography.heroNumerals(size: 34, weight: .heavy))
                             .foregroundStyle(AppTheme.Colors.text)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                        Text(daysUntilPayday == 0
-                             ? "payday · \(paydayShortText)"
-                             : "to payday · \(paydayShortText)")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(AppTheme.Colors.faint)
+                        Text(periodDaysWorked == 1 ? "day" : "days")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppTheme.Colors.subtext)
                     }
                     .frame(maxWidth: .infinity)
                 }
 
-                VStack(spacing: 8) {
-                    heroDayStrip
-
-                    HStack {
-                        Spacer()
-                        Text(heroProgress.caption)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(AppTheme.Colors.subtext)
-                    }
+                let _profile = store.displayedGamificationProfile()
+                let _tier = PrestigeTheme.tier(for: _profile.prestige)
+                Button {
+                    showingPrestigeInfoFromHeroCard = true
+                } label: {
+                    Label(
+                        _profile.prestige == 0 ? "Unranked" : "Prestige \(_profile.prestige) (\(_tier.name))",
+                        systemImage: _tier.icon
+                    )
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(_profile.prestige == 0 ? AppTheme.Colors.subtext : _tier.primary)
+                    .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.plain)
             }
             .padding(20)
             .background(
@@ -1255,19 +1234,28 @@ private struct HoursHomeView: View {
 
     // MARK: - Stat Triplet
 
+    private var thisWeekHours: Double {
+        var cal = Calendar.current
+        cal.firstWeekday = 2 // Monday
+        guard let interval = cal.dateInterval(of: .weekOfYear, for: Date()) else { return 0 }
+        return store.entries
+            .filter { !$0.isOffDay && $0.date >= interval.start && $0.date < interval.end }
+            .reduce(0) { $0 + $1.paidHours }
+    }
+
     private var statTriplet: some View {
         HStack(spacing: 10) {
             statTile(
+                label: "This Week",
+                value: AppTheme.Format.hours(thisWeekHours)
+            )
+            statTile(
+                label: "This Cheque",
+                value: AppTheme.Format.hours(periodHours)
+            )
+            statTile(
                 label: "This Month",
                 value: AppTheme.Format.hours(store.monthTotalHours(monthDate: Date()))
-            )
-            statTile(
-                label: "Best Month",
-                value: bestMonthSoFar.map { AppTheme.Format.hours($0.hours) } ?? "—"
-            )
-            statTile(
-                label: "Streak",
-                value: "\(store.gamificationProfile.currentStreak)d"
             )
         }
     }
@@ -2896,7 +2884,7 @@ private struct ClearBackgroundView: UIViewRepresentable {
 
 // MARK: - Prestige Info Sheet
 
-private struct PrestigeInfoSheet: View {
+struct PrestigeInfoSheet: View {
     @Environment(\.dismiss) private var dismiss
     let currentPrestige: Int
 
