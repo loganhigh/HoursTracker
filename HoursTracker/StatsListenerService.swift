@@ -2,6 +2,7 @@ import Foundation
 import FirebaseAuth
 import FirebaseFirestore
 import Combine
+import os
 
 /// Listens to server-maintained `users/{uid}/stats/*` summary documents.
 @MainActor
@@ -98,7 +99,12 @@ final class StatsListenerService: ObservableObject {
                             FirestoreOperationLog.listenerError(owner: .statsListener, purpose: "stats.lifetime", uid: uid, error: error)
                             return
                         }
-                        self.lifetimeStats = ServerLifetimeStats.fromFirestore(snapshot?.data())
+                        let previous = self.lifetimeStats
+                        let updated = ServerLifetimeStats.fromFirestore(snapshot?.data())
+                        self.lifetimeStats = updated
+                        if let updated, updated != previous {
+                            AppLogger.stats.info("stats.lifetime updated: level \(previous?.level ?? 0, privacy: .public) -> \(updated.level, privacy: .public), prestige \(previous?.prestige ?? 0, privacy: .public) -> \(updated.prestige, privacy: .public), totalXP \(previous?.totalXP ?? 0, privacy: .public) -> \(updated.totalXP, privacy: .public), totalHours \(String(format: "%.2f", previous?.totalHours ?? 0), privacy: .public) -> \(String(format: "%.2f", updated.totalHours), privacy: .public) (fromCache: \(snapshot?.metadata.isFromCache == true, privacy: .public))")
+                        }
                         self.lifetimeListenerFired = true
                         self.markReconciledIfReady()
                     }

@@ -5,6 +5,10 @@ import PhotosUI
 
 struct AccountView: View {
     @ObservedObject var store: HoursStore
+    // `store.displayedLevel` prefers the server-computed level from
+    // StatsListenerService — observe it so the Level tile re-renders when the
+    // server snapshot lands (HoursStore itself doesn't republish on it).
+    @ObservedObject private var statsListener = StatsListenerService.shared
     @EnvironmentObject private var authService: AuthService
     @Environment(\.dismiss) private var dismiss
 
@@ -217,6 +221,9 @@ struct AccountView: View {
                     .environmentObject(authService)
             }
             .onAppear {
+                // Same recovery hook as CareerView: guarantees the server-stats
+                // listeners are attached whenever a level-displaying screen appears.
+                StatsListenerService.shared.ensureListening()
                 Task {
                     await photoManager.uploadLocalPhotoIfNeeded()
                     if authService.isSignedIn {

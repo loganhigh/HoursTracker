@@ -2,6 +2,7 @@ import Foundation
 import FirebaseFirestore
 import Combine
 import SwiftUI
+import os
 
 /// A single ranked entry on the global hour trackers leaderboard.
 /// Only a first name, lifetime hours, and country flag are ever exposed publicly.
@@ -188,6 +189,8 @@ final class TopTrackersService: ObservableObject {
     }
 
     private func apply(_ data: [String: Any]?) {
+        let previousTopCount = topTrackers.count
+        let previousAllCount = allTrackers.count
         topTrackers = Self.parseRows(data?["top"] as? [[String: Any]], assignRankFromIndex: true)
 
         if let allRows = data?["all"] as? [[String: Any]], !allRows.isEmpty {
@@ -207,6 +210,7 @@ final class TopTrackersService: ObservableObject {
             hasServerFullList = false
             allTrackers = topTrackers
         }
+        AppLogger.leaderboard.info("leaderboards/global snapshot applied: top \(previousTopCount, privacy: .public) -> \(self.topTrackers.count, privacy: .public), broadcast \(previousAllCount, privacy: .public) -> \(self.allTrackers.count, privacy: .public), leader hours \(String(format: "%.2f", self.topTrackers.first?.hours ?? 0), privacy: .public)")
     }
 
     private static func parsePublicProfileDocuments(_ documents: [QueryDocumentSnapshot]) -> [TopTracker] {

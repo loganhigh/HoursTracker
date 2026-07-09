@@ -9,4 +9,8 @@ enum AppLogger {
     static let db = Logger(subsystem: subsystem, category: "db")
     static let network = Logger(subsystem: subsystem, category: "network")
     static let ui = Logger(subsystem: subsystem, category: "ui")
+    /// Server-stats (level/XP/lifetime) snapshot deliveries and transitions.
+    static let stats = Logger(subsystem: subsystem, category: "stats")
+    /// Global leaderboard snapshot deliveries.
+    static let leaderboard = Logger(subsystem: subsystem, category: "leaderboard")
 }

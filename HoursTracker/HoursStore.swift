@@ -58,13 +58,14 @@ final class HoursStore: ObservableObject {
     @Published var gamificationProfile: GamificationProfile = .defaultProfile
     @Published var gamificationEventMessage: String?
     @Published private(set) var isLoaded = false
-    /// Persistent admin-level floor pulled from `adminFloorLevel` on the
-    /// Firestore user doc. Displayed/published level is
-    /// `max(adminLevelOverride, gamificationProfile.level)` so XP progression
-    /// continues normally above the floor.
+    /// DEAD legacy admin floor (`adminFloorLevel`). No display or publish path
+    /// reads it anymore — level has ONE canonical source: the server-computed
+    /// `stats/lifetime.level` (see `displayedLevel`), with the XP-derived local
+    /// level as the offline fallback. Kept only so `applyAdminLevel` can keep
+    /// clearing stale persisted values on old installs.
     @Published var adminLevelOverride: Int? = nil
-    /// Persistent admin-prestige floor pulled from `adminFloorPrestige`.
-    /// Displayed prestige is `max(adminPrestigeOverride, gamificationProfile.prestige)`.
+    /// DEAD legacy admin-prestige floor (`adminFloorPrestige`) — same story as
+    /// `adminLevelOverride`.
     @Published var adminPrestigeOverride: Int? = nil
     /// Persistent admin title override from `adminEquippedTitle` on the user doc.
     var adminEquippedTitleOverride: String? = nil
@@ -111,18 +112,12 @@ final class HoursStore: ObservableObject {
            let profile = try? dec.decode(GamificationProfile.self, from: data) {
             gamificationProfile = profile
         }
-        // Restore the persisted admin-level floor synchronously so the displayed
-        // level is correct on first frame. Without this it starts nil and the UI
-        // briefly shows the lower XP-calculated level before cloud sync applies
-        // the override, causing a visible level "jump" on launch.
-        let savedAdminLevel = UserDefaults.standard.integer(forKey: adminLevelOverrideKey)
-        if savedAdminLevel > 0 {
-            adminLevelOverride = savedAdminLevel
-        }
-        let savedAdminPrestige = UserDefaults.standard.integer(forKey: adminPrestigeOverrideKey)
-        if savedAdminPrestige > 0 {
-            adminPrestigeOverride = savedAdminPrestige
-        }
+        // NOTE: the legacy admin-level/prestige floor is deliberately NOT
+        // restored from UserDefaults anymore. Nothing reads those overrides for
+        // display or publishing — the server-computed level is the single
+        // source of truth — so restoring them only kept conflicting state
+        // alive. `applyAdminLevel`/`applyAdminPrestige` still clear any values
+        // persisted by old builds.
     }
 
     /// Reload data from storage. Use for pull-to-refresh.

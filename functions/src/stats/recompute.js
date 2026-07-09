@@ -779,6 +779,14 @@ async function recomputeUserStats(db, uid, options = {}) {
 
   await batch.commit();
 
+  // Observability: one line per persisted recompute so stale-level reports can
+  // be traced end-to-end (client logs the matching stats.lifetime snapshot).
+  console.log(
+    `recomputeUserStats committed uid=${uid} level=${level} prestige=${prestige} ` +
+    `totalXP=${totalXP} totalHours=${totalHours.toFixed(2)} badges=${badgeCount}` +
+    (snapshotSanitize.cleared ? " (cleared inflating prestige snapshots)" : "")
+  );
+
   await emitShiftActivityIfNeeded(
     db,
     uid,
@@ -856,13 +864,13 @@ const BROADCAST_RANK_LIMIT = 100;
 async function applyLeaderboardDeltaForUser(db, uid) {
   const boardRef = db.collection("leaderboards").doc("global");
   const profileRef = db.collection("publicProfiles").doc(uid);
-  await db.runTransaction(async (tx) => {
+  const outcome = await db.runTransaction(async (tx) => {
     const [boardSnap, profileSnap] = await Promise.all([
       tx.get(boardRef),
       tx.get(profileRef),
     ]);
     // No board yet — the scheduled/full rebuild owns creation.
-    if (!boardSnap.exists) return;
+    if (!boardSnap.exists) return { action: "no-board" };
 
     const board = boardSnap.data() || {};
     const all = Array.isArray(board.all) ? board.all.slice() : [];
@@ -873,7 +881,7 @@ async function applyLeaderboardDeltaForUser(db, uid) {
     const idx = all.findIndex((e) => e && e.uid === uid);
 
     if (hours <= 0) {
-      if (idx === -1) return; // not on the board, nothing to change
+      if (idx === -1) return { action: "absent" }; // not on the board, nothing to change
       all.splice(idx, 1);
     } else {
       const entry = {
@@ -887,7 +895,7 @@ async function applyLeaderboardDeltaForUser(db, uid) {
       } else {
         const last = all[all.length - 1];
         if (all.length >= BROADCAST_RANK_LIMIT && last && hours <= (Number(last.hours) || 0)) {
-          return; // still below the broadcast cutoff — slice unchanged
+          return { action: "below-cutoff", hours }; // slice unchanged
         }
         all.push(entry);
       }
@@ -914,7 +922,18 @@ async function applyLeaderboardDeltaForUser(db, uid) {
       },
       { merge: true }
     );
+    const newRank = trimmed.find((e) => e.uid === uid)?.rank ?? null;
+    return { action: hours <= 0 ? "removed" : "patched", hours, rank: newRank };
   });
+  // Observability: pairs with the recomputeUserStats commit line so board
+  // movement (or the reason it didn't move) is visible per shift write.
+  if (outcome && outcome.action !== "absent") {
+    console.log(
+      `applyLeaderboardDeltaForUser uid=${uid} action=${outcome.action}` +
+      (outcome.hours !== undefined ? ` hours=${outcome.hours}` : "") +
+      (outcome.rank ? ` rank=${outcome.rank}` : "")
+    );
+  }
 }
 
 /**

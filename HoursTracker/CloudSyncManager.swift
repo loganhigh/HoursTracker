@@ -741,7 +741,22 @@ final class CloudSyncManager: ObservableObject {
         guard currentUID != nil else { return }
         recomputeDebounceWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            self?.requestStatsRecompute()
+            guard let self else { return }
+            // Push the client-owned XP/prestige anchors BEFORE asking the server
+            // to recompute. The server derives the published `level` (stats/
+            // lifetime, publicProfiles, leaderboard row) from
+            // gamification/current.totalXP — a client-only value (it includes
+            // streak/challenge bonuses the server can't rederive from entries).
+            // Recomputing against the stale doc published yesterday's level even
+            // though the entry write itself landed instantly; the anchors used to
+            // sync only on the app-open profile snapshot.
+            if let store = self.hoursStore {
+                self.saveGamificationAnchors(store: store) { [weak self] _ in
+                    self?.requestStatsRecompute()
+                }
+            } else {
+                self.requestStatsRecompute()
+            }
         }
         recomputeDebounceWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: work)
@@ -1457,6 +1472,10 @@ final class CloudSyncManager: ObservableObject {
                 self.saveConfirmedDeletes(confirmed)
                 self.savePendingDeletes(remaining)
                 StatsListenerService.shared.markEntryWritePending()
+                // Deleting shifts lowers entry-derived XP; push the fresh anchors
+                // and recompute so the published level/leaderboard row drop too
+                // (the callable's own recompute ran against the pre-delete XP).
+                self.scheduleStatsRecomputeDebounced()
                 self.isSyncingPendingDeletes = false
                 if !remaining.isEmpty {
                     self.syncPendingDeletes()

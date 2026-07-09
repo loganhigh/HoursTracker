@@ -3,6 +3,10 @@ import SwiftUI
 // MARK: - Profile View (Display Name + Badges)
 struct ProfileView: View {
     @ObservedObject var store: HoursStore
+    // `store.displayedLevel` prefers the server-computed level from
+    // StatsListenerService — observe it so the label re-renders when the
+    // server snapshot lands (HoursStore itself doesn't republish on it).
+    @ObservedObject private var statsListener = StatsListenerService.shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -26,6 +30,9 @@ struct ProfileView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            // Same recovery hook as CareerView: guarantees the server-stats
+            // listeners are attached whenever a level-displaying screen appears.
+            .onAppear { StatsListenerService.shared.ensureListening() }
         }
     }
 }
