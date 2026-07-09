@@ -334,7 +334,6 @@ private struct HoursHomeView: View {
             return
         }
         guard displayed > celebratedLevelHWM else { return }
-        let hadBaseline = celebratedLevelHWM > 0
         celebratedLevelHWM = displayed
         // Level-up popup and sound removed — ratchet still advances silently.
     }
