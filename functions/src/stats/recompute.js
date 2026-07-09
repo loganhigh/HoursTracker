@@ -392,6 +392,98 @@ function deriveProgressionFromEntryXP(entryXP) {
   return { prestige, snapshots, level };
 }
 
+// ── Server-derived entry XP ─────────────────────────────────────────────────
+// Mirrors the deterministic, entry-only components of the client's
+// GamificationEngine XP formula (xpPerHour/shiftLogXP/streakDayXP/longShiftXP/
+// weeklyCompletionXP). Deliberately EXCLUDES the client-only components —
+// overtime XP (needs the device's pay rules), challenge XP (time-of-day
+// dependent by design), boosts, and the admin offset — which ride along as a
+// persisted "extras" value recalibrated exactly at every client XP push (see
+// resolveTotalXP). Between pushes, XP therefore tracks the entries the server
+// can see; at each push it equals the client's total exactly.
+const XP_PER_HOUR = 100;
+const SHIFT_LOG_XP = 50;
+const STREAK_DAY_XP = 200;
+const LONG_SHIFT_XP = 300;
+const WEEKLY_COMPLETION_XP = 500;
+const COMPLETED_WEEK_HOURS = 40;
+const LONG_SHIFT_HOURS = 12;
+
+function entryDerivedXP(entries, workedDayCount) {
+  let hoursSum = 0;
+  let shifts = 0;
+  let longShifts = 0;
+  const weekHours = new Map();
+  for (const entry of entries) {
+    if (entry.isOffDay) continue;
+    const h = paidHours(entry);
+    hoursSum += h;
+    shifts += 1;
+    if (h >= LONG_SHIFT_HOURS) longShifts += 1;
+    const d = entryDate(entry);
+    if (d) {
+      const weekStart = currentWeekInterval(d).start.getTime();
+      weekHours.set(weekStart, (weekHours.get(weekStart) || 0) + h);
+    }
+  }
+  let completedWeeks = 0;
+  for (const total of weekHours.values()) {
+    if (total >= COMPLETED_WEEK_HOURS) completedWeeks += 1;
+  }
+  return (
+    Math.round(hoursSum * XP_PER_HOUR) +
+    shifts * SHIFT_LOG_XP +
+    workedDayCount * STREAK_DAY_XP +
+    longShifts * LONG_SHIFT_XP +
+    completedWeeks * WEEKLY_COMPLETION_XP
+  );
+}
+
+/**
+ * Server-owned XP resolution. The client remains the only party that can
+ * mint bonus XP (overtime/challenges/boosts/admin offset), but the server no
+ * longer freezes the WHOLE total between client pushes:
+ *
+ * - When gamification.totalXP is unchanged from the value the extras were
+ *   last calibrated against, the entries themselves have changed (that's what
+ *   triggered this recompute) — so XP = entryDerivedXP(now) + extras. A shift
+ *   synced by an offline/dead device moves XP (and level) immediately.
+ * - When gamification.totalXP differs, the client just pushed a fresh total:
+ *   adopt it exactly and recalibrate extras = clientTotal − entryDerivedXP.
+ *
+ * Returns { totalXP, extrasUpdate } where extrasUpdate is a gamification-doc
+ * patch to persist (null when calibration is already current).
+ */
+function resolveTotalXP(gamification, userData, serverEntryXP) {
+  const clientTotalXP = Math.min(
+    MAX_SANE_TOTAL_XP,
+    Math.max(0, Number(gamification.totalXP) || Number(userData.totalXP) || 0)
+  );
+  const storedBase = Number(gamification.xpExtrasBaseTotal);
+  const storedExtras = Number(gamification.xpClientExtras);
+
+  if (
+    Number.isFinite(storedBase) &&
+    Number.isFinite(storedExtras) &&
+    storedBase === clientTotalXP
+  ) {
+    return {
+      totalXP: Math.min(MAX_SANE_TOTAL_XP, Math.max(0, serverEntryXP + storedExtras)),
+      extrasUpdate: null,
+      xpSource: "entry-tracked",
+    };
+  }
+
+  return {
+    totalXP: clientTotalXP,
+    extrasUpdate: {
+      xpClientExtras: clientTotalXP - serverEntryXP,
+      xpExtrasBaseTotal: clientTotalXP,
+    },
+    xpSource: "client-push",
+  };
+}
+
 /** Drop prestige snapshots that inflate level after a bad sync/admin save. */
 function sanitizedPrestigeSnapshots(totalXP, prestige, snapshots) {
   const clean = Array.isArray(snapshots)
@@ -554,9 +646,11 @@ async function recomputeUserStats(db, uid, options = {}) {
   const best = bestStreak(workedStrings);
   const totalHours = totalPaidHours(entries);
 
-  const totalXP = Math.min(
-    MAX_SANE_TOTAL_XP,
-    Number(gamification.totalXP) || Number(userData.totalXP) || 0
+  const serverEntryXP = entryDerivedXP(entries, workedStrings.length);
+  const { totalXP, extrasUpdate, xpSource } = resolveTotalXP(
+    gamification,
+    userData,
+    serverEntryXP
   );
   // Admin-set floors (written only by the admin panel via adminSetUserProgression).
   // Both act as floors: the published value is never lower, but real XP/prestige
@@ -770,6 +864,17 @@ async function recomputeUserStats(db, uid, options = {}) {
     );
   }
 
+  // Persist the freshly-calibrated XP extras alongside the stats they were
+  // derived with (same batch, same fence) so the next entries-only recompute
+  // resolves XP against this calibration.
+  if (extrasUpdate) {
+    batch.set(
+      db.collection("users").doc(uid).collection("gamification").doc("current"),
+      extrasUpdate,
+      { merge: true }
+    );
+  }
+
   // Bail out if a newer recompute has already started since we began — it
   // will (or already did) produce a fresher result, so persisting ours now
   // would only reintroduce the exact staleness this fence exists to prevent.
@@ -787,7 +892,8 @@ async function recomputeUserStats(db, uid, options = {}) {
   // be traced end-to-end (client logs the matching stats.lifetime snapshot).
   console.log(
     `recomputeUserStats committed uid=${uid} level=${level} prestige=${prestige} ` +
-    `totalXP=${totalXP} totalHours=${totalHours.toFixed(2)} badges=${badgeCount}` +
+    `totalXP=${totalXP} (${xpSource}, entryXP=${serverEntryXP}) ` +
+    `totalHours=${totalHours.toFixed(2)} badges=${badgeCount}` +
     (snapshotSanitize.cleared ? " (cleared inflating prestige snapshots)" : "")
   );
 
@@ -1028,6 +1134,8 @@ module.exports = {
   recomputeUserStats,
   updateGlobalLeaderboard,
   applyLeaderboardDeltaForUser,
+  entryDerivedXP,
+  resolveTotalXP,
   totalXPAtLevelStart,
   buildSnapshotsForPrestige,
   deriveProgressionFromEntryXP,
