@@ -98,12 +98,19 @@ enum CountryFlag {
     }
 }
 
-/// Listens to the server-maintained public leaderboard doc `leaderboards/global`
-/// and publishes ranked hour trackers to every signed-in user. The board is
-/// recomputed server-side (privacy-filtered) whenever any user's stats change.
+/// Publishes ranked hour trackers to every signed-in user by listening to the
+/// top slice of `publicProfiles` ordered by lifetime hours. The query IS the
+/// leaderboard: rank = position, so the board can never disagree with the
+/// profiles that feed it. (The old server-materialized `leaderboards/global`
+/// doc is still published for pre-2.3 builds but is no longer read here — it
+/// required a delta patcher, a fence gate, and a 15-minute reconciler purely
+/// to keep a copy in sync with this exact query.)
 @MainActor
 final class TopTrackersService: ObservableObject {
     static let shared = TopTrackersService()
+
+    /// Broadcast slice mirrored from the retired board doc's rank cap.
+    private static let liveRankLimit = 100
 
     @Published private(set) var topTrackers: [TopTracker] = []
     @Published private(set) var allTrackers: [TopTracker] = []
@@ -123,22 +130,24 @@ final class TopTrackersService: ObservableObject {
         isListening = true
         listenerKey = FirebaseListenerRegistry.shared.register(
             owner: .leaderboard,
-            purpose: "leaderboards.global",
+            purpose: "publicProfiles.topByHours",
             uid: nil,
-            registration: db.collection("leaderboards").document("global")
+            registration: db.collection("publicProfiles")
+                .order(by: "totalHours", descending: true)
+                .limit(to: Self.liveRankLimit)
                 .addSnapshotListener { [weak self] snapshot, error in
                     Task { @MainActor in
                         guard let self else { return }
                         if let error {
                             FirestoreOperationLog.listenerError(
                                 owner: .leaderboard,
-                                purpose: "leaderboards.global",
+                                purpose: "publicProfiles.topByHours",
                                 uid: nil,
                                 error: error
                             )
                             return
                         }
-                        self.apply(snapshot?.data())
+                        self.applyRankedProfiles(snapshot)
                         self.hasLoaded = true
                     }
                 }
@@ -188,29 +197,16 @@ final class TopTrackersService: ObservableObject {
         return allTrackers.first { $0.uid == uid }
     }
 
-    private func apply(_ data: [String: Any]?) {
-        let previousTopCount = topTrackers.count
+    private func applyRankedProfiles(_ snapshot: QuerySnapshot?) {
         let previousAllCount = allTrackers.count
-        topTrackers = Self.parseRows(data?["top"] as? [[String: Any]], assignRankFromIndex: true)
-
-        if let allRows = data?["all"] as? [[String: Any]], !allRows.isEmpty {
-            allTrackers = Self.parseRows(allRows, assignRankFromIndex: false)
-            // The broadcast doc now carries only a bounded slice of the ranking
-            // (see updateGlobalLeaderboard's BROADCAST_RANK_LIMIT). Treat the
-            // server list as complete only when it actually holds every ranked
-            // user; otherwise leave the door open for ensureFullLeaderboardLoaded()
-            // to page publicProfiles for deep ranks.
-            let totalRanked: Int = {
-                if let v = data?["totalRanked"] as? Int { return v }
-                if let v = data?["totalRanked"] as? NSNumber { return v.intValue }
-                return allRows.count
-            }()
-            hasServerFullList = allRows.count >= totalRanked
-        } else {
-            hasServerFullList = false
-            allTrackers = topTrackers
-        }
-        AppLogger.leaderboard.info("leaderboards/global snapshot applied: top \(previousTopCount, privacy: .public) -> \(self.topTrackers.count, privacy: .public), broadcast \(previousAllCount, privacy: .public) -> \(self.allTrackers.count, privacy: .public), leader hours \(String(format: "%.2f", self.topTrackers.first?.hours ?? 0), privacy: .public)")
+        let documents = snapshot?.documents ?? []
+        allTrackers = Self.parsePublicProfileDocuments(documents)
+        topTrackers = Array(allTrackers.prefix(5))
+        // Fewer raw documents than the query limit means the query exhausted
+        // publicProfiles — the live slice already holds every ranked user, so
+        // ensureFullLeaderboardLoaded() has nothing deeper to page in.
+        hasServerFullList = documents.count < Self.liveRankLimit
+        AppLogger.leaderboard.info("publicProfiles leaderboard snapshot: ranked \(previousAllCount, privacy: .public) -> \(self.allTrackers.count, privacy: .public), leader hours \(String(format: "%.2f", self.topTrackers.first?.hours ?? 0), privacy: .public) (fromCache: \(snapshot?.metadata.isFromCache == true, privacy: .public))")
     }
 
     private static func parsePublicProfileDocuments(_ documents: [QueryDocumentSnapshot]) -> [TopTracker] {
@@ -244,36 +240,6 @@ final class TopTrackersService: ObservableObject {
         return String(first)
     }
 
-    private static func parseRows(_ rows: [[String: Any]]?, assignRankFromIndex: Bool) -> [TopTracker] {
-        guard let rows else { return [] }
-        var rank = 0
-        return rows.compactMap { row in
-            guard let uid = row["uid"] as? String else { return nil }
-            let name = (row["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let hours: Double = {
-                if let v = row["hours"] as? Double { return v }
-                if let v = row["hours"] as? Int { return Double(v) }
-                if let v = row["hours"] as? NSNumber { return v.doubleValue }
-                return 0
-            }()
-            guard hours > 0 else { return nil }
-            let countryCode = (row["countryCode"] as? String) ?? ""
-            let explicitRank: Int? = {
-                if let v = row["rank"] as? Int { return v }
-                if let v = row["rank"] as? NSNumber { return v.intValue }
-                return nil
-            }()
-            rank += 1
-            let resolvedRank = assignRankFromIndex ? rank : (explicitRank ?? rank)
-            return TopTracker(
-                uid: uid,
-                name: name.isEmpty ? "Tracker" : name,
-                hours: hours,
-                countryCode: countryCode,
-                rank: resolvedRank
-            )
-        }
-    }
 }
 
 // MARK: - Global leaderboard (full list)
