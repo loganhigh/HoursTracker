@@ -919,9 +919,14 @@ async function recomputeUserStats(db, uid, options = {}) {
   );
 
   // Parity telemetry for the server-XP migration (see XP_OWNERSHIP_MODE).
-  // One line per recompute comparing what each side would publish; a level
-  // mismatch is the flip-blocking signal and logs as a warning.
-  if (XP_OWNERSHIP_MODE === "shadow") {
+  // Runs in BOTH modes so diagnostics survive the flip:
+  //  - shadow: published = client total; serverXP shows what the flip would do.
+  //  - on:     published = server-tracked; clientXP shows what the client
+  //            would have produced — so post-flip anomalies are attributable
+  //            without guessing. Keep this for at least a week after the flip.
+  // A level mismatch is the attention signal in either mode and logs as a
+  // warning.
+  {
     const clientLevel = Math.min(
       CLIENT_MAX_LEVEL,
       levelStateFromXP(xpResolution.clientTotalXP, prestige, snapshots)
@@ -934,6 +939,7 @@ async function recomputeUserStats(db, uid, options = {}) {
     const clientBreakdown = gamification.xpBreakdown;
     const parts = [
       `xpShadow uid=${uid}`,
+      `mode=${XP_OWNERSHIP_MODE}`,
       `result=${shadowLevel === clientLevel ? "MATCH" : "MISMATCH"}`,
       `clientXP=${xpResolution.clientTotalXP}`,
       `serverXP=${xpResolution.trackedTotalXP}`,
