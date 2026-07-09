@@ -102,6 +102,9 @@ final class StatsListenerService: ObservableObject {
                         let previous = self.lifetimeStats
                         let updated = ServerLifetimeStats.fromFirestore(snapshot?.data())
                         self.lifetimeStats = updated
+                        if let updated {
+                            Self.cacheServerLevel(updated.level, uid: uid)
+                        }
                         if let updated, updated != previous {
                             AppLogger.stats.info("stats.lifetime updated: level \(previous?.level ?? 0, privacy: .public) -> \(updated.level, privacy: .public), prestige \(previous?.prestige ?? 0, privacy: .public) -> \(updated.prestige, privacy: .public), totalXP \(previous?.totalXP ?? 0, privacy: .public) -> \(updated.totalXP, privacy: .public), totalHours \(String(format: "%.2f", previous?.totalHours ?? 0), privacy: .public) -> \(String(format: "%.2f", updated.totalHours), privacy: .public) (fromCache: \(snapshot?.metadata.isFromCache == true, privacy: .public))")
                         }
@@ -131,6 +134,27 @@ final class StatsListenerService: ObservableObject {
 
     func markEntryWritePending() {
         isPendingReconcile = true
+    }
+
+    // MARK: - Cold-launch server-level cache
+
+    /// The last server-published level, persisted per uid. Used by
+    /// `HoursStore.displayedLevel` as the cold-launch fallback so the first
+    /// rendered frames show the last-known TRUE level instead of the locally
+    /// persisted `gamificationProfile.level`, which can be stale (observed
+    /// live: Home flashed a stale local 19 before the server's 12 arrived).
+    private static func levelCacheKey(uid: String) -> String {
+        "server_level_cache_v1_\(uid)"
+    }
+
+    static func cachedServerLevel(uid: String?) -> Int? {
+        guard let uid else { return nil }
+        let v = UserDefaults.standard.integer(forKey: levelCacheKey(uid: uid))
+        return v > 0 ? v : nil
+    }
+
+    fileprivate static func cacheServerLevel(_ level: Int, uid: String) {
+        UserDefaults.standard.set(level, forKey: levelCacheKey(uid: uid))
     }
 
     private func markReconciledIfReady() {

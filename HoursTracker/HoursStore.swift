@@ -432,9 +432,17 @@ final class HoursStore: ObservableObject {
 
     /// Level shown in UI — prefers server-computed level when available.
     var displayedLevel: Int {
-        if FirebaseMigrationFlags.useServerStats,
-           let serverLevel = StatsListenerService.shared.lifetimeStats?.level {
-            return serverLevel
+        if FirebaseMigrationFlags.useServerStats {
+            if let serverLevel = StatsListenerService.shared.lifetimeStats?.level {
+                return serverLevel
+            }
+            // Cold launch, before the stats listener delivers: the last
+            // server-published level beats the locally persisted one, which
+            // can be stale (observed live: Home flashed a stale local 19 for
+            // the first frames before the server's 12 arrived).
+            if let cached = StatsListenerService.cachedServerLevel(uid: cloudSync.currentUserID) {
+                return cached
+            }
         }
         return gamificationProfile.level
     }

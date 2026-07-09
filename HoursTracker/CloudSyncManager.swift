@@ -18,6 +18,10 @@ final class CloudSyncManager: ObservableObject {
     /// True when Firestore is available and user is signed in.
     var isCloudAvailable: Bool { currentUID != nil }
 
+    /// The signed-in Firebase uid, for callers that key caches per account
+    /// (e.g. HoursStore.displayedLevel's server-level cache).
+    var currentUserID: String? { currentUID }
+
     /// Resolved lazily so we don't touch `Firestore.firestore()` at construction
     /// time. If `GoogleService-Info.plist` is missing and `FirebaseApp.configure`
     /// never ran, accessing `db` would otherwise crash with "Default FirebaseApp
