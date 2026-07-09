@@ -525,6 +525,19 @@ final class HoursStore: ObservableObject {
         return gamificationProfile.equippedTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
+    /// Per-component XP breakdown for the server's XP-migration shadow logs.
+    /// See GamificationEngine.xpComponentBreakdown.
+    func xpComponentBreakdown() -> [String: Int] {
+        GamificationEngine.xpComponentBreakdown(
+            activeEntries: entries,
+            archivedEntries: yearArchives.flatMap(\.entries),
+            adminXPOffset: gamificationProfile.adminXPOffset,
+            overtimeHours: { [weak self] entry in
+                self?.payBreakdown(for: entry).overtimeHours ?? 0
+            }
+        )
+    }
+
     /// Call when the user opens the app or completes sign-in so friends/leaderboard
     /// fields (level, prestige, streaks) are pushed to Firestore promptly.
     func syncProfileOnLogin() {
@@ -2104,6 +2117,35 @@ private enum GamificationEngine {
             rival: previous.rival,
             crew: previous.crew
         )
+    }
+
+    /// Per-component XP breakdown mirroring `buildProfile`'s totalXP math.
+    /// Pushed with the gamification anchors so the server's XP-migration
+    /// shadow logs can attribute client/server drift to a specific component.
+    static func xpComponentBreakdown(
+        activeEntries: [WorkEntry],
+        archivedEntries: [WorkEntry],
+        adminXPOffset: Int,
+        overtimeHours: (WorkEntry) -> Double
+    ) -> [String: Int] {
+        let allEntries = (activeEntries + archivedEntries).sorted { $0.date < $1.date }
+        let workEntries = allEntries.filter { !$0.isOffDay }
+        let workedDays = distinctWorkedDays(from: workEntries)
+        let daily = makeDailyChallenges(entries: workEntries)
+        let weekly = makeWeeklyChallenges(entries: workEntries)
+        let challengeXP = (daily + weekly)
+            .filter(\.completed)
+            .reduce(0) { $0 + $1.rewardXP }
+        return [
+            "hourly": Int(workEntries.reduce(0.0) { $0 + ($1.paidHours * Double(xpPerHour)) }.rounded()),
+            "logging": workEntries.count * shiftLogXP,
+            "overtime": Int(workEntries.reduce(0.0) { $0 + (overtimeHours($1) * Double(overtimeXPPerHour)) }.rounded()),
+            "streakDays": workedDays.count * streakDayXP,
+            "longShift": workEntries.filter { $0.paidHours >= 12.0 }.count * longShiftXP,
+            "weeklyCompletion": completedWeekCount(from: workEntries) * weeklyCompletionXP,
+            "challenge": challengeXP,
+            "adminOffset": adminXPOffset,
+        ]
     }
 
     static func eventMessage(previous: GamificationProfile, current: GamificationProfile, hint: String?) -> String? {

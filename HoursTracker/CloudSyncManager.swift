@@ -859,6 +859,10 @@ final class CloudSyncManager: ObservableObject {
                     "totalXP": profile.totalXP,
                     "adminXPOffset": profile.adminXPOffset,
                     "level": profile.level,
+                    // Parity telemetry for the server-XP migration: lets the
+                    // server's shadow logs attribute any client/server XP drift
+                    // to a specific component (overtime vs challenge vs entry math).
+                    "xpBreakdown": store.xpComponentBreakdown(),
                     "updatedAt": FieldValue.serverTimestamp()
                 ]
                 if hadLevelOverride { payload["levelOverride"] = FieldValue.delete() }

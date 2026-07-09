@@ -409,7 +409,20 @@ const WEEKLY_COMPLETION_XP = 500;
 const COMPLETED_WEEK_HOURS = 40;
 const LONG_SHIFT_HOURS = 12;
 
-function entryDerivedXP(entries, workedDayCount) {
+// Rollout gate for server-owned XP:
+// "shadow" — the client-pushed total remains canonical (published level can
+//            never differ from pre-migration behavior); the server-derived
+//            value is computed, calibrated, and LOGGED in parallel so parity
+//            can be verified on real traffic before anything user-visible
+//            changes. Level mismatches log as warnings.
+// "on"     — entries-only changes publish the server-tracked value; every
+//            client push is still adopted exactly, so flipping this cannot
+//            move anyone's numbers at the moment of the flip.
+const XP_OWNERSHIP_MODE = "shadow";
+
+/** Per-component server entry XP, for parity diagnosis against the client's
+ * pushed xpBreakdown. */
+function entryXPComponents(entries, workedDayCount) {
   let hoursSum = 0;
   let shifts = 0;
   let longShifts = 0;
@@ -430,13 +443,18 @@ function entryDerivedXP(entries, workedDayCount) {
   for (const total of weekHours.values()) {
     if (total >= COMPLETED_WEEK_HOURS) completedWeeks += 1;
   }
-  return (
-    Math.round(hoursSum * XP_PER_HOUR) +
-    shifts * SHIFT_LOG_XP +
-    workedDayCount * STREAK_DAY_XP +
-    longShifts * LONG_SHIFT_XP +
-    completedWeeks * WEEKLY_COMPLETION_XP
-  );
+  return {
+    hourly: Math.round(hoursSum * XP_PER_HOUR),
+    logging: shifts * SHIFT_LOG_XP,
+    streakDays: workedDayCount * STREAK_DAY_XP,
+    longShift: longShifts * LONG_SHIFT_XP,
+    weeklyCompletion: completedWeeks * WEEKLY_COMPLETION_XP,
+  };
+}
+
+function entryDerivedXP(entries, workedDayCount) {
+  const c = entryXPComponents(entries, workedDayCount);
+  return c.hourly + c.logging + c.streakDays + c.longShift + c.weeklyCompletion;
 }
 
 /**
@@ -468,14 +486,16 @@ function resolveTotalXP(gamification, userData, serverEntryXP) {
     storedBase === clientTotalXP
   ) {
     return {
-      totalXP: Math.min(MAX_SANE_TOTAL_XP, Math.max(0, serverEntryXP + storedExtras)),
+      trackedTotalXP: Math.min(MAX_SANE_TOTAL_XP, Math.max(0, serverEntryXP + storedExtras)),
+      clientTotalXP,
       extrasUpdate: null,
       xpSource: "entry-tracked",
     };
   }
 
   return {
-    totalXP: clientTotalXP,
+    trackedTotalXP: clientTotalXP,
+    clientTotalXP,
     extrasUpdate: {
       xpClientExtras: clientTotalXP - serverEntryXP,
       xpExtrasBaseTotal: clientTotalXP,
@@ -647,11 +667,12 @@ async function recomputeUserStats(db, uid, options = {}) {
   const totalHours = totalPaidHours(entries);
 
   const serverEntryXP = entryDerivedXP(entries, workedStrings.length);
-  const { totalXP, extrasUpdate, xpSource } = resolveTotalXP(
-    gamification,
-    userData,
-    serverEntryXP
-  );
+  const xpResolution = resolveTotalXP(gamification, userData, serverEntryXP);
+  const { extrasUpdate, xpSource } = xpResolution;
+  // Shadow mode publishes the client total exactly (pre-migration behavior);
+  // the tracked value is only logged until parity is proven on real traffic.
+  const totalXP =
+    XP_OWNERSHIP_MODE === "on" ? xpResolution.trackedTotalXP : xpResolution.clientTotalXP;
   // Admin-set floors (written only by the admin panel via adminSetUserProgression).
   // Both act as floors: the published value is never lower, but real XP/prestige
   // progression can still push above them.
@@ -897,6 +918,42 @@ async function recomputeUserStats(db, uid, options = {}) {
     (snapshotSanitize.cleared ? " (cleared inflating prestige snapshots)" : "")
   );
 
+  // Parity telemetry for the server-XP migration (see XP_OWNERSHIP_MODE).
+  // One line per recompute comparing what each side would publish; a level
+  // mismatch is the flip-blocking signal and logs as a warning.
+  if (XP_OWNERSHIP_MODE === "shadow") {
+    const clientLevel = Math.min(
+      CLIENT_MAX_LEVEL,
+      levelStateFromXP(xpResolution.clientTotalXP, prestige, snapshots)
+    );
+    const shadowLevel = Math.min(
+      CLIENT_MAX_LEVEL,
+      levelStateFromXP(xpResolution.trackedTotalXP, prestige, snapshots)
+    );
+    const clientBestStreak = Number(gamification.bestStreak) || 0;
+    const clientBreakdown = gamification.xpBreakdown;
+    const parts = [
+      `xpShadow uid=${uid}`,
+      `clientXP=${xpResolution.clientTotalXP}`,
+      `serverXP=${xpResolution.trackedTotalXP}`,
+      `drift=${xpResolution.trackedTotalXP - xpResolution.clientTotalXP}`,
+      `clientLevel=${clientLevel}`,
+      `serverLevel=${shadowLevel}`,
+      `prestige=${prestige}`,
+      `hours=${totalHours.toFixed(2)}`,
+      `bestStreak(client=${clientBestStreak}, server=${best})`,
+      `serverComponents=${JSON.stringify(entryXPComponents(entries, workedStrings.length))}`,
+    ];
+    if (clientBreakdown && typeof clientBreakdown === "object") {
+      parts.push(`clientComponents=${JSON.stringify(clientBreakdown)}`);
+    }
+    if (shadowLevel !== clientLevel) {
+      console.warn(`XP-SHADOW LEVEL MISMATCH ${parts.join(" ")}`);
+    } else {
+      console.log(parts.join(" "));
+    }
+  }
+
   await emitShiftActivityIfNeeded(
     db,
     uid,
@@ -1135,6 +1192,7 @@ module.exports = {
   updateGlobalLeaderboard,
   applyLeaderboardDeltaForUser,
   entryDerivedXP,
+  entryXPComponents,
   resolveTotalXP,
   totalXPAtLevelStart,
   buildSnapshotsForPrestige,
