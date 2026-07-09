@@ -3,6 +3,7 @@ import Combine
 import FirebaseAuth
 import FirebaseFirestore
 import FirebaseFunctions
+import os
 
 // MARK: - Cloud Sync Manager (Firestore)
 
@@ -124,11 +125,27 @@ final class CloudSyncManager: ObservableObject {
         let primaryCollection = entriesCollectionName()
         let primaryRef = db.collection("users").document(uid).collection(primaryCollection).document(entry.id.uuidString)
 
+        // Watchdog: on some devices the direct SDK write channel hangs — the
+        // setData completion below simply never fires (the documented reason
+        // clientUploadTimeEntriesBatch exists). Before this, a stalled save
+        // reached the cloud only at the NEXT DAILY repair, so a freshly logged
+        // shift didn't hit stats/the leaderboard for up to ~24h on an affected
+        // device. If the direct write hasn't confirmed within 5s, push this one
+        // entry through the batch callable (Admin SDK, bypasses the stuck
+        // channel). Idempotent by construction: same doc id, and the callable
+        // skips unchanged docs server-side, so whichever path lands second is
+        // a no-op.
+        let watchdog = DispatchWorkItem { [weak self] in
+            self?.uploadEntryViaBatchCallable(entry)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0, execute: watchdog)
+
         FirestoreOperationLog.write(operation: "saveEntry.\(primaryCollection)", uid: uid) { done in
             primaryRef.setData(payload, merge: true, completion: done)
         } completion: { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
+                watchdog.cancel()
                 switch result {
                 case .failure(let error):
                     self.queueEntryForSync(entry)
@@ -402,6 +419,34 @@ final class CloudSyncManager: ObservableObject {
                 }
                 let entries = snapshot?.documents.compactMap { self.entry(from: $0.data()) } ?? []
                 completion(.success(entries))
+            }
+        }
+    }
+
+    /// Fast-path fallback for a single stalled direct write (see the watchdog
+    /// in `saveEntry`): pushes one entry through clientUploadTimeEntriesBatch.
+    /// Never surfaces an error to the user — the direct write may still land,
+    /// and the entry remains covered by the daily repair either way.
+    private func uploadEntryViaBatchCallable(_ entry: WorkEntry) {
+        guard currentUID != nil, networkMonitor.isConnected else { return }
+        let payload = entryCallablePayload(entry)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await self.functions.httpsCallable("clientUploadTimeEntriesBatch").call(
+                    self.functionsCallablePayload(["entries": [payload]])
+                )
+                self.markEntryAsSynced(entry.id)
+                self.checkPendingChanges()
+                if FirebaseMigrationFlags.useServerStats {
+                    StatsListenerService.shared.markEntryWritePending()
+                }
+                self.scheduleStatsRecomputeDebounced()
+                AppLogger.db.info("saveEntry watchdog: direct write stalled >5s; entry \(entry.id.uuidString, privacy: .public) uploaded via batch callable")
+            } catch {
+                // Keep it queued so the daily repair still covers it.
+                self.queueEntryForSync(entry)
+                AppLogger.db.warning("saveEntry watchdog: batch fallback failed (\(error.localizedDescription, privacy: .public)); entry queued for repair")
             }
         }
     }
