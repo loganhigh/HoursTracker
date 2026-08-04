@@ -144,9 +144,6 @@ struct FriendProfileDetailView: View {
 
                 if friend.privacy.shareHours {
                     careerStatsCard(friend: friend)
-                    if friend.hasChequeDetail {
-                        chequeDetailCard(friend: friend, tier: tier)
-                    }
                 } else {
                     hiddenHoursCard
                 }
@@ -374,7 +371,7 @@ struct FriendProfileDetailView: View {
                 GridItem(.flexible(), spacing: 12)
             ], spacing: 12) {
                 FriendCareerStatTile(label: "All-Time Hours", value: hoursDisplay(friend.totalHours), icon: "clock.fill", tint: tier.primary)
-                FriendCareerStatTile(label: "This Cheque", value: hoursDisplay(friend.chequeHours), icon: "calendar", tint: tier.primary)
+                FriendCareerStatTile(label: "Hours This Week", value: hoursDisplay(friend.weeklyHours), icon: "calendar", tint: tier.primary)
                 FriendCareerStatTile(label: "Shifts This Week", value: "\(friend.weeklyShiftsLogged)", icon: "plus.circle.fill", tint: tier.primary)
                 FriendCareerStatTile(label: "Days This Week", value: "\(friend.weeklyDaysLogged)", icon: "chart.bar.fill", tint: tier.primary)
             }
@@ -471,171 +468,6 @@ struct FriendProfileDetailView: View {
                 FriendBadgeTile(badge: badge, tier: tier)
             }
         }
-    }
-
-    // MARK: - Cheque Detail
-
-    private func chequeDetailCard(friend: FriendProfile, tier: PrestigeTheme.Tier) -> some View {
-        let entries = chequeDays(for: friend)
-        let loggedEntries = entries.filter { $0.hours > 0 || $0.shifts > 0 }
-        let maxHours = loggedEntries.map(\.hours).max() ?? 1
-        let subtitle = chequeWindowSubtitle(start: friend.chequeWindowStart, cutoff: friend.chequeWindowCutoff)
-        let totalHours = entries.reduce(0.0) { $0 + $1.hours }
-        let totalShifts = entries.reduce(0) { $0 + $1.shifts }
-
-        return SectionCard(
-            title: "This Cheque",
-            subtitle: subtitle,
-            trailing: nil,
-            centerHeader: true
-        ) {
-            VStack(spacing: 8) {
-                if entries.isEmpty {
-                    Text("No shift details available yet.")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                } else {
-                    HStack {
-                        Text("\(loggedEntries.count) days • \(totalShifts) shifts • \(hoursDisplay(totalHours))")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AppTheme.Colors.subtext)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 4)
-
-                    ForEach(entries) { entry in
-                        chequeDayRow(entry: entry, maxHours: maxHours, tint: tier.primary)
-                    }
-                }
-            }
-            .padding(.vertical, 8)
-        }
-    }
-
-    /// Builds a full day-by-day list for the friend's cheque window, filling
-    /// in zero-hour days so the viewer sees the entire period to date.
-    private func chequeDays(for friend: FriendProfile) -> [FriendDailyEntry] {
-        let iso = FriendDailyEntry.isoFormatter
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-
-        guard
-            let start = iso.date(from: friend.chequeWindowStart),
-            let cutoff = iso.date(from: friend.chequeWindowCutoff)
-        else {
-            return friend.chequeDailySummary.sorted { $0.date < $1.date }
-        }
-
-        let hoursByDate = Dictionary(uniqueKeysWithValues: friend.chequeDailySummary.map { ($0.date, $0) })
-        var days: [FriendDailyEntry] = []
-        var cursor = cal.startOfDay(for: start)
-        let lastIncluded = min(cal.startOfDay(for: cutoff), today)
-
-        while cursor <= lastIncluded {
-            let key = iso.string(from: cursor)
-            if let existing = hoursByDate[key] {
-                days.append(existing)
-            } else {
-                days.append(FriendDailyEntry(date: key, hours: 0, shifts: 0))
-            }
-            guard let next = cal.date(byAdding: .day, value: 1, to: cursor) else { break }
-            cursor = next
-        }
-
-        return days
-    }
-
-    private func chequeDayRow(entry: FriendDailyEntry, maxHours: Double, tint: Color) -> some View {
-        let hasShift = entry.hours > 0 || entry.shifts > 0
-        return HStack(spacing: 10) {
-            // Day label
-            Group {
-                if let date = entry.calendarDate {
-                    VStack(alignment: .center, spacing: 1) {
-                        Text(dayAbbrev(date))
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(hasShift ? AppTheme.Colors.subtext : AppTheme.Colors.faint)
-                        Text(dayNum(date))
-                            .font(.system(size: 15, weight: .heavy, design: .rounded))
-                            .foregroundStyle(hasShift ? AppTheme.Colors.text : AppTheme.Colors.faint)
-                    }
-                } else {
-                    Text(entry.date)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                }
-            }
-            .frame(width: 32)
-
-            // Progress bar
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(tint.opacity(hasShift ? 0.12 : 0.05))
-                        .frame(height: 22)
-                    if hasShift {
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [tint.opacity(0.9), tint.opacity(0.6)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(
-                                width: max(8, geo.size.width * CGFloat(min(1, entry.hours / max(maxHours, 0.01)))),
-                                height: 22
-                            )
-                    }
-                }
-            }
-            .frame(height: 22)
-
-            // Hours + shift count
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(hasShift ? hoursDisplay(entry.hours) : "—")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(hasShift ? AppTheme.Colors.text : AppTheme.Colors.faint)
-                    .monospacedDigit()
-                if entry.shifts > 1 {
-                    Text("\(entry.shifts) shifts")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                }
-            }
-            .frame(width: 52, alignment: .trailing)
-        }
-        .padding(.vertical, 2)
-        .padding(.horizontal, 4)
-        .opacity(hasShift ? 1 : 0.55)
-    }
-
-    private func chequeWindowSubtitle(start: String, cutoff: String) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        f.locale = Locale(identifier: "en_US_POSIX")
-        let display = DateFormatter()
-        display.dateFormat = "MMM d"
-        guard
-            let s = f.date(from: start),
-            let e = f.date(from: cutoff)
-        else { return "Current pay period" }
-        return "\(display.string(from: s)) – \(display.string(from: e))"
-    }
-
-    private func dayAbbrev(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "EEE"
-        return f.string(from: date).uppercased()
-    }
-
-    private func dayNum(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "d"
-        return f.string(from: date)
     }
 
     private var hiddenHoursCard: some View {
