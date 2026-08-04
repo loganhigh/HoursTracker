@@ -147,6 +147,15 @@ enum PayCycleEngine {
     }
 
     /// The pay period / cheque that contains `date`.
+    ///
+    /// Rolls over the moment the cutoff passes: the day after cutoff belongs to
+    /// the NEXT accumulating cheque, even though the finished cheque hasn't been
+    /// paid yet. "This cheque" is always the one hours are currently landing on;
+    /// the just-cut-off cheque becomes "last cheque" (still showing its upcoming
+    /// payday). This matches the server's currentPayCycle in recompute.js —
+    /// which has always rolled at cutoff — so the hero card's server-computed
+    /// hours and the friend-facing cheque window stay in sync with the dates
+    /// this returns.
     static func cycle(containing date: Date, settings: PaySettings, calendar: Calendar = .current) -> PayCycle {
         let cal = calendar
         let d = cal.startOfDay(for: date)
@@ -163,7 +172,6 @@ enum PayCycleEngine {
             }
 
             while d >= cycle.end {
-                if d < cycle.payday { break }
                 cutoff = cal.date(byAdding: .day, value: span, to: cutoff)
                     ?? cutoff.addingTimeInterval(Double(span) * 86400)
                 cycle = makeCycleFromCutoff(cutoff, settings: settings, calendar: cal)
@@ -182,9 +190,6 @@ enum PayCycleEngine {
         }
 
         while d >= cycle.end {
-            if usesSavedCutoff(settings) && d < cycle.payday {
-                break
-            }
             payday = cal.date(byAdding: .day, value: span, to: payday)
                 ?? payday.addingTimeInterval(Double(span) * 86400)
             cycle = makeCycle(payday: payday, settings: settings, calendar: cal)
