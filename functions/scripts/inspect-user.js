@@ -88,6 +88,7 @@ async function main() {
   console.log("=== users/{uid} (legacy mirror) ===");
   console.log(JSON.stringify(pick(userDoc, [
     "level", "prestige", "totalXP", "totalHours",
+    "adminXPOffset",
     "adminFloorLevel", "adminFloorPrestige", "adminEquippedTitle",
     "statsComputeSeq", "displayName",
   ]), null, 2));

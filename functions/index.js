@@ -1377,7 +1377,14 @@ async function applyAdminProgressionSet(db, targetUid, opts = {}) {
   batch.set(gamRef, gamUpdate, { merge: true });
   batch.set(
     userRef,
-    { adminFloorLevel: FieldValue.delete(), adminFloorPrestige: FieldValue.delete() },
+    {
+      // Authoritative copy of the offset — clients never write users/{uid}
+      // (gamification-doc copies get stomped by old builds' anchor saves;
+      // resolveTotalXP re-adds this one when a push hasn't adopted it).
+      adminXPOffset: newOffset,
+      adminFloorLevel: FieldValue.delete(),
+      adminFloorPrestige: FieldValue.delete(),
+    },
     { merge: true }
   );
   await batch.commit();
@@ -1413,7 +1420,13 @@ async function clearAdminProgressionSet(db, targetUid) {
     { merge: true }
   );
   await userRef.set(
-    { adminFloorLevel: FieldValue.delete(), adminFloorPrestige: FieldValue.delete() },
+    {
+      // Clear the authoritative offset copy too, or resolveTotalXP would
+      // keep re-adding the cleared offset to every future client push.
+      adminXPOffset: FieldValue.delete(),
+      adminFloorLevel: FieldValue.delete(),
+      adminFloorPrestige: FieldValue.delete(),
+    },
     { merge: true }
   );
 }

@@ -176,12 +176,17 @@ async function main() {
   await patchDoc(
     token,
     `users/${uid}`,
-    ["level", "prestige", "totalXP", "adminFloorLevel", "adminFloorPrestige"],
-    // adminFloor* omitted -> deleted.
+    ["level", "prestige", "totalXP", "adminXPOffset", "adminFloorLevel", "adminFloorPrestige"],
+    // adminFloor* omitted -> deleted. adminXPOffset here is the AUTHORITATIVE
+    // copy (clients never write users/{uid}): resolveTotalXP re-adds it when a
+    // client push's xpBreakdown shows the device never adopted the offset, so
+    // old builds stomping the gamification-doc copy can no longer collapse the
+    // published level.
     {
       level: int(targetLevel),
       prestige: int(targetPrestige),
       totalXP: int(newTotal),
+      adminXPOffset: int(newOffset),
     }
   );
 

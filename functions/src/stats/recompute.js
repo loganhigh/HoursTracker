@@ -471,11 +471,42 @@ function entryDerivedXP(entries, workedDayCount) {
  *
  * Returns { totalXP, extrasUpdate } where extrasUpdate is a gamification-doc
  * patch to persist (null when calibration is already current).
+ *
+ * Un-adopted admin-offset defense: `users/{uid}.adminXPOffset` is the
+ * authoritative copy of the admin XP offset (written only by
+ * applyAdminProgressionSet / clearAdminProgressionSet / the repair script —
+ * clients never write it). Old client builds overwrite the gamification doc's
+ * `adminXPOffset` (and totalXP) with their local values on every anchors save,
+ * so a device that never adopted the offset pushes an offset-less total and
+ * stomps the doc's copy — dragging the published level down until the next
+ * repair (observed live: level 23 ↔ 5 flapping). The client's own pushed
+ * `xpBreakdown.adminOffset` says which offset its total was computed WITH, so
+ * when that disagrees with the authoritative offset the difference is re-added
+ * here before the total is adopted. Devices that have adopted the offset
+ * (breakdown matches) and accounts with no authoritative offset are untouched.
  */
 function resolveTotalXP(gamification, userData, serverEntryXP) {
+  const authoritativeOffset = Number(userData.adminXPOffset) || 0;
+  const breakdown =
+    gamification.xpBreakdown && typeof gamification.xpBreakdown === "object"
+      ? gamification.xpBreakdown
+      : null;
+  // Pre-xpBreakdown clients don't report the offset their total includes, so
+  // no correction is possible (and none is attempted) without a breakdown.
+  const clientReportedOffset = breakdown ? Number(breakdown.adminOffset) || 0 : null;
+  const offsetRepair =
+    authoritativeOffset !== 0 &&
+    clientReportedOffset != null &&
+    clientReportedOffset !== authoritativeOffset
+      ? authoritativeOffset - clientReportedOffset
+      : 0;
+
   const clientTotalXP = Math.min(
     MAX_SANE_TOTAL_XP,
-    Math.max(0, Number(gamification.totalXP) || Number(userData.totalXP) || 0)
+    Math.max(
+      0,
+      (Number(gamification.totalXP) || Number(userData.totalXP) || 0) + offsetRepair
+    )
   );
   const storedBase = Number(gamification.xpExtrasBaseTotal);
   const storedExtras = Number(gamification.xpClientExtras);
@@ -490,6 +521,8 @@ function resolveTotalXP(gamification, userData, serverEntryXP) {
       clientTotalXP,
       extrasUpdate: null,
       xpSource: "entry-tracked",
+      offsetRepair,
+      authoritativeOffset,
     };
   }
 
@@ -501,6 +534,8 @@ function resolveTotalXP(gamification, userData, serverEntryXP) {
       xpExtrasBaseTotal: clientTotalXP,
     },
     xpSource: "client-push",
+    offsetRepair,
+    authoritativeOffset,
   };
 }
 
@@ -901,6 +936,22 @@ async function recomputeUserStats(db, uid, options = {}) {
     );
   }
 
+  // Heal a stomped gamification adminXPOffset back to the authoritative copy
+  // (users/{uid}.adminXPOffset) so updated clients can adopt it from their
+  // gamification listener. Deliberately does NOT touch the doc's totalXP /
+  // xpBreakdown — those stay exactly what the client last pushed, and the
+  // offset correction is re-applied at read time in resolveTotalXP.
+  if (
+    xpResolution.authoritativeOffset !== 0 &&
+    (Number(gamification.adminXPOffset) || 0) !== xpResolution.authoritativeOffset
+  ) {
+    batch.set(
+      db.collection("users").doc(uid).collection("gamification").doc("current"),
+      { adminXPOffset: xpResolution.authoritativeOffset },
+      { merge: true }
+    );
+  }
+
   // Bail out if a newer recompute has already started since we began — it
   // will (or already did) produce a fresher result, so persisting ours now
   // would only reintroduce the exact staleness this fence exists to prevent.
@@ -920,6 +971,9 @@ async function recomputeUserStats(db, uid, options = {}) {
     `recomputeUserStats committed uid=${uid} level=${level} prestige=${prestige} ` +
     `totalXP=${totalXP} (${xpSource}, entryXP=${serverEntryXP}) ` +
     `totalHours=${totalHours.toFixed(2)} badges=${badgeCount}` +
+    (xpResolution.offsetRepair
+      ? ` (re-added un-adopted adminXPOffset ${xpResolution.offsetRepair})`
+      : "") +
     (snapshotSanitize.cleared ? " (cleared inflating prestige snapshots)" : "")
   );
 
