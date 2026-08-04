@@ -41,6 +41,7 @@ function paidHours(entry) {
 function toMs(value) {
   if (value == null) return null;
   if (value instanceof Timestamp) return value.toMillis();
+  if (value instanceof Date) return value.getTime();
   if (typeof value === "number") return value;
   if (typeof value === "object" && typeof value._seconds === "number") {
     return value._seconds * 1000 + Math.floor((value._nanoseconds || 0) / 1e6);
