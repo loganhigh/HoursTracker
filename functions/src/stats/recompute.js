@@ -491,22 +491,29 @@ function resolveTotalXP(gamification, userData, serverEntryXP) {
     gamification.xpBreakdown && typeof gamification.xpBreakdown === "object"
       ? gamification.xpBreakdown
       : null;
-  // Pre-xpBreakdown clients don't report the offset their total includes, so
-  // no correction is possible (and none is attempted) without a breakdown.
+  const rawTotalXP = Number(gamification.totalXP) || Number(userData.totalXP) || 0;
+  // The breakdown only describes a total the CLIENT wrote: a client push
+  // always writes totalXP equal to the exact sum of its own breakdown
+  // components. A total written by the admin panel or the repair script
+  // already includes the offset but leaves the breakdown stale — correcting
+  // it would double-add (observed live: 241371 + 62346 → level 25). So the
+  // correction only applies when the total matches the breakdown sum.
+  // Pre-xpBreakdown clients never match (no breakdown) and are untouched.
+  const breakdownSum = breakdown
+    ? Object.values(breakdown).reduce((s, v) => s + (Number(v) || 0), 0)
+    : null;
   const clientReportedOffset = breakdown ? Number(breakdown.adminOffset) || 0 : null;
   const offsetRepair =
     authoritativeOffset !== 0 &&
     clientReportedOffset != null &&
-    clientReportedOffset !== authoritativeOffset
+    clientReportedOffset !== authoritativeOffset &&
+    Math.round(breakdownSum) === Math.round(rawTotalXP)
       ? authoritativeOffset - clientReportedOffset
       : 0;
 
   const clientTotalXP = Math.min(
     MAX_SANE_TOTAL_XP,
-    Math.max(
-      0,
-      (Number(gamification.totalXP) || Number(userData.totalXP) || 0) + offsetRepair
-    )
+    Math.max(0, rawTotalXP + offsetRepair)
   );
   const storedBase = Number(gamification.xpExtrasBaseTotal);
   const storedExtras = Number(gamification.xpClientExtras);
