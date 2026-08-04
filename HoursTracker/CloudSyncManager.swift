@@ -948,13 +948,19 @@ final class CloudSyncManager: ObservableObject {
                     hadPrestigeOverride = consumed.hadPrestigeOverride
                 }
 
-                let profile = store.gamificationProfile
                 let cloudOffset = snapshot.flatMap { self.firestoreOptionalInt($0.data() ?? [:], key: "adminXPOffset") } ?? 0
-                // Never stomp an admin-set offset the device hasn't adopted yet.
-                if !hadLevelOverride && !hadPrestigeOverride && cloudOffset != 0 && profile.adminXPOffset == 0 {
-                    completion(.success(()))
-                    return
+                // A cloud admin offset this device hasn't adopted yet: adopt it
+                // and continue the push with the corrected profile. Returning
+                // early here (the old behavior) blocked EVERY anchors push —
+                // the doc's updateTime froze for days while local XP sat a
+                // whole offset below cloud, rendering the level-6 flash and
+                // the "level 23 but bar almost full" wobble, and freezing the
+                // friend-facing level as new XP was earned.
+                if !hadLevelOverride && !hadPrestigeOverride && cloudOffset != 0
+                    && store.gamificationProfile.adminXPOffset == 0 {
+                    store.syncAdminXPOffsetFromCloud(cloudOffset)
                 }
+                let profile = store.gamificationProfile
 
                 var payload: [String: Any] = [
                     "prestige": profile.prestige,

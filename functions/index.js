@@ -1342,7 +1342,15 @@ async function applyAdminProgressionSet(db, targetUid, opts = {}) {
   const targetStart = totalXPAtLevelStart(level, prestige, snapshots);
   const newOffset = targetStart - entryXP;
   const newTotal = entryXP + newOffset;
-  const highWater = Math.max(Number(g.highWaterPrestige) || 0, prestige);
+  // An explicit admin prestige set is authoritative in BOTH directions: it
+  // must also lower highWaterPrestige, or a downgrade leaves hwm above the
+  // real prestige and every client ratchets itself back up to the old value —
+  // level math then collapses and the account flaps between levels forever
+  // (observed live on early accounts).
+  const highWater =
+    targetPrestige != null
+      ? prestige
+      : Math.max(Number(g.highWaterPrestige) || 0, prestige);
 
   const gamUpdate = {
     prestige,
@@ -1392,10 +1400,10 @@ async function clearAdminProgressionSet(db, targetUid) {
       totalXP: entryXP,
       prestige: derived.prestige,
       prestigeFloor: derived.prestige,
-      highWaterPrestige: Math.max(
-        Number(g.highWaterPrestige) || 0,
-        derived.prestige
-      ),
+      // Reset-to-XP is authoritative: hwm must follow the derived prestige
+      // down, or clients ratchet back up to the stale high-water mark (same
+      // divergence applyAdminProgressionSet guards against).
+      highWaterPrestige: derived.prestige,
       prestigeXPSnapshots:
         derived.snapshots.length > 0 ? derived.snapshots : FieldValue.delete(),
       levelOverride: FieldValue.delete(),

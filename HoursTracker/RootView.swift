@@ -201,7 +201,6 @@ private struct HoursHomeView: View {
     @State private var showXPGain = false
     @State private var showLevelUp = false
     @State private var levelUpNumber = 0
-    @State private var previousXP = 0
     /// Highest level ever celebrated with a Level Up card, per prestige run.
     /// Local totalXP includes daily/weekly challenge XP that resets at day/week
     /// boundaries, so the computed level can dip overnight and re-cross the
@@ -733,16 +732,16 @@ private struct HoursHomeView: View {
                 onDismiss: { showingPrestigeConfetti = false }
             )
         }
-        .onChange(of: store.gamificationProfile.totalXP) { oldXP, newXP in
-            let delta = newXP - previousXP
-            if delta > 0 && previousXP > 0 {
-                xpGainText = "+\(delta) XP"
-                withAnimation(.easeOut(duration: 0.2)) { showXPGain = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) {
-                    withAnimation(.easeIn(duration: 0.4)) { showXPGain = false }
-                }
+        .onChange(of: store.xpGainEvent) { _, event in
+            // Only fires for XP earned by a real user action (shift logged /
+            // updated) — cloud pulls and pull-to-refresh recalcs never emit
+            // this event, so no more phantom "+XP" toasts on refresh.
+            guard let event else { return }
+            xpGainText = "+\(event.amount) XP"
+            withAnimation(.easeOut(duration: 0.2)) { showXPGain = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) {
+                withAnimation(.easeIn(duration: 0.4)) { showXPGain = false }
             }
-            previousXP = newXP
         }
         .onChange(of: store.displayedLevel) { _, _ in
             evaluateLevelUpCelebration(celebrate: true)
@@ -762,7 +761,6 @@ private struct HoursHomeView: View {
             checkPersonalBest()
         }
         .onAppear {
-            previousXP = store.gamificationProfile.totalXP
             // Baseline the celebration ratchet silently — never celebrate a
             // level the user merely re-loaded the app at.
             evaluateLevelUpCelebration(celebrate: false)

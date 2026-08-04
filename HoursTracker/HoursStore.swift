@@ -57,6 +57,14 @@ final class HoursStore: ObservableObject {
     @Published var awardEntries: [AwardEntry] = []
     @Published var gamificationProfile: GamificationProfile = .defaultProfile
     @Published var gamificationEventMessage: String?
+    /// Fires only when a *user action* (logging/editing a shift) earned XP —
+    /// never for sync/refresh recalcs, whose transient dips-and-restores used
+    /// to trigger a phantom "+XP" toast on every pull-to-refresh.
+    struct XPGainEvent: Equatable {
+        let id: UUID
+        let amount: Int
+    }
+    @Published var xpGainEvent: XPGainEvent?
     @Published private(set) var isLoaded = false
     /// DEAD legacy admin floor (`adminFloorLevel`). No display or publish path
     /// reads it anymore — level has ONE canonical source: the server-computed
@@ -262,8 +270,19 @@ final class HoursStore: ObservableObject {
     /// Merges prestige / progression anchors pulled from the private
     /// `users/{uid}/gamification/current` doc so a second device (e.g. iPad)
     /// picks up the same prestige level as the user's phone.
+    /// Cloud gamification anchors seen this session (prestige, snapshots,
+    /// adminXPOffset). `loadAsync` reads the persisted profile on a background
+    /// thread; if the cloud listeners win the race, the disk copy it read is
+    /// stale (a fresh install reads `.defaultProfile`), and assigning it used to
+    /// clobber the adopted anchors — XP then recomputed with offset 0 /
+    /// prestige 0 and maxed the level bar for the whole session ("level 23 but
+    /// almost at 24"). After the disk profile loads, these anchors are
+    /// re-applied on top so cloud truth always wins for the fields it owns.
+    private(set) var lastSeenCloudGamificationAnchors: RemoteGamificationAnchors?
+
     func applyRemoteGamificationAnchors(_ anchors: RemoteGamificationAnchors?) {
         guard let anchors else { return }
+        lastSeenCloudGamificationAnchors = anchors
 
         let cloudPrestige = anchors.prestige
         let localPrestige = gamificationProfile.prestige
@@ -280,11 +299,16 @@ final class HoursStore: ObservableObject {
         let cloudTitle = anchors.equippedTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard shouldApplyCloud else {
-            // Even if we don't apply full anchors, always ratchet the floor up
-            // to the cloud high-water mark so corrupted accounts self-heal.
+            // Even if we don't apply full anchors, ratchet the floor up to the
+            // cloud high-water mark so corrupted accounts self-heal — but ONLY
+            // when the cloud prestige itself looks corrupted (0). When the
+            // cloud doc carries an explicit positive prestige below hwm (an
+            // admin downgrade / repair), hwm is stale history, not truth:
+            // ratcheting to it forced accounts up to a prestige their XP can't
+            // support, collapsing the level (the "flaps between levels" bug).
             var didUpdate = false
             let hwm = anchors.highWaterPrestige
-            if hwm > (gamificationProfile.prestigeFloor ?? 0) {
+            if cloudPrestige <= 0, hwm > (gamificationProfile.prestigeFloor ?? 0) {
                 gamificationProfile.prestigeFloor = hwm
                 if hwm > gamificationProfile.prestige {
                     gamificationProfile.prestige = hwm
@@ -302,14 +326,25 @@ final class HoursStore: ObservableObject {
                 didUpdate = true
             }
             if didUpdate {
-                recalculateGamification(eventHint: nil)
+                // Never recompute against an empty entry set (cold start,
+                // anchors arrive before entries): the prestige hour-snapshot
+                // rollback would see 0 paid hours and pop prestige to 0.
+                if isLoaded || !entries.isEmpty {
+                    recalculateGamification(eventHint: nil)
+                }
                 saveLocallyOnly()
             }
             return
         }
 
         gamificationProfile.prestige = cloudPrestige
-        gamificationProfile.prestigeFloor = max(gamificationProfile.prestigeFloor ?? 0, cloudPrestige, anchors.highWaterPrestige)
+        // The cloud doc is authoritative here (shouldApplyCloud): SET the
+        // floor to its prestige rather than max-ing with the old local floor
+        // or hwm, so admin downgrades actually stick. hwm only backstops a
+        // cloud prestige corrupted to 0.
+        gamificationProfile.prestigeFloor = cloudPrestige > 0
+            ? cloudPrestige
+            : max(cloudPrestige, anchors.highWaterPrestige)
         if !anchors.prestigeXPSnapshots.isEmpty {
             gamificationProfile.prestigeXPSnapshots = anchors.prestigeXPSnapshots
         }
@@ -328,6 +363,17 @@ final class HoursStore: ObservableObject {
         }
         if let cloudUpdatedAt = anchors.updatedAt {
             UserDefaults.standard.set(cloudUpdatedAt, forKey: gamificationCloudSyncedAtKey)
+        }
+        // Recompute level/xpIntoLevel from the adopted anchors immediately.
+        // Without this, the profile keeps whatever level state the previous
+        // recalc produced (possibly computed with offset 0 / prestige 0 if the
+        // entries listener beat the anchors), and nothing corrects the bar
+        // until an unrelated recalc happens to run. Skipped while entries are
+        // still empty (cold start) — recomputing with 0 paid hours would pop
+        // prestige via the hour-snapshot rollback; the recalc that follows
+        // entry load covers that case.
+        if isLoaded || !entries.isEmpty {
+            recalculateGamification(eventHint: nil)
         }
         saveLocallyOnly()
     }
@@ -452,10 +498,41 @@ final class HoursStore: ObservableObject {
         gamificationProfile.prestige
     }
 
-    /// Gamification snapshot for UI cards.
+    /// Gamification snapshot for UI cards. Carries `displayedLevel` (server-
+    /// preferred, with the cold-launch cache) instead of the raw local level:
+    /// the Home level strip / progress card render this, and the local level
+    /// is briefly wrong on cold start until cloud anchors (admin XP offset,
+    /// prestige snapshots) finish applying — users saw a "level 6 flash"
+    /// before it snapped to the real level.
     func displayedGamificationProfile() -> GamificationProfile {
         var profile = gamificationProfile
+        profile.level = displayedLevel
         profile.prestige = displayedPrestige
+        // When local XP disagrees with the displayed (server) level — e.g. the
+        // cloud admin XP offset hasn't been adopted yet, so local XP is tens
+        // of thousands below the server's — the local bar fields belong to the
+        // WRONG level: a level-5 bar at 92% under a "LVL 23" label reads as
+        // "almost level 24". Derive the bar from the server's own XP so the
+        // bar always matches the label; park it at the level start if server
+        // XP isn't available yet.
+        if profile.level != gamificationProfile.level {
+            if let server = StatsListenerService.shared.lifetimeStats {
+                let state = GamificationLevelCalculator.levelState(
+                    for: server.totalXP,
+                    prestige: server.prestige,
+                    snapshots: GamificationLevelCalculator.buildSnapshotsForPrestige(server.prestige)
+                )
+                if state.level == profile.level {
+                    profile.xpIntoCurrentLevel = state.xpIntoLevel
+                    profile.xpForNextLevel = state.xpForNext
+                    profile.canPrestige = state.canPrestige
+                    return profile
+                }
+            }
+            profile.xpIntoCurrentLevel = 0
+            profile.xpForNextLevel = GamificationLevelCalculator.xpRequiredForLevel(profile.level)
+            profile.canPrestige = false
+        }
         return profile
     }
 
@@ -463,7 +540,11 @@ final class HoursStore: ObservableObject {
     func syncAdminXPOffsetFromCloud(_ offset: Int) {
         guard offset != gamificationProfile.adminXPOffset else { return }
         gamificationProfile.adminXPOffset = offset
-        recalculateGamification(eventHint: nil)
+        // Never recompute against an empty entry set (cold start) — the
+        // prestige hour-snapshot rollback would pop prestige to 0.
+        if isLoaded || !entries.isEmpty {
+            recalculateGamification(eventHint: nil)
+        }
         saveLocallyOnly()
     }
 
@@ -477,14 +558,17 @@ final class HoursStore: ObservableObject {
     /// level-ups endlessly. The server-computed offset is the single source of
     /// truth; local XP earned since simply stacks on top of it.
     func applyCloudGamificationProgression(_ anchors: RemoteGamificationAnchors) {
+        lastSeenCloudGamificationAnchors = anchors
         var dirty = false
         if anchors.prestige != gamificationProfile.prestige {
             gamificationProfile.prestige = anchors.prestige
-            gamificationProfile.prestigeFloor = max(
-                gamificationProfile.prestigeFloor ?? 0,
-                anchors.prestige,
-                anchors.highWaterPrestige
-            )
+            // Admin sets are authoritative in both directions — SET the floor
+            // to the cloud prestige (don't max with the old floor/hwm), or a
+            // downgrade never sticks locally and the level math flaps. hwm
+            // only backstops a cloud prestige corrupted to 0.
+            gamificationProfile.prestigeFloor = anchors.prestige > 0
+                ? anchors.prestige
+                : max(anchors.prestige, anchors.highWaterPrestige)
             dirty = true
         }
         if !anchors.prestigeXPSnapshots.isEmpty,
@@ -736,6 +820,7 @@ final class HoursStore: ObservableObject {
         awardEntries.removeAll()
         gamificationProfile = .defaultProfile
         gamificationEventMessage = nil
+        lastSeenCloudGamificationAnchors = nil
         isLoaded = false
         UserDefaults.standard.removeObject(forKey: entriesKey)
         UserDefaults.standard.removeObject(forKey: settingsKey)
@@ -1100,6 +1185,13 @@ final class HoursStore: ObservableObject {
 
         if let event = GamificationEngine.eventMessage(previous: previous, current: gamificationProfile, hint: eventHint) {
             gamificationEventMessage = event
+        }
+
+        // Only hinted recalcs (real user actions) surface the floating +XP
+        // toast; hint-less recalcs come from cloud pulls/settings syncs where
+        // XP can transiently dip and restore without anything being earned.
+        if eventHint != nil, gamificationProfile.totalXP > previous.totalXP {
+            xpGainEvent = XPGainEvent(id: UUID(), amount: gamificationProfile.totalXP - previous.totalXP)
         }
     }
 
@@ -1672,7 +1764,18 @@ final class HoursStore: ObservableObject {
                     self.payHistoryEntries = loadedPayHistory.sorted { $0.year < $1.year }
                     self.certificateEntries = loadedCertificates
                     self.awardEntries = loadedAwards
+                    // The disk copy was read on a background thread BEFORE the
+                    // cloud listeners ran, so it can be stale (a fresh install
+                    // reads `.defaultProfile`). Load it for its disk-only fields
+                    // (badges, battle pass, streak history), then re-apply any
+                    // cloud anchors seen this session so cloud truth wins for
+                    // prestige/snapshots/adminXPOffset — without this, the stale
+                    // disk copy wiped the adopted anchors and the level bar
+                    // maxed out for the rest of the session.
                     self.gamificationProfile = loadedGamification
+                    if let anchors = self.lastSeenCloudGamificationAnchors {
+                        self.applyRemoteGamificationAnchors(anchors)
+                    }
                     self.recalculateGamification(eventHint: nil)
                     self.saveLocallyOnly()
                     // Firestore listener applied entries before loadAsync finished,
@@ -1690,7 +1793,12 @@ final class HoursStore: ObservableObject {
                     self.payHistoryEntries = loadedPayHistory.sorted { $0.year < $1.year }
                     self.certificateEntries = loadedCertificates
                     self.awardEntries = loadedAwards
+                    // Same stale-disk-read guard as the branch above: re-apply
+                    // cloud anchors adopted mid-load over the persisted profile.
                     self.gamificationProfile = loadedGamification
+                    if let anchors = self.lastSeenCloudGamificationAnchors {
+                        self.applyRemoteGamificationAnchors(anchors)
+                    }
                     self.recalculateGamification(eventHint: nil)
                     if rollover.didArchive {
                         self.save()
