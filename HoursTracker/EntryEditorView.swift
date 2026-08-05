@@ -1,9 +1,28 @@
 import SwiftUI
 
+// MARK: - Entry editor (Phase 4 rebuild)
+//
+// One fast, quiet editor for both add and edit. Presets fill the form
+// instantly (add mode), Start/End rows expand inline native pickers, breaks
+// are one tap, and a live summary card shows the hour breakdown as you type.
+// The save/delete paths into HoursStore are unchanged.
+
 struct EntryEditorView: View {
     enum Mode {
         case add
         case edit(WorkEntry)
+    }
+
+    enum ShiftKind: Hashable {
+        case work, offDay, holiday
+    }
+
+    enum EditorPreset: Hashable {
+        case yesterday, usual, custom
+    }
+
+    private enum ExpandableField: Hashable {
+        case date, start, end
     }
 
     @Environment(\.dismiss) private var dismiss
@@ -18,58 +37,28 @@ struct EntryEditorView: View {
 
     /// Free-form label for the location and/or job of the day. Stored in `WorkEntry.locationName`.
     @State private var locationLabel: String
+    @State private var notes: String
 
-    // Off day
-    @State private var isOffDay: Bool
+    @State private var shiftKind: ShiftKind
     @State private var offDayReason: String
 
-    // Add flow
-    @State private var addStep: AddEntryStep = .date
-    @State private var glowPulse: CGFloat = 0.4
-    @State private var iconScale: CGFloat = 0.82
-    @State private var contentOpacity: Double = 0
-    @State private var contentOffset: CGFloat = 18
+    @State private var selectedPreset: EditorPreset = .custom
+    @State private var expandedField: ExpandableField?
+    @State private var showCustomBreak: Bool
+    @State private var isApplyingPreset = false
 
-    // Edit flow
-    @State private var showingDatePicker = false
-
-    // Shared
     @State private var showDeleteConfirm = false
     @State private var showToast = false
     @State private var toastMessage = ""
     @State private var showSaveSuccess = false
 
-    private static let offDayReasons = ["Sick", "Appointment", "Vacation", "Holiday", "Personal", "Other"]
+    private let yesterdayPreset: EntryShiftPreset?
+    private let usualPreset: EntryShiftPreset?
 
-    private enum AddEntryStep: Int, CaseIterable {
-        case date
-        case time
-        case location
+    private static let offDayReasons = ["Sick", "Appointment", "Vacation", "Personal", "Other"]
+    private static let holidayReason = "Holiday"
 
-        var icon: String {
-            switch self {
-            case .date: return "calendar"
-            case .time: return "clock.fill"
-            case .location: return "briefcase.fill"
-            }
-        }
-
-        var title: String {
-            switch self {
-            case .date: return "Which day?"
-            case .time: return "What were your hours?"
-            case .location: return "Location & job"
-            }
-        }
-
-        var message: String {
-            switch self {
-            case .date: return "Pick the date for this shift."
-            case .time: return "Set your start, end, and break — or mark the day off."
-            case .location: return "Add an optional label like “Landscaping”."
-            }
-        }
-    }
+    // MARK: - Init (same signature as before — all call sites unchanged)
 
     init(store: HoursStore, mode: Mode) {
         self.store = store
@@ -80,8 +69,7 @@ struct EntryEditorView: View {
 
         switch mode {
         case .add:
-            let d = cal.startOfDay(for: now)
-            _date = State(initialValue: d)
+            _date = State(initialValue: cal.startOfDay(for: now))
 
             let mostRecentEntry = store.entries.filter { !$0.isOffDay }.sorted { $0.date > $1.date }.first
             let defaultStartHour = mostRecentEntry.map { cal.component(.hour, from: $0.start) } ?? 7
@@ -94,9 +82,13 @@ struct EntryEditorView: View {
             _breakMinutes = State(initialValue: mostRecentEntry?.breakMinutes ?? 0)
 
             _locationLabel = State(initialValue: "")
-
-            _isOffDay = State(initialValue: false)
+            _notes = State(initialValue: "")
+            _shiftKind = State(initialValue: .work)
             _offDayReason = State(initialValue: Self.offDayReasons[0])
+            _showCustomBreak = State(initialValue: false)
+
+            yesterdayPreset = EntryShiftPreset.yesterday(in: store.entries, calendar: cal)
+            usualPreset = EntryShiftPreset.usual(in: store.entries, calendar: cal)
 
         case .edit(let entry):
             _date = State(initialValue: entry.date)
@@ -105,489 +97,313 @@ struct EntryEditorView: View {
             _breakMinutes = State(initialValue: entry.breakMinutes)
 
             _locationLabel = State(initialValue: entry.locationName)
+            _notes = State(initialValue: entry.notes)
 
-            _isOffDay = State(initialValue: entry.isOffDay)
+            if entry.isOffDay {
+                _shiftKind = State(initialValue: entry.offDayReason == Self.holidayReason ? .holiday : .offDay)
+            } else {
+                _shiftKind = State(initialValue: .work)
+            }
             _offDayReason = State(initialValue: Self.offDayReasons.contains(entry.offDayReason) ? entry.offDayReason : Self.offDayReasons[0])
+            _showCustomBreak = State(initialValue: entry.breakMinutes > 0 && ![15, 30, 45, 60].contains(entry.breakMinutes))
+
+            yesterdayPreset = nil
+            usualPreset = nil
         }
     }
+
+    private var isEditing: Bool {
+        if case .edit = mode { return true }
+        return false
+    }
+
+    // MARK: - Body
 
     var body: some View {
-        switch mode {
-        case .add:
-            addEntryWizard
-        case .edit:
-            editEntryForm
-        }
-    }
-
-    // MARK: - Add wizard
-
-    private var addEntryWizard: some View {
         ZStack {
-            AppTheme.Colors.bg.ignoresSafeArea()
-
-            wizardAmbientGlow
+            AppColors.bg.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                wizardTopBar
-                    .padding(.horizontal, 20)
-                    .padding(.top, 12)
-
-                wizardStepDots
-                    .padding(.top, 28)
-                    .padding(.bottom, 12)
+                header
+                    .padding(.horizontal, AppSpacing.lg)
+                    .padding(.top, AppSpacing.lg)
+                    .padding(.bottom, AppSpacing.sm)
 
                 ScrollView {
-                    VStack(spacing: 24) {
-                        wizardStepHeader
-                        wizardStepFields
+                    VStack(spacing: AppSpacing.md) {
+                        if !isEditing { presetsRow }
+                        dateCard
+                        if shiftKind == .work {
+                            timesCard
+                            EntryBreakSection(breakMinutes: $breakMinutes, showCustom: $showCustomBreak)
+                        }
+                        EntryShiftTypeSection(kind: $shiftKind, offDayReason: $offDayReason, reasons: Self.offDayReasons)
+                        if shiftKind == .work { summarySection }
+                        EntryDetailsSection(locationLabel: $locationLabel, notes: $notes)
+                        if isEditing {
+                            EntryDeleteRow { showDeleteConfirm = true }
+                        }
                     }
-                    .padding(.horizontal, 28)
-                    .padding(.top, 8)
-                    .padding(.bottom, 24)
-                    .opacity(contentOpacity)
-                    .offset(y: contentOffset)
-                    .id(addStep)
+                    .padding(.horizontal, AppSpacing.lg)
+                    .padding(.top, AppSpacing.xxs)
+                    .padding(.bottom, AppSpacing.xl)
                 }
                 .scrollDismissesKeyboard(.interactively)
 
-                wizardBottomButtons
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 44)
+                footer
+                    .padding(.horizontal, AppSpacing.lg)
+                    .padding(.top, AppSpacing.sm)
+                    .padding(.bottom, AppSpacing.xl)
             }
         }
-        .onAppear {
-            glowPulse = 1.0
-            animateWizardContentIn()
-        }
         .toast(isPresented: $showToast, message: toastMessage, showsCheckmark: false)
-    }
-
-    private var wizardAmbientGlow: some View {
-        ZStack {
-            Circle()
-                .fill(AppTheme.Colors.accent.opacity(0.12))
-                .frame(width: 340, height: 340)
-                .blur(radius: 80)
-                .offset(x: -90, y: -220)
-                .scaleEffect(glowPulse)
-            Circle()
-                .fill(AppTheme.Colors.accentHighlight.opacity(0.08))
-                .frame(width: 280, height: 280)
-                .blur(radius: 80)
-                .offset(x: 110, y: 180)
-                .scaleEffect(glowPulse)
+        .alert("Delete this shift?", isPresented: $showDeleteConfirm) {
+            Button("Delete Shift", role: .destructive) { deleteEntry() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This can't be undone.")
         }
-        .ignoresSafeArea()
-        .animation(.easeInOut(duration: 3.5).repeatForever(autoreverses: true), value: glowPulse)
+        .onChange(of: date) { _, newDate in
+            let applying = isApplyingPreset
+            isApplyingPreset = true
+            start = merge(day: newDate, with: start)
+            end = merge(day: newDate, with: end)
+            DispatchQueue.main.async { isApplyingPreset = applying }
+        }
+        .onChange(of: start) { _, _ in invalidatePresetIfNeeded() }
+        .onChange(of: end) { _, _ in invalidatePresetIfNeeded() }
+        .onChange(of: breakMinutes) { _, _ in invalidatePresetIfNeeded() }
     }
 
-    private var wizardTopBar: some View {
-        HStack {
+    // MARK: - Header / footer
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                if isEditing {
+                    Text("Editing")
+                        .appText(.eyebrow)
+                        .foregroundStyle(AppColors.accent)
+                }
+                Text(isEditing ? "Edit Shift" : "Add Shift")
+                    .appText(.title)
+                    .foregroundStyle(AppColors.text)
+            }
             Spacer()
             Button("Cancel") {
                 Haptics.lightTap()
                 dismiss()
             }
-            .font(.system(size: 16, weight: .semibold, design: .rounded))
-            .foregroundStyle(AppTheme.Colors.subtext)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 8)
+            .appText(.subheadline)
+            .foregroundStyle(AppColors.subtext)
+            .padding(.vertical, AppSpacing.xxs)
         }
     }
 
-    private var wizardStepDots: some View {
-        HStack(spacing: 8) {
-            ForEach(AddEntryStep.allCases, id: \.rawValue) { step in
-                Capsule()
-                    .fill(
-                        step.rawValue == addStep.rawValue
-                            ? LinearGradient(
-                                colors: [AppTheme.Colors.accent, AppTheme.Colors.accentHighlight],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                            : LinearGradient(
-                                colors: [AppTheme.Colors.stroke, AppTheme.Colors.stroke],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                    )
-                    .frame(width: step.rawValue == addStep.rawValue ? 28 : 8, height: 8)
-                    .animation(.spring(response: 0.4, dampingFraction: 0.7), value: addStep)
-            }
+    private var footer: some View {
+        VStack(spacing: AppSpacing.sm) {
+            EntryValidationLine(isValid: canSave, message: validationMessage)
+            Button(isEditing ? "Save Changes" : "Save Shift") { save() }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(!canSave || showSaveSuccess)
+                .opacity(canSave ? 1 : 0.55)
         }
     }
 
-    private var wizardStepHeader: some View {
-        VStack(spacing: 28) {
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [AppTheme.Colors.accent.opacity(0.22), AppTheme.Colors.accentHighlight.opacity(0.12)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 120, height: 120)
-                    .blur(radius: 2)
+    // MARK: - Presets (add mode only)
 
-                Circle()
-                    .fill(AppTheme.Colors.card2)
-                    .frame(width: 96, height: 96)
-                    .overlay(
-                        Circle()
-                            .stroke(
-                                LinearGradient(
-                                    colors: [AppTheme.Colors.accent.opacity(0.55), AppTheme.Colors.accentHighlight.opacity(0.45)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1.5
-                            )
-                    )
-
-                Image(systemName: addStep.icon)
-                    .font(.system(size: 42, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [AppTheme.Colors.accent, AppTheme.Colors.accentHighlight],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+    private var presetsRow: some View {
+        HStack(spacing: AppSpacing.xs) {
+            if let yesterdayPreset {
+                EntryPresetCard(
+                    title: "Same as yesterday",
+                    caption: yesterdayPreset.caption,
+                    isSelected: selectedPreset == .yesterday
+                ) { apply(preset: yesterdayPreset, kind: .yesterday) }
             }
-            .scaleEffect(iconScale)
-
-            VStack(spacing: 14) {
-                Text(addStep.title)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.text)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text(addStep.message)
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                    .fixedSize(horizontal: false, vertical: true)
+            if let usualPreset {
+                EntryPresetCard(
+                    title: "Usual shift",
+                    caption: usualPreset.caption,
+                    isSelected: selectedPreset == .usual
+                ) { apply(preset: usualPreset, kind: .usual) }
             }
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    @ViewBuilder
-    private var wizardStepFields: some View {
-        switch addStep {
-        case .date:
-            wizardCard {
-                DatePicker(
-                    "Date",
-                    selection: $date,
-                    in: ...Date(),
-                    displayedComponents: .date
-                )
-                .datePickerStyle(.graphical)
-                .labelsHidden()
-                .tint(AppTheme.Colors.accent)
-                .onChange(of: date) { _, newDate in
-                    start = merge(day: newDate, with: start)
-                    end = merge(day: newDate, with: end)
-                }
-            }
-
-        case .time:
-            VStack(spacing: 12) {
-                wizardCard {
-                    VStack(spacing: 0) {
-                        wizardTimeRow(title: "Start", selection: $start)
-                        wizardDivider
-                        wizardTimeRow(title: "End", selection: $end)
-                        wizardDivider
-                        HStack {
-                            Text("Break")
-                                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                .foregroundStyle(AppTheme.Colors.text)
-                            Spacer()
-                            Stepper(value: $breakMinutes, in: 0...240, step: 5) {
-                                Text("\(breakMinutes) min")
-                                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(AppTheme.Colors.accent)
-                                    .monospacedDigit()
-                            }
-                            .tint(AppTheme.Colors.accent)
-                        }
-                        .padding(.vertical, 12)
-                    }
-                }
-
-                if !isValid {
-                    Text("End time must be after start time (or an overnight shift).")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(AppTheme.Colors.danger)
-                        .multilineTextAlignment(.center)
-                }
-            }
-
-        case .location:
-            wizardCard {
-                TextField("Location or job (optional)", text: $locationLabel, axis: .vertical)
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.text)
-                    .lineLimit(1...3)
-                    .tint(AppTheme.Colors.accent)
-            }
-        }
-    }
-
-    private var wizardBottomButtons: some View {
-        VStack(spacing: 12) {
-            PrimaryButton(
-                wizardPrimaryTitle,
-                systemImage: addStep == .location ? "checkmark" : "chevron.right",
-                isSuccess: showSaveSuccess && addStep == .location
+            EntryPresetCard(
+                title: "Custom",
+                caption: "Set your own times",
+                isSelected: selectedPreset == .custom
             ) {
-                handleWizardPrimary()
-            }
-            .disabled(!canAdvanceFromCurrentStep || showSaveSuccess)
-
-            if addStep != .date {
-                Button {
-                    Haptics.lightTap()
-                    goBackWizardStep()
-                } label: {
-                    Text("Back")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                Haptics.lightTap()
+                withAnimation(AppMotion.animation(AppMotion.Spring.snappy, reduceMotion: reduceMotion)) {
+                    selectedPreset = .custom
                 }
-                .buttonStyle(.plain)
             }
         }
     }
 
-    private var wizardPrimaryTitle: String {
-        addStep == .location ? "Save Entry" : "Next"
-    }
-
-    private var canAdvanceFromCurrentStep: Bool {
-        switch addStep {
-        case .date:
-            return true
-        case .time:
-            return canSave
-        case .location:
-            return canSave
-        }
-    }
-
-    private func handleWizardPrimary() {
+    private func apply(preset: EntryShiftPreset, kind: EditorPreset) {
         Haptics.lightTap()
-        switch addStep {
-        case .date:
-            advanceWizardStep()
-        case .time:
-            guard canSave else {
-                Haptics.error()
-                toastMessage = paidHours > 48 ? "Shift too long (max 48 hours)" : "Invalid hours"
-                showToast = true
-                return
-            }
-            advanceWizardStep()
-        case .location:
-            save()
+        isApplyingPreset = true
+        withAnimation(AppMotion.animation(AppMotion.Spring.snappy, reduceMotion: reduceMotion)) {
+            selectedPreset = kind
+            shiftKind = .work
+            start = merge(day: date, with: preset.start)
+            end = merge(day: date, with: preset.end)
+            breakMinutes = preset.breakMinutes
+            showCustomBreak = preset.breakMinutes > 0 && ![15, 30, 45, 60].contains(preset.breakMinutes)
         }
+        DispatchQueue.main.async { isApplyingPreset = false }
     }
 
-    private func advanceWizardStep() {
-        guard let next = AddEntryStep(rawValue: addStep.rawValue + 1) else { return }
-        withAnimation(.easeOut(duration: 0.15)) {
-            contentOpacity = 0
-            contentOffset = 12
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            addStep = next
-            animateWizardContentIn()
-        }
+    private func invalidatePresetIfNeeded() {
+        guard !isApplyingPreset, selectedPreset != .custom else { return }
+        selectedPreset = .custom
     }
 
-    private func goBackWizardStep() {
-        guard let previous = AddEntryStep(rawValue: addStep.rawValue - 1) else { return }
-        withAnimation(.easeOut(duration: 0.15)) {
-            contentOpacity = 0
-            contentOffset = -12
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            addStep = previous
-            animateWizardContentIn()
-        }
-    }
+    // MARK: - Date / times
 
-    private func animateWizardContentIn() {
-        iconScale = 0.82
-        contentOpacity = 0
-        contentOffset = 18
-
-        withAnimation(.spring(response: 0.55, dampingFraction: 0.72)) {
-            iconScale = 1.0
-        }
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.82).delay(0.08)) {
-            contentOpacity = 1.0
-            contentOffset = 0
-        }
-    }
-
-    private func wizardCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(AppTheme.Colors.card2)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [AppTheme.Colors.accent.opacity(0.35), AppTheme.Colors.stroke],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1.5
-                            )
-                    )
-            )
-    }
-
-    private func wizardTimeRow(title: String, selection: Binding<Date>) -> some View {
-        HStack {
-            Text(title)
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.text)
-            Spacer()
-            DatePicker("", selection: selection, displayedComponents: .hourAndMinute)
-                .labelsHidden()
-                .tint(AppTheme.Colors.accent)
-        }
-        .padding(.vertical, 8)
-    }
-
-    private var wizardDivider: some View {
-        Rectangle()
-            .fill(AppTheme.Colors.stroke.opacity(0.6))
-            .frame(height: 1)
-    }
-
-    // MARK: - Edit form
-
-    private var editEntryForm: some View {
-        NavigationStack {
-            Form {
-                Section("Day") {
-                    Button {
-                        showingDatePicker = true
-                    } label: {
-                        HStack {
-                            Text("Date")
-                                .foregroundStyle(Color(uiColor: .systemBlue))
-                            Spacer()
-                            Text(date.formatted(date: .abbreviated, time: .omitted))
-                                .foregroundStyle(Color(uiColor: .systemBlue))
-                        }
-                    }
-                }
-
-                Section("Time") {
-                    DatePicker("Start", selection: $start, displayedComponents: .hourAndMinute)
-                    DatePicker("End", selection: $end, displayedComponents: .hourAndMinute)
-
-                    Stepper(value: $breakMinutes, in: 0...240, step: 5) {
-                        Text("Break: \(breakMinutes) min")
-                    }
-
-                    Toggle("Off today", isOn: $isOffDay)
-                    if isOffDay {
-                        Picker("Reason", selection: $offDayReason) {
-                            ForEach(Self.offDayReasons, id: \.self) { reason in
-                                Text(reason).tag(reason)
-                            }
-                        }
-                    }
-                }
-
-                Section {
-                    TextField("Location or job (optional)", text: $locationLabel, axis: .vertical)
-                        .lineLimit(1...3)
-                } header: {
-                    Text("Location & job")
-                } footer: {
-                    Text("Add a quick label like “Landscaping”.")
-                }
-
-                Section {
-                    Button(role: .destructive) {
-                        showDeleteConfirm = true
-                    } label: {
-                        Text("Delete Entry")
-                    }
-                }
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .scrollContentBackground(.hidden)
-            .background(AppTheme.Colors.bg.ignoresSafeArea())
-            .navigationTitle("Edit Entry")
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .fontWeight(.semibold)
-                        .foregroundStyle(showSaveSuccess ? AppTheme.Colors.success : Color(uiColor: .systemBlue))
-                        .disabled(!canSave || showSaveSuccess)
-                }
-            }
-            .toast(isPresented: $showToast, message: toastMessage, showsCheckmark: false)
-            .sheet(isPresented: $showingDatePicker) {
-                AutoDismissDatePickerSheet(date: $date, title: "Select Date") {
-                    showingDatePicker = false
-                }
-            }
-            .alert("Delete this entry?", isPresented: $showDeleteConfirm) {
-                Button("Delete Entry", role: .destructive) {
-                    deleteEntry()
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("This can't be undone.")
+    private var dateCard: some View {
+        EntryEditorCard {
+            EntryFieldRow(
+                title: "Date",
+                dayText: "",
+                valueText: date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()),
+                isExpanded: expandedField == .date
+            ) { toggleField(.date) }
+            if expandedField == .date {
+                EntryRowDivider()
+                DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
+                    .tint(AppColors.accent)
+                    .padding(.top, AppSpacing.xxs)
             }
         }
     }
 
-    // MARK: - Validation & save
+    private var timesCard: some View {
+        EntryEditorCard {
+            EntryFieldRow(
+                title: "Start",
+                dayText: dayCaption(offsetDay: false),
+                valueText: start.formatted(date: .omitted, time: .shortened),
+                isExpanded: expandedField == .start
+            ) { toggleField(.start) }
+            if expandedField == .start {
+                inlineTimePicker($start)
+            }
+            EntryRowDivider()
+            EntryFieldRow(
+                title: "End",
+                dayText: dayCaption(offsetDay: isOvernight),
+                valueText: end.formatted(date: .omitted, time: .shortened),
+                isExpanded: expandedField == .end
+            ) { toggleField(.end) }
+            if expandedField == .end {
+                inlineTimePicker($end)
+            }
+        }
+    }
+
+    private func inlineTimePicker(_ selection: Binding<Date>) -> some View {
+        DatePicker("", selection: selection, displayedComponents: .hourAndMinute)
+            .datePickerStyle(.wheel)
+            .labelsHidden()
+            .tint(AppColors.accent)
+            .frame(maxWidth: .infinity)
+            .frame(height: 180)
+            .clipped()
+    }
+
+    private func toggleField(_ field: ExpandableField) {
+        Haptics.lightTap()
+        withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
+            expandedField = expandedField == field ? nil : field
+        }
+    }
+
+    private var isOvernight: Bool {
+        end.timeIntervalSince(start) < 0
+    }
+
+    private func dayCaption(offsetDay: Bool) -> String {
+        let cal = Calendar.current
+        let day = offsetDay ? (cal.date(byAdding: .day, value: 1, to: date) ?? date) : date
+        let label = day.formatted(.dateTime.weekday(.abbreviated))
+        return offsetDay ? "\(label) +1" : label
+    }
+
+    // MARK: - Summary (hours only — never money)
+
+    private var summarySection: some View {
+        let breakdown = store.payBreakdown(for: draftEntry)
+        return EntrySummaryCard(
+            totalHours: paidHours,
+            regularHours: breakdown.regularHours,
+            overtimeHours: breakdown.overtimeHoursAt1_5,
+            doubleTimeHours: breakdown.overtimeHoursAt2_0,
+            start: start,
+            end: end,
+            breakMinutes: breakMinutes
+        )
+    }
+
+    /// The entry as currently drafted, for live breakdown math. Keeps the
+    /// edited entry's identity so weekly-overtime lookups stay coherent.
+    private var draftEntry: WorkEntry {
+        var entry: WorkEntry
+        if case .edit(let old) = mode {
+            entry = old
+        } else {
+            entry = WorkEntry(date: date, start: start, end: end, breakMinutes: breakMinutes, notes: "")
+        }
+        entry.date = date
+        entry.start = start
+        entry.end = end
+        entry.breakMinutes = breakMinutes
+        entry.isOffDay = false
+        entry.isHoliday = false
+        return entry
+    }
+
+    // MARK: - Validation & save (unchanged semantics)
+
+    private var isOffKind: Bool { shiftKind != .work }
 
     private var canSave: Bool {
-        if isOffDay { return true }
+        if isOffKind { return true }
         return isValid
     }
 
     private var isValid: Bool {
-        if isOffDay { return true }
+        if isOffKind { return true }
         return paidHours > 0 && paidHours <= 48
     }
 
     private var paidHours: Double {
         var raw = end.timeIntervalSince(start) / 3600.0
-
         if raw < 0 {
             raw += 24
         }
-
         let breakHrs = Double(max(0, breakMinutes)) / 60.0
         return max(0, raw - breakHrs)
+    }
+
+    private var validationMessage: String {
+        switch shiftKind {
+        case .offDay:
+            return "Off day — no hours logged"
+        case .holiday:
+            return "Holiday — no hours logged"
+        case .work:
+            if paidHours > 48 { return "Shift too long (max 48 hours)" }
+            if paidHours <= 0 {
+                let rawSpan = end.timeIntervalSince(start)
+                if rawSpan > 0 && breakMinutes > 0 { return "Break is longer than the shift" }
+                return "End time must be after start time"
+            }
+            return "Looks good — \(AppTheme.Format.hours(paidHours, suffix: "")) hours"
+        }
     }
 
     private func merge(day: Date, with time: Date) -> Date {
@@ -603,26 +419,30 @@ struct EntryEditorView: View {
     private func save() {
         if !isValid {
             Haptics.error()
-            if paidHours > 48 {
-                toastMessage = "Shift too long (max 48 hours)"
-            } else {
-                toastMessage = "Invalid hours"
-            }
+            toastMessage = paidHours > 48 ? "Shift too long (max 48 hours)" : "Invalid hours"
             showToast = true
             return
         }
 
         let cal = Calendar.current
-        let (s, e, br) = isOffDay
+        let (s, e, br) = isOffKind
             ? (cal.startOfDay(for: date), cal.startOfDay(for: date), 0)
             : (start, end, breakMinutes)
 
+        let reason: String
+        switch shiftKind {
+        case .work: reason = ""
+        case .offDay: reason = offDayReason
+        case .holiday: reason = Self.holidayReason
+        }
+
         let trimmedLabel = locationLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
 
         switch mode {
         case .add:
-            var entry = WorkEntry(date: date, start: s, end: e, breakMinutes: br, notes: "",
-                                 isOffDay: isOffDay, offDayReason: isOffDay ? offDayReason : "", isHoliday: false)
+            var entry = WorkEntry(date: date, start: s, end: e, breakMinutes: br, notes: trimmedNotes,
+                                  isOffDay: isOffKind, offDayReason: reason, isHoliday: false)
             entry.locationName = trimmedLabel
             entry.locationURL = ""
             entry.latitude = nil
@@ -634,13 +454,13 @@ struct EntryEditorView: View {
             updated.start = s
             updated.end = e
             updated.breakMinutes = br
-            updated.notes = ""
+            updated.notes = trimmedNotes
             updated.locationName = trimmedLabel
             updated.locationURL = ""
             updated.latitude = nil
             updated.longitude = nil
-            updated.isOffDay = isOffDay
-            updated.offDayReason = isOffDay ? offDayReason : ""
+            updated.isOffDay = isOffKind
+            updated.offDayReason = reason
             updated.isHoliday = false
             withAnimation(AppMotion.Spring.smooth) { store.update(updated) }
         }
@@ -655,7 +475,7 @@ struct EntryEditorView: View {
         guard case .edit(let entry) = mode else { return }
         Haptics.mediumTap()
         withAnimation(AppMotion.Spring.smooth) { store.delete(entry) }
-        toastMessage = "Entry deleted"
+        toastMessage = "Shift deleted"
         showToast = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             dismiss()
