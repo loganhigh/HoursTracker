@@ -150,7 +150,7 @@ private struct AppRootView: View {
                 MainAppWithStartup()
                     .id(sessionManager.rootResetToken)
             } else {
-                AppTutorialView(isPresented: .constant(true), dismissesWhenComplete: false)
+                OnboardingView(isPresented: .constant(true), dismissesWhenComplete: false)
                     .environmentObject(authService)
             }
         }
