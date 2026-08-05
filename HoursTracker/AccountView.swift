@@ -118,25 +118,25 @@ struct AccountView: View {
                             GridItem(.flexible(), spacing: 12),
                             GridItem(.flexible(), spacing: 12)
                         ], spacing: 12) {
-                            AccountStatTile(
+                            MetricDisplay(
+                                icon: "rosette",
                                 label: "Badges",
-                                value: "\(earnedBadgeCount)",
-                                icon: "rosette"
+                                value: "\(earnedBadgeCount)"
                             )
-                            AccountStatTile(
+                            MetricDisplay(
+                                icon: "star.fill",
                                 label: "Level",
-                                value: "\(store.displayedLevel)",
-                                icon: "star.fill"
+                                value: "\(store.displayedLevel)"
                             )
-                            AccountStatTile(
+                            MetricDisplay(
+                                icon: "calendar",
                                 label: "Member Since",
-                                value: memberSinceString,
-                                icon: "calendar"
+                                value: memberSinceString
                             )
-                            AccountStatTile(
+                            MetricDisplay(
+                                icon: "clock.fill",
                                 label: "\(currentYearString) Hours",
-                                value: AppTheme.Format.hours(currentYearHours),
-                                icon: "clock.fill"
+                                value: AppTheme.Format.hours(currentYearHours)
                             )
                         }
                         .padding(.vertical, 8)
@@ -516,44 +516,5 @@ struct AccountView: View {
         // Profile-details fields were removed; nothing to persist when the user
         // taps Done. Kept as a hook so future settings can plug in.
         store.save()
-    }
-}
-
-// MARK: - Account stat tile
-
-private struct AccountStatTile: View {
-    let label: String
-    let value: String
-    let icon: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppTheme.Colors.accent)
-                Text(label)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
-            Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(AppTheme.Colors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AppTheme.Colors.stroke, lineWidth: 1)
-                )
-        )
     }
 }

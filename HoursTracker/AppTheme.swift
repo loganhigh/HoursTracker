@@ -70,6 +70,8 @@ enum AppTheme {
         }
     }
 
+    // DEPRECATED: use AppSpacing (DesignTokens.swift). This 6/10/14/18 scale was
+    // ignored by ~95% of call sites; do not use in new code. Kept until screens migrate.
     enum Spacing {
         static let xs: CGFloat = AppDesignSystem.Spacing.xs
         static let sm: CGFloat = AppDesignSystem.Spacing.sm
@@ -100,6 +102,9 @@ enum AppTheme {
         }
     }
 
+    // DEPRECATED: use AppTypography (DesignTokens.swift) — the ONE Dynamic Type-relative
+    // scale. This fixed-size scale conflicts with AppDesignSystem.Typography (e.g. callout
+    // 15 vs 14); do not use in new code. Kept until screens migrate.
     enum Typography {
         static let h1 = Font.system(size: 34, weight: .bold, design: .rounded)
         static let h2 = Font.system(size: 24, weight: .bold, design: .rounded)

@@ -909,35 +909,6 @@ private struct HoursHomeView: View {
         return (Double(elapsed) / Double(total), "Day \(min(elapsed + 1, total)) of \(total)")
     }
 
-    private enum HeroDayState { case worked, off, empty }
-
-    /// One state per day from the cycle start through today (matches the
-    /// windowing PayPeriodMiniCalendar used).
-    private var heroDayStates: [HeroDayState] {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        var workedDays: Set<Date> = []
-        var offDays: Set<Date> = []
-        for e in periodEntries {
-            let d = cal.startOfDay(for: e.date)
-            if e.isOffDay { offDays.insert(d) } else { workedDays.insert(d) }
-        }
-        let start = cal.startOfDay(for: currentPayCycle.start)
-        let lastCycleDay = cal.date(byAdding: .day, value: -1, to: cal.startOfDay(for: currentPayCycle.end)) ?? currentPayCycle.end
-        let cap = min(lastCycleDay, today)
-        let end = cap >= start ? cap : lastCycleDay
-        var states: [HeroDayState] = []
-        var day = start
-        while day <= end && states.count < 62 {
-            if workedDays.contains(day) { states.append(.worked) }
-            else if offDays.contains(day) { states.append(.off) }
-            else { states.append(.empty) }
-            guard let next = cal.date(byAdding: .day, value: 1, to: day) else { break }
-            day = next
-        }
-        return states
-    }
-
     private var chequeHeroCard: some View {
         NavigationLink {
             PayCycleDetailView(store: store, initialCycle: currentPayCycle)

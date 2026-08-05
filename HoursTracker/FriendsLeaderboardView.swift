@@ -244,29 +244,20 @@ struct FriendsLeaderboardView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "person.2.slash")
-                .font(.system(size: 36, weight: .light))
-                .foregroundStyle(theme.textTertiary)
-            Text("No friends to rank yet")
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundStyle(theme.textPrimary)
-            Text("Add a friend with their code to see weekly standings together.")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(theme.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(28)
-        .frame(maxWidth: .infinity)
+        AppEmptyState(
+            icon: "person.2.slash",
+            title: "No friends to rank yet",
+            message: "Add a friend with their code to see weekly standings together."
+        )
+        .padding(AppSpacing.xs)
         .background(
-            RoundedRectangle(cornerRadius: AppDesignSystem.Radius.lg, style: .continuous)
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
                 .fill(theme.card)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: AppDesignSystem.Radius.lg, style: .continuous)
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
                 .stroke(theme.border, lineWidth: 0.5)
         )
-        .gentleFadeIn()
     }
 
     // MARK: - Rows

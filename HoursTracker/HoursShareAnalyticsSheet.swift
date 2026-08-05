@@ -64,25 +64,25 @@ struct HoursShareAnalyticsSheet: View {
                                 GridItem(.flexible(), spacing: 12),
                                 GridItem(.flexible(), spacing: 12)
                             ], spacing: 12) {
-                                WorkSummaryStatTile(
+                                MetricDisplay(
+                                    icon: "chart.bar.fill",
                                     label: "Avg Shift",
-                                    value: metricValue(result.averageShiftHours, suffix: "h", isHours: true),
-                                    icon: "chart.bar.fill"
+                                    value: metricValue(result.averageShiftHours, suffix: "h", isHours: true)
                                 )
-                                WorkSummaryStatTile(
+                                MetricDisplay(
+                                    icon: "calendar",
                                     label: "Days Worked",
-                                    value: metricValue(Double(result.shiftsCount), suffix: "", isHours: false),
-                                    icon: "calendar"
+                                    value: metricValue(Double(result.shiftsCount), suffix: "", isHours: false)
                                 )
-                                WorkSummaryStatTile(
+                                MetricDisplay(
+                                    icon: "bolt.fill",
                                     label: "Overtime",
-                                    value: metricValue(result.overtimeHours, suffix: "h", isHours: true),
-                                    icon: "bolt.fill"
+                                    value: metricValue(result.overtimeHours, suffix: "h", isHours: true)
                                 )
-                                WorkSummaryStatTile(
+                                MetricDisplay(
+                                    icon: "clock.fill",
                                     label: "Regular",
-                                    value: metricValue(max(0, result.totalHours - result.overtimeHours), suffix: "h", isHours: true),
-                                    icon: "clock.fill"
+                                    value: metricValue(max(0, result.totalHours - result.overtimeHours), suffix: "h", isHours: true)
                                 )
                             }
                             .padding(.vertical, 8)
@@ -225,45 +225,6 @@ struct HoursShareAnalyticsSheet: View {
 private struct ShareableImage: Identifiable {
     let id = UUID()
     let image: UIImage
-}
-
-// MARK: - Stat tile (matches CareerStatTile)
-
-private struct WorkSummaryStatTile: View {
-    let label: String
-    let value: String
-    let icon: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppTheme.Colors.accent)
-                Text(label)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
-            Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(AppTheme.Colors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AppTheme.Colors.stroke, lineWidth: 1)
-                )
-        )
-    }
 }
 
 // MARK: - Shareable card (for ImageRenderer)

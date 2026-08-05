@@ -97,25 +97,25 @@ struct PayHistoryView: View {
                         GridItem(.flexible(), spacing: 12),
                         GridItem(.flexible(), spacing: 12)
                     ], spacing: 12) {
-                        PayStatTile(
+                        MetricDisplay(
+                            icon: "dollarsign.circle.fill",
                             label: "Current Rate",
-                            value: formatRate(currentRate),
-                            icon: "dollarsign.circle.fill"
+                            value: formatRate(currentRate)
                         )
-                        PayStatTile(
+                        MetricDisplay(
+                            icon: "flag.fill",
                             label: "Starting Rate",
-                            value: sortedEntries.isEmpty ? "—" : formatRate(startingRate),
-                            icon: "flag.fill"
+                            value: sortedEntries.isEmpty ? "—" : formatRate(startingRate)
                         )
-                        PayStatTile(
+                        MetricDisplay(
+                            icon: "briefcase.fill",
                             label: "Roles",
-                            value: "\(totalRoles)",
-                            icon: "briefcase.fill"
+                            value: "\(totalRoles)"
                         )
-                        PayStatTile(
+                        MetricDisplay(
+                            icon: "building.2.fill",
                             label: "Companies",
-                            value: distinctCompanies > 0 ? "\(distinctCompanies)" : "—",
-                            icon: "building.2.fill"
+                            value: distinctCompanies > 0 ? "\(distinctCompanies)" : "—"
                         )
                     }
                     .padding(.vertical, 8)
@@ -423,45 +423,6 @@ struct PayHistoryView: View {
         f.maximumFractionDigits = 2
         f.minimumFractionDigits = 0
         return (f.string(from: NSNumber(value: rate)) ?? "$\(rate)") + "/hr"
-    }
-}
-
-// MARK: - Pay stat tile (matches CareerStatTile)
-
-private struct PayStatTile: View {
-    let label: String
-    let value: String
-    let icon: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppTheme.Colors.accent)
-                Text(label)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
-            Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(AppTheme.Colors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AppTheme.Colors.stroke, lineWidth: 1)
-                )
-        )
     }
 }
 

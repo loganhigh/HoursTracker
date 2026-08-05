@@ -152,9 +152,8 @@ struct FriendsView: View {
                         .padding(.horizontal, AppTheme.Spacing.md)
                     }
                 } else if friendsService.isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 12)
+                    AppLoadingState(message: "Loading friends…")
+                        .padding(.top, AppSpacing.sm)
                 } else {
                     emptyFriendsBubble
                         .padding(.horizontal, AppTheme.Spacing.md)

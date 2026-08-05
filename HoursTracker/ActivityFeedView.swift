@@ -46,9 +46,11 @@ struct ActivityFeedView: View {
     @ViewBuilder
     private var content: some View {
         if let error = feed.errorMessage, feed.events.isEmpty {
-            errorState(error)
+            AppErrorState(title: "Couldn't load activity", message: error) {
+                refreshSubscription()
+            }
         } else if feed.isLoading && feed.events.isEmpty {
-            SoftLoadingIndicator(title: "Catching up on friends…")
+            AppLoadingState(message: "Catching up on friends…")
         } else if feed.events.isEmpty {
             emptyState
         } else {
@@ -63,31 +65,6 @@ struct ActivityFeedView: View {
                 .padding(.vertical, AppTheme.Spacing.md)
             }
         }
-    }
-
-    private func errorState(_ message: String) -> some View {
-        VStack(spacing: 14) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 36, weight: .light))
-                .foregroundStyle(AppTheme.Colors.danger)
-            Text("Couldn't load activity")
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundStyle(theme.textPrimary)
-            Text(message)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(theme.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-            Button("Try again") {
-                Haptics.lightTap()
-                refreshSubscription()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
-            .tint(AppTheme.Colors.accent)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .gentleFadeIn()
     }
 
     private func eventRow(_ event: ActivityEvent) -> some View {
@@ -160,21 +137,12 @@ struct ActivityFeedView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 36, weight: .light))
-                .foregroundStyle(theme.textTertiary)
-            Text("Nothing new yet")
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundStyle(theme.textPrimary)
-            Text("Friend events — shifts logged, badges unlocked, milestones — will show up here as they happen.")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(theme.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-        }
+        AppEmptyState(
+            icon: "sparkles",
+            title: "Nothing new yet",
+            message: "Friend events — shifts logged, badges unlocked, milestones — will show up here as they happen."
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .gentleFadeIn()
     }
 
     // MARK: - Subscription lifecycle

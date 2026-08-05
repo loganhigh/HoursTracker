@@ -157,10 +157,10 @@ struct CareerView: View {
                             GridItem(.flexible(), spacing: 12),
                             GridItem(.flexible(), spacing: 12)
                         ], spacing: 12) {
-                            CareerStatTile(label: "All-Time Hours", value: hoursDisplay(totalHours), icon: "clock.fill")
-                            CareerStatTile(label: "Days Worked", value: "\(daysWorked)", icon: "calendar")
-                            CareerStatTile(label: "Avg Shift", value: AppTheme.Format.hours(averageShiftHours), icon: "chart.bar.fill")
-                            CareerStatTile(label: "Overtime", value: AppTheme.Format.hours(totalOvertimeHours), icon: "bolt.fill")
+                            MetricDisplay(icon: "clock.fill", label: "All-Time Hours", value: hoursDisplay(totalHours))
+                            MetricDisplay(icon: "calendar", label: "Days Worked", value: "\(daysWorked)")
+                            MetricDisplay(icon: "chart.bar.fill", label: "Avg Shift", value: AppTheme.Format.hours(averageShiftHours))
+                            MetricDisplay(icon: "bolt.fill", label: "Overtime", value: AppTheme.Format.hours(totalOvertimeHours))
                         }
                     }
                     .padding(.vertical, 8)
@@ -552,44 +552,5 @@ struct CareerView: View {
         if days == 0 { return "Today" }
         if days == 1 { return "Tomorrow" }
         return "In \(days) days"
-    }
-}
-
-// MARK: - Career stat tile
-
-private struct CareerStatTile: View {
-    let label: String
-    let value: String
-    let icon: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppTheme.Colors.accent)
-                Text(label)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
-            Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(AppTheme.Colors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AppTheme.Colors.stroke, lineWidth: 1)
-                )
-        )
     }
 }

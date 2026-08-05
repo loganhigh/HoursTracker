@@ -15,23 +15,6 @@ private struct MonthAchievementItem: Identifiable {
     var progress: Double? = nil
 }
 
-private struct MonthProgressRing: View {
-    let progress: Double
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(AppTheme.Colors.stroke.opacity(0.6), lineWidth: 6)
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(
-                    AppTheme.Colors.accentGradient,
-                    style: StrokeStyle(lineWidth: 6, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-        }
-    }
-}
-
 private let achievementTileHeight: CGFloat = 152
 
 private struct MonthAchievementTile: View {
@@ -41,7 +24,7 @@ private struct MonthAchievementTile: View {
         VStack(spacing: 10) {
             ZStack {
                 if let p = item.progress {
-                    MonthProgressRing(progress: p)
+                    AppProgressRing(progress: p)
                         .frame(width: 64, height: 64)
                 }
                 Circle()

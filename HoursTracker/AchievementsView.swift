@@ -650,7 +650,7 @@ private struct BadgeTile: View {
         VStack(spacing: 6) {
             ZStack {
                 if locked {
-                    ProgressRing(progress: badge.progress)
+                    AppProgressRing(progress: badge.progress)
                         .frame(width: 64, height: 64)
                 }
 
@@ -703,22 +703,5 @@ private struct BadgeTile: View {
         .padding(.vertical, 10)
         .padding(.horizontal, 4)
         .frame(maxWidth: .infinity)
-    }
-}
-
-private struct ProgressRing: View {
-    let progress: Double
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(AppTheme.Colors.stroke.opacity(0.7), lineWidth: 6)
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(
-                    AppTheme.Colors.accentGradient,
-                    style: StrokeStyle(lineWidth: 6, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-        }
     }
 }

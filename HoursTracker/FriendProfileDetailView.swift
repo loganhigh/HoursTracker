@@ -33,7 +33,7 @@ struct FriendProfileDetailView: View {
             if let friend {
                 profileContent(friend: friend)
             } else {
-                SoftLoadingIndicator(title: "Loading profile…")
+                AppLoadingState(message: "Loading profile…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(AppTheme.Colors.bg.ignoresSafeArea())
             }
@@ -370,10 +370,10 @@ struct FriendProfileDetailView: View {
                 GridItem(.flexible(), spacing: 12),
                 GridItem(.flexible(), spacing: 12)
             ], spacing: 12) {
-                FriendCareerStatTile(label: "All-Time Hours", value: hoursDisplay(friend.totalHours), icon: "clock.fill", tint: tier.primary)
-                FriendCareerStatTile(label: "Hours This Week", value: hoursDisplay(friend.weeklyHours), icon: "calendar", tint: tier.primary)
-                FriendCareerStatTile(label: "Shifts This Week", value: "\(friend.weeklyShiftsLogged)", icon: "plus.circle.fill", tint: tier.primary)
-                FriendCareerStatTile(label: "Days This Week", value: "\(friend.weeklyDaysLogged)", icon: "chart.bar.fill", tint: tier.primary)
+                MetricDisplay(icon: "clock.fill", label: "All-Time Hours", value: hoursDisplay(friend.totalHours), tint: tier.primary)
+                MetricDisplay(icon: "calendar", label: "Hours This Week", value: hoursDisplay(friend.weeklyHours), tint: tier.primary)
+                MetricDisplay(icon: "plus.circle.fill", label: "Shifts This Week", value: "\(friend.weeklyShiftsLogged)", tint: tier.primary)
+                MetricDisplay(icon: "chart.bar.fill", label: "Days This Week", value: "\(friend.weeklyDaysLogged)", tint: tier.primary)
             }
             .padding(.vertical, 8)
         }
@@ -701,44 +701,6 @@ private struct FriendBadgeTile: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
         .frame(maxWidth: .infinity)
-    }
-}
-
-private struct FriendCareerStatTile: View {
-    let label: String
-    let value: String
-    let icon: String
-    var tint: Color = AppTheme.Colors.accent
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(tint)
-                Text(label)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
-            Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(AppTheme.Colors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AppTheme.Colors.stroke, lineWidth: 1)
-                )
-        )
     }
 }
 

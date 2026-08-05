@@ -4,6 +4,8 @@ import SwiftUI
 
 enum AppDesignSystem {
 
+    // DEPRECATED: use AppSpacing (DesignTokens.swift) — the canonical 4/8/12/16/20/24/32
+    // scale that matches real call-site usage. Do not use in new code; kept until screens migrate.
     enum Spacing {
         static let xs: CGFloat = 6
         static let sm: CGFloat = 10
@@ -25,6 +27,9 @@ enum AppDesignSystem {
         static let cardLight = (color: Color.black.opacity(0.08), radius: CGFloat(6), x: CGFloat(0), y: CGFloat(2))
     }
 
+    // DEPRECATED: use AppTypography (DesignTokens.swift) — the ONE Dynamic Type-relative
+    // scale. This fixed-size scale conflicts with AppTheme.Typography (e.g. callout 14 vs 15);
+    // do not use in new code. Kept until screens migrate.
     enum Typography {
         static let largeTitle = Font.system(size: 32, weight: .bold, design: .rounded)
         static let title1 = Font.system(size: 24, weight: .bold, design: .rounded)
