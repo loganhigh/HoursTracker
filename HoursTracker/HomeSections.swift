@@ -195,6 +195,14 @@ struct TodayHeroCard: View {
 
 // MARK: - XP Strip (animated fill, cold-launch seeded from cache)
 
+/// Persisted XP-bar cache keys. `HomeXPStrip` owns the writes; the You tab's
+/// `ProfileXPCapsule` reads the same keys (read-only) so both bars cold-launch
+/// seeded at the same fill instead of visibly refilling from zero.
+enum XPStripCache {
+    static let progressKey = "xp_strip_cached_progress_v1"
+    static let levelKey = "xp_strip_cached_level_v1"
+}
+
 struct HomeXPStrip: View {
     @ObservedObject var store: HoursStore
     // Server stats drive displayedGamificationProfile(); observe so the strip
@@ -204,8 +212,8 @@ struct HomeXPStrip: View {
     // Last displayed progress + level, persisted so a cold launch seeds the
     // bar at its previous fill instead of visibly refilling from zero while
     // server stats are still in flight.
-    @AppStorage("xp_strip_cached_progress_v1") private var cachedProgress: Double = 0
-    @AppStorage("xp_strip_cached_level_v1") private var cachedLevel: Int = 0
+    @AppStorage(XPStripCache.progressKey) private var cachedProgress: Double = 0
+    @AppStorage(XPStripCache.levelKey) private var cachedLevel: Int = 0
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var displayedProgress: Double = 0

@@ -1,13 +1,19 @@
 import SwiftUI
 import PhotosUI
 
-// MARK: - Account view
+// MARK: - Account view (Phase 9 — You tab root)
+//
+// Identity hero on the background (no card), XP capsule seeded from the Home
+// strip's cache, lifetime stats grid, quiet navigation card, and the account
+// card (cloud sync / sign out / delete / sign-in options). Auth, photo, and
+// deletion flows are unchanged — this phase is presentation only. Row/capsule
+// building blocks live in AccountSections.swift.
 
 struct AccountView: View {
     @ObservedObject var store: HoursStore
-    // `store.displayedLevel` prefers the server-computed level from
-    // StatsListenerService — observe it so the Level tile re-renders when the
-    // server snapshot lands (HoursStore itself doesn't republish on it).
+    // Server stats drive displayedGamificationProfile(); observe so the hero
+    // and lifetime grid re-render when the server snapshot lands (HoursStore
+    // itself doesn't republish on it).
     @ObservedObject private var statsListener = StatsListenerService.shared
     @EnvironmentObject private var authService: AuthService
     @Environment(\.openURL) private var openURL
@@ -22,9 +28,7 @@ struct AccountView: View {
     @State private var isUpdatingPhoto = false
     @ObservedObject private var photoManager = ProfilePhotoManager.shared
 
-    private var earnedBadgeCount: Int {
-        AchievementsView.earnedBadgeCount(for: store)
-    }
+    // MARK: - Identity data
 
     private var displayName: String {
         let trimmed = storedDisplayName.trimmingCharacters(in: .whitespaces)
@@ -34,282 +38,95 @@ struct AccountView: View {
         return "Guest"
     }
 
-    private var displayInitials: String {
-        let parts = displayName
-            .split(separator: " ")
-            .prefix(2)
-            .compactMap { $0.first.map(String.init) }
-        let joined = parts.joined().uppercased()
-        return joined.isEmpty ? "U" : joined
+    private var equippedTitle: String {
+        store.displayedEquippedTitle
     }
 
-    private var levelLabel: String {
-        let level = store.displayedLevel
-        let prestige = store.gamificationProfile.prestige
-        if prestige > 0 { return "Lv \(level) • P\(prestige)" }
-        return "Level \(level)"
+    // MARK: - Lifetime stats
+
+    private var workEntries: [WorkEntry] {
+        // Span the year archive: archivePriorYearsIfNeeded moves prior-year
+        // entries out of `store.entries`, so reading `entries` alone would drop
+        // every year before the current one after the Jan-1 rollover.
+        store.allEntriesIncludingArchive().filter { !$0.isOffDay }
     }
 
-    private var memberSinceString: String {
-        guard let first = store.entries.map(\.date).min() else { return "Just now" }
-        let df = DateFormatter()
-        df.dateFormat = "MMM yyyy"
-        return df.string(from: first)
+    private var allTimeHours: Double {
+        // Prefer the server-computed total so this grid, Career, and the
+        // leaderboard always agree. Local sum when offline or signed out.
+        if let serverTotal = statsListener.lifetimeStats?.totalHours, serverTotal > 0 {
+            return serverTotal
+        }
+        return workEntries.reduce(0) { $0 + $1.paidHours }
     }
 
-    private var cloudStatusLabel: String {
-        authService.isSignedIn ? "Synced" : "Local"
-    }
-
-    private var currentYearString: String {
-        String(Calendar.current.component(.year, from: Date()))
-    }
-
-    private var currentYearHours: Double {
+    private var daysWorked: Int {
         let cal = Calendar.current
-        let year = cal.component(.year, from: Date())
-        return store.entries
-            .filter { !$0.isOffDay && cal.component(.year, from: $0.date) == year }
-            .reduce(0) { $0 + $1.paidHours }
+        return Set(workEntries.map { cal.startOfDay(for: $0.date) }).count
     }
+
+    // MARK: - Body
 
     var body: some View {
         ScrollView {
-                VStack(spacing: AppTheme.Spacing.xl) {
-                    heroProfileCard
-
-                    SectionCard(
-                        title: "Profile",
-                        subtitle: "Career progress and milestones",
-                        trailing: nil,
-                        centerHeader: true
-                    ) {
-                        VStack(spacing: 10) {
-                            NavigationLink(destination: CareerView(store: store)) {
-                                profileActionRow(
-                                    icon: "chart.line.uptrend.xyaxis",
-                                    title: "Career",
-                                    subtitle: "View lifetime hours and career stats"
-                                )
-                            }
-                            .buttonStyle(.plain)
-
-                            NavigationLink(destination: AchievementsView(store: store)) {
-                                profileActionRow(
-                                    icon: "rosette",
-                                    title: "Badges",
-                                    subtitle: "\(earnedBadgeCount) badges earned"
-                                )
-                            }
-                            .buttonStyle(.plain)
-
-                        }
-                        .padding(.vertical, 8)
-                    }
-
-                    SectionCard(
-                        title: "Account stats",
-                        subtitle: "Your profile at a glance",
-                        trailing: nil,
-                        centerHeader: true
-                    ) {
-                        LazyVGrid(columns: [
-                            GridItem(.flexible(), spacing: 12),
-                            GridItem(.flexible(), spacing: 12)
-                        ], spacing: 12) {
-                            MetricDisplay(
-                                icon: "rosette",
-                                label: "Badges",
-                                value: "\(earnedBadgeCount)"
-                            )
-                            MetricDisplay(
-                                icon: "star.fill",
-                                label: "Level",
-                                value: "\(store.displayedLevel)"
-                            )
-                            MetricDisplay(
-                                icon: "calendar",
-                                label: "Member Since",
-                                value: memberSinceString
-                            )
-                            MetricDisplay(
-                                icon: "clock.fill",
-                                label: "\(currentYearString) Hours",
-                                value: AppTheme.Format.hours(currentYearHours)
-                            )
-                        }
-                        .padding(.vertical, 8)
-                    }
-
-                    SectionCard(
-                        title: nil,
-                        subtitle: authService.isSignedIn
-                            ? "Signed in with Apple"
-                            : "Sign in to sync across devices",
-                        trailing: nil,
-                        centerHeader: true
-                    ) {
-                        cloudSyncBody
-                    }
-
-                    SectionCard(
-                        title: "Friends",
-                        subtitle: "Connect with coworkers",
-                        trailing: nil,
-                        centerHeader: true
-                    ) {
-                        NavigationLink {
-                            FriendsView(store: store)
-                        } label: {
-                            HStack(spacing: 12) {
-                                ZStack {
-                                    Circle()
-                                        .fill(AppTheme.Colors.accent.opacity(0.18))
-                                        .frame(width: 40, height: 40)
-                                    Image(systemName: "person.2.fill")
-                                        .font(.system(size: 16, weight: .bold))
-                                        .foregroundStyle(AppTheme.Colors.accent)
-                                }
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Manage friends")
-                                        .font(.system(size: 15, weight: .semibold))
-                                        .foregroundStyle(AppTheme.Colors.text)
-                                    Text(authService.isSignedIn
-                                        ? "Add friends with your code"
-                                        : "Sign in to add friends")
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(AppTheme.Colors.subtext)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundStyle(AppTheme.Colors.subtext)
-                            }
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(AppTheme.Colors.card2)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!authService.isSignedIn)
-                        .opacity(authService.isSignedIn ? 1 : 0.55)
-                    }
-
-                    appSection
-
-                    Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundStyle(AppColors.subtext.opacity(0.4))
-                        .tracking(1.5)
-                        .padding(.top, 8)
-
-                }
-                .padding(.horizontal, AppTheme.Spacing.md)
-                .padding(.top, 10)
-                .padding(.bottom, 24)
+            VStack(spacing: AppSpacing.xl) {
+                identityHero
+                ProfileXPCapsule(store: store)
+                lifetimeStatsSection
+                navigationCard
+                accountSection
+                versionFooter
             }
-            .scrollContentBackground(.hidden)
-            .background(AppTheme.Colors.bg.ignoresSafeArea())
-            .navigationTitle("You")
-            .navigationBarTitleDisplayMode(.large)
-            .sheet(isPresented: $showingSettings) {
-                SettingsView(store: store, settings: $store.paySettings)
-                    .environmentObject(authService)
-            }
-            .onAppear {
-                // Same recovery hook as CareerView: guarantees the server-stats
-                // listeners are attached whenever a level-displaying screen appears.
-                StatsListenerService.shared.ensureListening()
-                Task {
-                    await photoManager.uploadLocalPhotoIfNeeded()
-                    if authService.isSignedIn {
-                        store.syncProfileSnapshotToCloud()
-                    }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, 10)
+            .padding(.bottom, AppSpacing.xl)
+        }
+        .scrollContentBackground(.hidden)
+        .background(AppColors.bg.ignoresSafeArea())
+        .navigationTitle("You")
+        .navigationBarTitleDisplayMode(.large)
+        .sheet(isPresented: $showingSettings) {
+            SettingsView(store: store, settings: $store.paySettings)
+                .environmentObject(authService)
+        }
+        .onAppear {
+            // Same recovery hook as CareerView: guarantees the server-stats
+            // listeners are attached whenever a level-displaying screen appears.
+            StatsListenerService.shared.ensureListening()
+            Task {
+                await photoManager.uploadLocalPhotoIfNeeded()
+                if authService.isSignedIn {
+                    store.syncProfileSnapshotToCloud()
                 }
             }
-    }
-
-    // MARK: - App section (settings + support links, rehomed from the drawer)
-
-    private var appSection: some View {
-        SectionCard(
-            title: "App",
-            subtitle: "Settings and support",
-            trailing: nil,
-            centerHeader: true
-        ) {
-            VStack(spacing: 10) {
-                Button {
-                    Haptics.lightTap()
-                    showingSettings = true
-                } label: {
-                    profileActionRow(
-                        icon: "gearshape.fill",
-                        title: "Settings",
-                        subtitle: "Pay, notifications, and data"
-                    )
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    openURL(AppLegalURLs.website)
-                } label: {
-                    profileActionRow(
-                        icon: "globe",
-                        title: "Website",
-                        subtitle: "Visit the Hour Tracker site"
-                    )
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    openURL(AppLegalURLs.support)
-                } label: {
-                    profileActionRow(
-                        icon: "envelope.fill",
-                        title: "Contact",
-                        subtitle: "Get help or report a bug"
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.vertical, 8)
         }
     }
 
-    // MARK: - Hero
+    // MARK: - Identity hero (no card — sits on the background)
 
-    private var heroProfileCard: some View {
-        let currentUserUid = authService.user?.uid
+    private var identityHero: some View {
+        let profile = store.displayedGamificationProfile()
+        let tier = PrestigeTheme.tier(for: profile.prestige)
+        let ringColor = profile.prestige == 0 ? AppColors.accent : tier.primary
 
-        return VStack(spacing: 10) {
+        return VStack(spacing: AppSpacing.xs) {
             PhotosPicker(selection: $photoPickerItem, matching: .images) {
                 ZStack(alignment: .bottomTrailing) {
                     ProfileAvatarView(
                         name: displayName,
-                        size: 84,
-                        uid: currentUserUid,
-                        showsAccentRing: true
+                        size: 96,
+                        uid: authService.user?.uid
                     )
-                    .shadow(color: AppTheme.Colors.accent.opacity(0.35), radius: 12, y: 6)
-
-                    ZStack {
+                    // Thin prestige-tier ring (accent at P0).
+                    .overlay(
                         Circle()
-                            .fill(AppTheme.Colors.card)
-                            .frame(width: 28, height: 28)
-                        if isUpdatingPhoto {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                        } else {
-                            Image(systemName: "camera.fill")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(AppTheme.Colors.accent)
-                        }
+                            .stroke(ringColor.opacity(0.7), lineWidth: 2)
+                            .padding(-5)
+                    )
+
+                    if authService.isSignedIn {
+                        cameraBadge
                     }
-                    .overlay(Circle().stroke(AppTheme.Colors.bg, lineWidth: 2))
-                    .offset(x: 2, y: 2)
                 }
             }
             .buttonStyle(.plain)
@@ -318,193 +135,219 @@ struct AccountView: View {
                 guard let item else { return }
                 Task { await updateProfilePhoto(from: item) }
             }
-            .padding(.bottom, 2)
-
-            if authService.isSignedIn {
-                Text("Tap photo to update")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.faint)
-            }
+            .padding(.bottom, AppSpacing.xxs)
 
             Text(displayName)
-                .font(.system(size: 24, weight: .heavy, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.text)
-
-            if let userEmail = authService.user?.email, !userEmail.isEmpty {
-                Text(userEmail)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-            } else {
-                Text(authService.isSignedIn ? "No email on file" : "Not signed in")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-            }
+                .appText(.title)
+                .foregroundStyle(AppColors.text)
+                .multilineTextAlignment(.center)
 
             HStack(spacing: 6) {
-                Image(systemName: "star.circle.fill")
-                    .font(.system(size: 12, weight: .bold))
-                Text(levelLabel)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                Image(systemName: tier.icon)
+                    .font(.footnote.weight(.bold))
+                Text("Prestige \(profile.prestige) • Level \(profile.level)")
+                    .appText(.subheadline)
+                    .fontWeight(.semibold)
+                    .monospacedDigit()
             }
-            .foregroundStyle(AppTheme.Colors.accent)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                Capsule().fill(AppTheme.Colors.accent.opacity(0.15))
-            )
-            .padding(.top, 4)
+            .foregroundStyle(ringColor)
+
+            if !equippedTitle.isEmpty {
+                Text("\u{201C}\(equippedTitle)\u{201D}")
+                    .appText(.caption)
+                    .foregroundStyle(AppColors.subtext)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 24)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(AppTheme.Colors.accent.opacity(0.25), lineWidth: 1)
+    }
+
+    private var cameraBadge: some View {
+        ZStack {
+            Circle()
+                .fill(AppColors.card)
+                .frame(width: 28, height: 28)
+            if isUpdatingPhoto {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Image(systemName: "camera.fill")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(AppColors.accent)
+            }
+        }
+        .overlay(Circle().stroke(AppColors.bg, lineWidth: 2))
+        .offset(x: 2, y: 2)
+    }
+
+    // MARK: - Lifetime stats
+
+    private var lifetimeStatsSection: some View {
+        VStack(spacing: AppSpacing.sm) {
+            SectionEyebrow("Lifetime")
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: AppSpacing.sm),
+                GridItem(.flexible(), spacing: AppSpacing.sm)
+            ], spacing: AppSpacing.sm) {
+                MetricDisplay(
+                    icon: "clock.fill",
+                    label: "All-Time Hours",
+                    value: hoursDisplay(allTimeHours)
                 )
-        )
-    }
-
-    private func profileActionRow(icon: String, title: String, subtitle: String) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(AppTheme.Colors.accent.opacity(0.18))
-                    .frame(width: 40, height: 40)
-                Image(systemName: icon)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(AppTheme.Colors.accent)
+                MetricDisplay(
+                    icon: "calendar",
+                    label: "Days Worked",
+                    value: "\(daysWorked)"
+                )
+                MetricDisplay(
+                    icon: "checkmark.circle.fill",
+                    label: "Shifts Completed",
+                    value: "\(workEntries.count)"
+                )
+                MetricDisplay(
+                    icon: "flame.fill",
+                    label: "Best Streak",
+                    value: streakDisplay(store.gamificationProfile.bestStreak),
+                    tint: AppColors.streak
+                )
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(AppTheme.Colors.text)
-                Text(subtitle)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-            }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(AppTheme.Colors.subtext)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-        )
     }
 
-    // MARK: - Cloud sync body
+    // MARK: - Navigation card
+
+    private var navigationCard: some View {
+        let badgeCounts = AchievementsView.badgeCollectionCounts(for: store)
+
+        return AccountRowsCard {
+            NavigationLink(destination: CareerView(store: store)) {
+                AccountNavRow(
+                    icon: "chart.line.uptrend.xyaxis",
+                    title: "Career"
+                )
+            }
+            .buttonStyle(PremiumPressStyle())
+
+            AccountRowHairline()
+
+            NavigationLink(destination: AchievementsView(store: store)) {
+                AccountNavRow(
+                    icon: "rosette",
+                    title: "Badges",
+                    detail: "\(badgeCounts.earned) of \(badgeCounts.total)"
+                )
+            }
+            .buttonStyle(PremiumPressStyle())
+
+            AccountRowHairline()
+
+            Button {
+                Haptics.lightTap()
+                showingSettings = true
+            } label: {
+                AccountNavRow(icon: "gearshape.fill", title: "Settings")
+            }
+            .buttonStyle(PremiumPressStyle())
+
+            AccountRowHairline()
+
+            Button {
+                openURL(AppLegalURLs.website)
+            } label: {
+                AccountNavRow(icon: "globe", title: "Website")
+            }
+            .buttonStyle(PremiumPressStyle())
+
+            AccountRowHairline()
+
+            Button {
+                openURL(AppLegalURLs.support)
+            } label: {
+                AccountNavRow(icon: "envelope.fill", title: "Contact")
+            }
+            .buttonStyle(PremiumPressStyle())
+        }
+    }
+
+    // MARK: - Account section (cloud sync, sign out, delete — flows unchanged)
 
     @ViewBuilder
-    private var cloudSyncBody: some View {
-        if authService.isSignedIn {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Color.green.opacity(0.18))
-                        .frame(width: 40, height: 40)
-                    Image(systemName: "checkmark.icloud.fill")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.green)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Connected to iCloud")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppTheme.Colors.text)
-                    Text("Your data is backed up automatically")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                }
-                Spacer()
-                Button(role: .destructive) {
-                    try? authService.signOut()
-                } label: {
-                    Text("Sign Out")
-                        .font(.system(size: 13, weight: .semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule().fill(AppTheme.Colors.danger.opacity(0.18))
+    private var accountSection: some View {
+        VStack(spacing: AppSpacing.sm) {
+            SectionEyebrow("Account")
+
+            if authService.isSignedIn {
+                AccountRowsCard {
+                    AccountNavRow(
+                        icon: "checkmark.icloud.fill",
+                        title: "Cloud sync",
+                        subtitle: signedInSubtitle,
+                        tint: AppColors.positive,
+                        showsChevron: false
+                    )
+
+                    AccountRowHairline()
+
+                    Button {
+                        try? authService.signOut()
+                    } label: {
+                        AccountNavRow(
+                            icon: "rectangle.portrait.and.arrow.right",
+                            title: "Sign Out",
+                            titleTint: AppColors.accent,
+                            showsChevron: false
                         )
-                        .foregroundStyle(AppTheme.Colors.danger)
+                    }
+                    .buttonStyle(PremiumPressStyle())
+
+                    AccountRowHairline()
+
+                    // Account deletion — required by App Store Review
+                    // Guideline 5.1.1(v). Confirmation flow unchanged.
+                    deleteAccountRow
                 }
-                .buttonStyle(.plain)
-            }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(AppTheme.Colors.card2)
-            )
 
-            // Account deletion — required by App Store Review Guideline 5.1.1(v)
-            deleteAccountRow
-
-            LegalLinksSection()
-                .padding(.top, 4)
-        } else {
-            VStack(spacing: 12) {
-                Text("Sign in to sync your hours across devices and add friends.")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                AuthSignInOptionsView()
+                LegalLinksSection()
+                    .padding(.top, AppSpacing.xxs)
+            } else {
+                AccountRowsCard {
+                    VStack(spacing: AppSpacing.sm) {
+                        Text("Sign in to sync your hours across devices and add friends.")
+                            .appText(.subheadline)
+                            .foregroundStyle(AppColors.subtext)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                        AuthSignInOptionsView()
+                    }
+                    .padding(AppSpacing.md)
+                }
             }
-            .padding(.vertical, 8)
         }
     }
 
-    @ViewBuilder
+    private var signedInSubtitle: String {
+        if let email = authService.user?.email, !email.isEmpty {
+            return email
+        }
+        return "Backed up automatically"
+    }
+
     private var deleteAccountRow: some View {
         Button(role: .destructive) {
             Haptics.warning()
             showingDeleteAccountConfirm = true
         } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(AppTheme.Colors.danger.opacity(0.18))
-                        .frame(width: 40, height: 40)
-                    if isDeletingAccount {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(AppTheme.Colors.danger)
-                    } else {
-                        Image(systemName: "trash.fill")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(AppTheme.Colors.danger)
-                    }
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(isDeletingAccount ? "Deleting account…" : "Delete account")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppTheme.Colors.text)
-                    Text("Permanently removes your account and synced data")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                        .lineLimit(2)
-                }
-                Spacer()
-                if !isDeletingAccount {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                }
-            }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(AppTheme.Colors.card2)
+            AccountNavRow(
+                icon: "trash.fill",
+                title: isDeletingAccount ? "Deleting account…" : "Delete Account",
+                subtitle: "Permanently removes your account and synced data",
+                tint: AppColors.negative,
+                titleTint: AppColors.negative,
+                showsChevron: !isDeletingAccount,
+                isBusy: isDeletingAccount
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PremiumPressStyle())
         .disabled(isDeletingAccount)
         .alert("Delete account?", isPresented: $showingDeleteAccountConfirm) {
             Button("Cancel", role: .cancel) { }
@@ -523,6 +366,30 @@ struct AccountView: View {
             Text(deleteAccountError ?? "")
         }
     }
+
+    // MARK: - Footer
+
+    private var versionFooter: some View {
+        Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
+            .appText(.eyebrow)
+            .foregroundStyle(AppColors.subtext.opacity(0.4))
+            .padding(.top, AppSpacing.xs)
+    }
+
+    // MARK: - Formatting
+
+    private func hoursDisplay(_ value: Double) -> String {
+        if value >= 1000 {
+            return String(format: "%.0f", value) + "h"
+        }
+        return AppTheme.Format.hours(value)
+    }
+
+    private func streakDisplay(_ days: Int) -> String {
+        days == 1 ? "1 day" : "\(days) days"
+    }
+
+    // MARK: - Actions (unchanged flows)
 
     private func performAccountDeletion() async {
         isDeletingAccount = true

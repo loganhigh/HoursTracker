@@ -174,6 +174,13 @@ struct AchievementsView: View {
         earnedBadgesForSharing(from: store).filter { !$0.isLegend }.count
     }
 
+    /// Earned + total (non-legend) badge counts for "N of M" summary rows.
+    static func badgeCollectionCounts(for store: HoursStore) -> (earned: Int, total: Int) {
+        let badges = BadgeFactory.makeBadges(stats: BadgeStats(from: store))
+            .filter { !$0.isLegend }
+        return (badges.filter(\.isUnlocked).count, badges.count)
+    }
+
     /// Earned badges serialized for the public profile doc so friends can
     /// see which badges someone has unlocked.
     static func earnedBadgesForSharing(from store: HoursStore) -> [SharedBadgeSummary] {
