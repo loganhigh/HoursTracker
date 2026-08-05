@@ -1,6 +1,9 @@
 import SwiftUI
 
 /// Leaderboard with weekly hours and company-focused categories.
+/// Phase 7 redesign: quiet stepped podium with metal rank pips, a persistent
+/// "You" summary row, and ranked standings with relative bars. Data flow
+/// (FriendsService, category computation, privacy gating) is unchanged.
 struct FriendsLeaderboardView: View {
 
     @ObservedObject var store: HoursStore
@@ -10,8 +13,6 @@ struct FriendsLeaderboardView: View {
     // server snapshot lands (HoursStore itself doesn't republish on it).
     @ObservedObject private var statsListener = StatsListenerService.shared
     @EnvironmentObject private var authService: AuthService
-
-    @Environment(\.semanticColors) private var theme
 
     // MARK: - Category
 
@@ -45,24 +46,27 @@ struct FriendsLeaderboardView: View {
     // MARK: - Body
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                categoryPicker
-                if rows.isEmpty {
-                    emptyState
-                } else {
-                    if rows.count >= 3 { podium }
-                    leaderboardList
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: AppSpacing.lg) {
+                    categoryPicker
+                    if rows.isEmpty {
+                        emptyState
+                    } else {
+                        if rows.count >= 3 { podium }
+                        youSummary(proxy: proxy)
+                        leaderboardList
+                    }
                 }
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.vertical, AppSpacing.sm)
             }
-            .padding(.horizontal, AppTheme.Spacing.lg)
-            .padding(.vertical, AppTheme.Spacing.md)
         }
         .refreshable {
             store.syncProfileSnapshotToCloud()
             await friendsService.refreshFriendProfiles()
         }
-        .background(AppTheme.Colors.bg.ignoresSafeArea())
+        .background(AppColors.bg.ignoresSafeArea())
         .navigationTitle("Leaderboard")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -77,7 +81,7 @@ struct FriendsLeaderboardView: View {
     // MARK: - Subviews
 
     private var categoryPicker: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AppSpacing.xs) {
             ForEach(Category.allCases) { category in
                 MotionSegmentChip(
                     title: category.rawValue,
@@ -91,106 +95,129 @@ struct FriendsLeaderboardView: View {
         .frame(maxWidth: .infinity)
     }
 
+    // MARK: Podium
+
     @ViewBuilder
     private var podium: some View {
         // Reorder so 2nd is on the left, 1st in the middle, 3rd on the right —
         // the standard podium layout. Use first three rows.
         let top3 = Array(rows.prefix(3))
         HStack(alignment: .bottom, spacing: 10) {
-            podiumColumn(row: top3[safe: 1], height: 110, rank: 2)
+            LeaderboardPodiumColumn(row: top3[safe: 1], height: 96, rank: 2)
                 .podiumRise(delay: 0.08)
-            podiumColumn(row: top3[safe: 0], height: 140, rank: 1)
+            LeaderboardPodiumColumn(row: top3[safe: 0], height: 122, rank: 1)
                 .podiumRise(delay: 0)
-            podiumColumn(row: top3[safe: 2], height: 96,  rank: 3)
+            LeaderboardPodiumColumn(row: top3[safe: 2], height: 82, rank: 3)
                 .podiumRise(delay: 0.14)
         }
-        .padding(.top, 4)
+        .padding(.top, AppSpacing.md)
         .id(selected)
         .transition(.opacity.combined(with: .scale(scale: 0.98)))
         .animation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion), value: selected)
     }
 
-    private func podiumColumn(row: LeaderboardRow?, height: CGFloat, rank: Int) -> some View {
-        let highlight = (rank == 1)
-        return VStack(spacing: 8) {
-            avatar(row: row, size: rank == 1 ? 56 : 48, accentHalo: highlight)
-                .overlay(
-                    Image(systemName: rank == 1 ? "crown.fill" : "")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.yellow)
-                        .shadow(color: .yellow.opacity(0.6), radius: 4)
-                        .offset(y: -28)
-                )
-            Text(row?.displayName ?? "—")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(theme.textPrimary)
-                .lineLimit(1)
-            if let levelLine = row?.levelDisplayLine {
-                Text(levelLine)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(theme.textSecondary)
-                    .lineLimit(1)
+    // MARK: "You" summary row
+
+    /// Persistent summary directly under the podium — always shows your rank
+    /// (even when you're on the podium). Tapping scrolls to your standings row.
+    private func youSummary(proxy: ScrollViewProxy) -> some View {
+        let myIndex = rows.firstIndex { $0.isMe }
+        let me = myIndex.map { rows[$0] }
+        return Button {
+            Haptics.lightTap()
+            guard let me else { return }
+            withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
+                proxy.scrollTo("standing-\(me.id)", anchor: .center)
             }
-            Text(row?.primaryDisplay ?? "—")
-                .font(AppDesignSystem.Typography.heroNumerals(size: rank == 1 ? 18 : 16, weight: .bold))
-                .foregroundStyle(theme.accent)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: highlight
-                            ? theme.accentGradientColors
-                            : [theme.cardSecondary, theme.cardSecondary.opacity(0.65)],
-                        startPoint: .top,
-                        endPoint: .bottom
+        } label: {
+            HStack(spacing: AppSpacing.sm) {
+                avatar(row: me, size: 36, accentHalo: false)
+                Text(youSummaryLine(rank: (myIndex ?? 0) + 1, row: me))
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: AppSpacing.xs)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.faint)
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.vertical, AppSpacing.sm)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                    .fill(AppColors.accent.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                            .stroke(AppColors.accent.opacity(0.2), lineWidth: 0.5)
                     )
-                )
-                .frame(height: height)
-                .overlay(
-                    Text("\(rank)")
-                        .font(.system(size: 28, weight: .black, design: .rounded))
-                        .foregroundStyle(highlight ? .white : theme.textSecondary)
-                )
+            )
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: .infinity)
+        .buttonStyle(PremiumPressStyle())
+        .accessibilityHint("Scrolls to your row in the standings")
     }
 
+    private func youSummaryLine(rank: Int, row: FriendsLeaderboardRowModel?) -> String {
+        guard let row else { return "You're unranked" }
+        let base = "You're #\(rank)"
+        guard row.primaryDisplay != "—" else { return base }
+        switch selected {
+        case .hours:        return "\(base) · \(row.primaryDisplay) this week"
+        case .tenure:       return "\(base) · \(row.primaryDisplay) at company"
+        case .companyHours: return "\(base) · \(row.primaryDisplay) at company"
+        }
+    }
+
+    // MARK: Standings
+
     private var leaderboardList: some View {
-        SectionCard(
-            title: "Standings",
-            subtitle: selected.subtitle,
-            trailing: nil,
-            centerHeader: true
-        ) {
+        VStack(spacing: AppSpacing.sm) {
+            SectionEyebrow("Standings", subtitle: selected.subtitle)
             VStack(spacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                     leaderboardRow(row: row, position: index + 1)
+                        .id("standing-\(row.id)")
                     if index < rows.count - 1 {
-                        Divider().opacity(0.25)
+                        Divider()
+                            .overlay(AppColors.stroke)
+                            .opacity(0.5)
+                            .padding(.leading, 60)
                     }
                 }
             }
+            .padding(AppSpacing.xxs)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                    .fill(AppColors.card.opacity(0.55))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                            .stroke(AppColors.stroke, lineWidth: 0.5)
+                    )
+            )
             .animation(nil, value: rows.map { "\($0.id)-\($0.primaryValue)" })
         }
         .animation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion), value: selected)
     }
 
-    private func leaderboardRow(row: LeaderboardRow, position: Int) -> some View {
-        HStack(spacing: 12) {
+    private func leaderboardRow(row: FriendsLeaderboardRowModel, position: Int) -> some View {
+        let leaderValue = rows.first?.primaryValue ?? 0
+        let fraction = leaderValue > 0 ? min(1, max(0, row.primaryValue / leaderValue)) : 0
+        return HStack(spacing: AppSpacing.sm) {
             Text("\(position)")
-                .font(.system(size: 14, weight: .black, design: .rounded))
-                .foregroundStyle(theme.textSecondary)
-                .frame(width: 22, alignment: .leading)
+                .font(.system(size: 14, weight: .heavy, design: .rounded))
                 .monospacedDigit()
+                .foregroundStyle(position <= 3 ? LeaderboardRankStyle.color(position) : AppColors.subtext)
+                .frame(width: 24, alignment: .center)
 
-            avatar(row: row, size: 36, accentHalo: row.isMe)
+            avatar(row: row, size: 36, accentHalo: false)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(row.displayName)
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(theme.textPrimary)
+                        .foregroundStyle(AppColors.text)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                     if row.isMe {
@@ -198,34 +225,42 @@ struct FriendsLeaderboardView: View {
                             .font(.system(size: 9, weight: .black))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Capsule().fill(theme.accent.opacity(0.22)))
-                            .foregroundStyle(theme.accent)
+                            .background(Capsule().fill(AppColors.accent.opacity(0.12)))
+                            .foregroundStyle(AppColors.accent)
                             .fixedSize()
                     }
                 }
                 if !row.subtitle.isEmpty {
                     Text(row.subtitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(theme.textSecondary)
+                        .appText(.caption)
+                        .foregroundStyle(AppColors.subtext)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                 }
             }
 
-            Spacer(minLength: 8)
+            Spacer(minLength: AppSpacing.xs)
 
-            Text(row.primaryDisplay)
-                .font(AppDesignSystem.Typography.heroNumerals(size: 17, weight: .bold))
-                .foregroundStyle(theme.textPrimary)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .fixedSize(horizontal: true, vertical: false)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(row.primaryDisplay)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .fixedSize(horizontal: true, vertical: false)
+                LeaderboardRelativeBar(fraction: fraction)
+            }
         }
+        .padding(.horizontal, AppSpacing.sm)
         .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                .fill(row.isMe ? AppColors.accent.opacity(0.12) : Color.clear)
+        )
     }
 
-    private func avatar(row: LeaderboardRow?, size: CGFloat, accentHalo: Bool) -> some View {
+    private func avatar(row: FriendsLeaderboardRowModel?, size: CGFloat, accentHalo: Bool) -> some View {
         ProfileAvatarView(
             name: row?.displayName ?? "—",
             size: size,
@@ -244,36 +279,24 @@ struct FriendsLeaderboardView: View {
         .padding(AppSpacing.xs)
         .background(
             RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                .fill(theme.card)
+                .fill(AppColors.card.opacity(0.55))
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                .stroke(theme.border, lineWidth: 0.5)
+                .stroke(AppColors.stroke, lineWidth: 0.5)
         )
     }
 
-    // MARK: - Rows
+    // MARK: - Rows (model lives in FriendsLeaderboardSections.swift)
 
-    /// View-model row consumed by both the podium and the standings list.
-    private struct LeaderboardRow: Identifiable, Equatable {
-        let id: String
-        let displayName: String
-        let isMe: Bool
-        let levelDisplayLine: String
-        let primaryValue: Double
-        let primaryDisplay: String
-        let subtitle: String
-        let profilePhotoURL: String?
-    }
-
-    private var rows: [LeaderboardRow] {
+    private var rows: [FriendsLeaderboardRowModel] {
         let myRow = makeRow(forSelf: true)
         // All three categories depend on hours-derived data (weeklyHours,
         // weeklyShiftsLogged, daysLogged, currentStreak). When a friend has opted
         // out of `shareHours` those fields are zeroed at write time AND we
         // skip them in the leaderboard so they don't appear with a misleading
         // "0" rank — privacy + UX both stay clean.
-        let friendRows: [LeaderboardRow] = {
+        let friendRows: [FriendsLeaderboardRowModel] = {
             switch selected {
             case .hours:
                 return friendsService.friends
@@ -295,7 +318,7 @@ struct FriendsLeaderboardView: View {
         return all
     }
 
-    private func makeRow(forSelf: Bool) -> LeaderboardRow {
+    private func makeRow(forSelf: Bool) -> FriendsLeaderboardRowModel {
         let name = UserDefaults.standard.string(forKey: "profile_display_name") ?? "You"
         let profile = store.gamificationProfile
         let weekly = WeeklyStatsCalculator.weeklyHours(store.entries)
@@ -325,7 +348,7 @@ struct FriendsLeaderboardView: View {
         )
     }
 
-    private func makeRow(forFriend friend: FriendProfile) -> LeaderboardRow {
+    private func makeRow(forFriend friend: FriendProfile) -> FriendsLeaderboardRowModel {
         makeRow(
             id: friend.uid,
             name: friend.displayName,
@@ -349,7 +372,7 @@ struct FriendsLeaderboardView: View {
         companyHoursLogged: Double,
         companyName: String,
         profilePhotoURL: String?
-    ) -> LeaderboardRow {
+    ) -> FriendsLeaderboardRowModel {
         let primaryValue: Double
         let primaryDisplay: String
         let detail: String
@@ -369,7 +392,7 @@ struct FriendsLeaderboardView: View {
             detail = companyName.isEmpty ? "" : companyName
         }
         let subtitle = detail.isEmpty ? levelDisplayLine : "\(levelDisplayLine) • \(detail)"
-        return LeaderboardRow(
+        return FriendsLeaderboardRowModel(
             id: id,
             displayName: name,
             isMe: isMe,
