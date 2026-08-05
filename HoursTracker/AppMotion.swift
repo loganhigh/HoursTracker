@@ -287,7 +287,7 @@ struct MotionSegmentChip: View {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
             }
-            .foregroundStyle(isSelected ? .white : theme.textSecondary)
+            .foregroundStyle(isSelected ? AppColors.textOnAccent : theme.textSecondary)
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
             .background(

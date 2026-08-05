@@ -672,7 +672,7 @@ struct HoursHomeView: View {
                     .foregroundStyle(tint)
                 Text(title)
                     .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.text)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
@@ -915,7 +915,7 @@ private struct PrestigeCallToAction: View {
                 Image(systemName: "sparkles")
                     .font(.system(size: 18, weight: .bold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.textOnAccent)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
             .background(
@@ -1027,7 +1027,7 @@ struct PrestigeInfoSheet: View {
 
                         Text("What is Prestige?")
                             .font(.system(size: 24, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(AppColors.text)
 
                         Text("Hit Level 25 to Prestige. Your level resets, your rank goes up.")
                             .font(.system(size: 15, weight: .medium))
@@ -1083,7 +1083,7 @@ struct PrestigeInfoSheet: View {
 
                                     Text(tier.title)
                                         .font(.system(size: 15, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(tier.level == currentPrestige ? .white : AppTheme.Colors.subtext)
+                                        .foregroundStyle(tier.level == currentPrestige ? AppColors.text : AppTheme.Colors.subtext)
 
                                     Spacer()
 
@@ -1091,7 +1091,7 @@ struct PrestigeInfoSheet: View {
                                         Text("YOU")
                                             .font(.system(size: 10, weight: .black, design: .rounded))
                                             .tracking(1)
-                                            .foregroundStyle(.white)
+                                            .foregroundStyle(AppColors.textOnAccent)
                                             .padding(.horizontal, 8)
                                             .padding(.vertical, 3)
                                             .background(
@@ -1167,7 +1167,7 @@ private struct PersonalBestBanner: View {
                 .foregroundStyle(Color(hex: 0xFBBF24))
             Text("New Personal Best Month! 🏆")
                 .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textOnAccent)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 11)
@@ -1211,7 +1211,7 @@ private struct StreakBurstView: View {
     var body: some View {
         ZStack {
             // Dimmed backdrop
-            Color.black.opacity(0.4).ignoresSafeArea()
+            AppColors.overlay.ignoresSafeArea()
 
             VStack(spacing: 12) {
                 ZStack {
@@ -1231,10 +1231,10 @@ private struct StreakBurstView: View {
                     Text("\(streakCount) DAY STREAK")
                         .font(.system(size: 22, weight: .black, design: .rounded))
                         .tracking(2)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.text)
                     Text("You're on fire. Keep it up!")
                         .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(AppColors.subtext)
                 }
             }
         }
@@ -1292,7 +1292,7 @@ private struct PaydayConfettiOverlay: View {
     var body: some View {
         ZStack {
             // Dimmed backdrop
-            Color.black.opacity(0.45)
+            AppColors.overlay
                 .ignoresSafeArea()
                 .onTapGesture { dismiss() }
 
@@ -1332,7 +1332,7 @@ private struct PaydayConfettiOverlay: View {
 
                     Text("You earned it. Go get it. 💸")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(AppColors.subtext)
                         .multilineTextAlignment(.center)
                 }
 

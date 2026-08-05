@@ -18,6 +18,7 @@ struct SettingsView: View {
     @State private var showRestoreSuccessAlert = false
     @State private var backupErrorMessage: String?
     @AppStorage("auto_yearly_reset_enabled") private var autoYearlyResetEnabled = true
+    @AppStorage(AppAppearance.storageKey) private var appearanceMode = AppAppearance.system.rawValue
 
     @ObservedObject private var smartNotifier = SmartNotifier.shared
     @ObservedObject private var weeklyNotifier = WeeklyMilestoneNotifier.shared
@@ -183,6 +184,25 @@ struct SettingsView: View {
                 .listRowSeparatorTint(AppColors.stroke)
 
                 // Certificates removed from Settings for now — revisit later.
+
+                // MARK: - Appearance
+                Section {
+                    Picker("Appearance", selection: $appearanceMode) {
+                        ForEach(AppAppearance.allCases) { mode in
+                            Text(mode.label).tag(mode.rawValue)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.vertical, AppSpacing.xxs)
+                } header: {
+                    SectionEyebrow("Appearance")
+                } footer: {
+                    Text("System follows your device's light or dark setting.")
+                        .appText(.caption)
+                        .foregroundStyle(AppColors.subtext)
+                }
+                .listRowBackground(AppColors.card.opacity(0.55))
+                .listRowSeparatorTint(AppColors.stroke)
 
                 // MARK: - Notifications
                 Section {

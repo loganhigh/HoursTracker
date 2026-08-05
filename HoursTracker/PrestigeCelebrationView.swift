@@ -76,15 +76,15 @@ struct PrestigeCelebrationView: View {
                     VStack(spacing: 8) {
                         Text(tier.name)
                             .font(.system(size: 28, weight: .black, design: .rounded))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(AppColors.textOnAccent)
 
                         Text(rankTransitionLabel)
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .foregroundStyle(AppColors.textOnAccent.opacity(0.55))
 
                         Text(Self.tagline(for: prestige))
                             .font(.system(size: 15, weight: .medium, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.72))
+                            .foregroundStyle(AppColors.textOnAccent.opacity(0.72))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 28)
                             .padding(.top, 4)
@@ -120,7 +120,7 @@ struct PrestigeCelebrationView: View {
                         Text("Claim Your Rank")
                             .font(.system(size: 17, weight: .black, design: .rounded))
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textOnAccent)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
                     .background(
@@ -180,7 +180,7 @@ struct PrestigeCelebrationView: View {
 
                 Text("P\(prestige)")
                     .font(.system(size: 34, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textOnAccent)
             }
             .shadow(color: tier.primary.opacity(0.5), radius: 10)
         }
@@ -219,7 +219,7 @@ struct PrestigeCelebrationView: View {
                 .foregroundStyle(tier.highlight)
             Text(label)
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(AppColors.textOnAccent.opacity(0.75))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .minimumScaleFactor(0.85)

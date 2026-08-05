@@ -147,7 +147,7 @@ struct HoursShareAnalyticsSheet: View {
                 } label: {
                     Text(r.rawValue)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(selectedRange == r ? .white : ShareAnalyticsTheme.subtext)
+                        .foregroundStyle(selectedRange == r ? AppColors.textOnAccent : ShareAnalyticsTheme.subtext)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity)
@@ -178,7 +178,7 @@ struct HoursShareAnalyticsSheet: View {
             } label: {
                 Text("Share Work Report")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textOnAccent)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(
@@ -255,7 +255,7 @@ private struct ShareableAnalyticsCardView: View {
                 ForEach(HoursAnalyticsCalculator.TimeRange.allCases) { r in
                     Text(r.rawValue)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(r == range ? .white : ShareAnalyticsTheme.subtext)
+                        .foregroundStyle(r == range ? AppColors.textOnAccent : ShareAnalyticsTheme.subtext)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(

@@ -17,7 +17,7 @@ struct CompanyProfileView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Company Details")
                         .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.text)
 
                     field(title: "Company Name", text: $companyName, placeholder: "Your Company Name")
 
@@ -55,7 +55,7 @@ struct CompanyProfileView: View {
                                 .foregroundStyle(AppTheme.Colors.subtext)
                             TextField("0", value: $hourlyRate, format: .number)
                                 .keyboardType(.decimalPad)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(AppColors.text)
                         }
                         .padding(12)
                         .background(
@@ -177,7 +177,7 @@ struct CompanyProfileView: View {
 
             TextField(placeholder, text: text)
                 .textInputAutocapitalization(.words)
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.text)
                 .padding(12)
                 .background(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)

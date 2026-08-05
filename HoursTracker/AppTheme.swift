@@ -18,7 +18,9 @@ enum AppTheme {
         static var card: Color { c.card }
         static var card2: Color { c.cardSecondary }
         static var stroke: Color { c.border }
-        static var strokeStrong: Color { Color.white.opacity(0.16) }
+        static var strokeStrong: Color {
+            .schemeAdaptive(dark: Color.white.opacity(0.16), light: Color.black.opacity(0.16))
+        }
 
         // Text
         static var text: Color { c.textPrimary }
@@ -46,11 +48,19 @@ enum AppTheme {
                 endPoint: .trailing
             )
         }
-        static var cardGradient = LinearGradient(
-            colors: [Color.white.opacity(0.04), Color.white.opacity(0.01)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        /// Subtle card lift: a white sheen in dark mode, a faint darkening in
+        /// light mode. Built from scheme-dynamic colors so it re-resolves per
+        /// render (a stored white-lift gradient would wash out light cards).
+        static var cardGradient: LinearGradient {
+            LinearGradient(
+                colors: [
+                    .schemeAdaptive(dark: Color.white.opacity(0.04), light: Color.black.opacity(0.03)),
+                    .schemeAdaptive(dark: Color.white.opacity(0.01), light: Color.black.opacity(0.005))
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
         static var chartFillGradient: LinearGradient {
             let stops = c.accentGradientColors
             let top = stops.first ?? c.accent

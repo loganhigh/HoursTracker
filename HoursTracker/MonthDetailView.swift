@@ -33,7 +33,7 @@ private struct MonthAchievementTile: View {
                     .shadow(color: AppTheme.Colors.accent.opacity(0.4), radius: 8, y: 3)
                 Image(systemName: item.icon)
                     .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textOnAccent)
             }
             .frame(height: 64)
             VStack(spacing: 4) {

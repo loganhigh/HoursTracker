@@ -38,7 +38,7 @@ struct AchievementBadgeCircle: View {
 
     private var ringColor: Color {
         if !badge.isUnlocked { return AppColors.stroke }
-        return badge.isLegend ? AppColors.gold.opacity(0.8) : Color.white.opacity(0.25)
+        return badge.isLegend ? AppColors.gold.opacity(0.8) : AppColors.textOnAccent.opacity(0.25)
     }
 
     private var ringWidth: CGFloat {
@@ -47,7 +47,7 @@ struct AchievementBadgeCircle: View {
 
     private var iconColor: Color {
         if !badge.isUnlocked { return AppColors.subtext }
-        return badge.isLegend ? AppColors.gold : .white
+        return badge.isLegend ? AppColors.gold : AppColors.textOnAccent
     }
 }
 

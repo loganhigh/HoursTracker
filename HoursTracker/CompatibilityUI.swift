@@ -172,7 +172,7 @@ struct PrimaryButton: View {
                 Text(title)
                     .font(.system(size: 16, weight: .bold, design: .rounded))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.textOnAccent)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
             .background(

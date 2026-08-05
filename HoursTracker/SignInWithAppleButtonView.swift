@@ -4,6 +4,7 @@ import AuthenticationServices
 /// Themed Sign in with Apple control wired to `AuthService`.
 struct SignInWithAppleButtonView: View {
     @EnvironmentObject private var authService: AuthService
+    @Environment(\.colorScheme) private var colorScheme
     var height: CGFloat = 50
 
     var body: some View {
@@ -17,7 +18,7 @@ struct SignInWithAppleButtonView: View {
                 authService.lastError = error.localizedDescription
             }
         }
-        .signInWithAppleButtonStyle(.white)
+        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
         .frame(height: height)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .disabled(authService.isSigningIn)

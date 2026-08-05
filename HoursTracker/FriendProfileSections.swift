@@ -227,7 +227,7 @@ struct ExpandedPhotoView: View {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 30))
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(AppColors.textOnAccent.opacity(0.7))
                     }
                     .padding()
                 }
@@ -241,7 +241,7 @@ struct ExpandedPhotoView: View {
                 )
                 Text(name)
                     .font(.system(size: 20, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textOnAccent)
                     .padding(.top, 16)
                 Spacer()
             }
