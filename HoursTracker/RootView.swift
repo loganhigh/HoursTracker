@@ -395,19 +395,16 @@ struct HoursHomeView: View {
             ScrollView {
             VStack(spacing: AppSpacing.xl) {
 
+                progressionCard
+                    .cardAppear(index: 0)
+
                 TodayHeroCard(store: store) {
                     showingPrestigeInfoFromHeroCard = true
                 }
-                .cardAppear(index: 0)
-
-                progressionCard
-                    .cardAppear(index: 1)
+                .cardAppear(index: 1)
 
                 HomeStatTriplet(store: store)
                     .cardAppear(index: 2)
-
-                HoursTypeChipsRow(store: store)
-                    .cardAppear(index: 3)
 
                 VStack(spacing: 10) {
                     // Quiet primary action: flat accent fill, hairline-free,
@@ -459,7 +456,7 @@ struct HoursHomeView: View {
                         .tapBurst(trigger: holidayBurst)
                     }
                 }
-                .cardAppear(index: 4)
+                .cardAppear(index: 3)
 
                 RecentShiftsSection(
                     store: store,
@@ -481,10 +478,10 @@ struct HoursHomeView: View {
                         showTrackingHint = true
                     }
                 )
-                .cardAppear(index: 5)
+                .cardAppear(index: 4)
 
                 YearlyOverviewSection(store: store)
-                    .cardAppear(index: 6)
+                    .cardAppear(index: 5)
 
                 if !premium.isPremium {
                     BannerAdView()
@@ -500,10 +497,10 @@ struct HoursHomeView: View {
                         tabRouter.selection = .friends
                     }
                 )
-                .cardAppear(index: 7)
+                .cardAppear(index: 6)
 
                 homeTopTrackersSection
-                    .cardAppear(index: 8)
+                    .cardAppear(index: 7)
 
                 Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                     .font(.system(.caption, design: .rounded, weight: .bold))

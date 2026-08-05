@@ -187,7 +187,7 @@ struct HomeXPStrip: View {
 
     var body: some View {
         NavigationLink {
-            CareerView(store: store)
+            LevelView(store: store)
         } label: {
             HStack(spacing: AppSpacing.sm) {
                 emblem
