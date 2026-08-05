@@ -8,8 +8,7 @@ private struct ExportShareItem: Identifiable {
 
 struct ReportingView: View {
     @ObservedObject var store: HoursStore
-    @Environment(\.dismiss) private var dismiss
-    
+
     @State private var selectedPeriod: TimePeriod = .month
     @State private var selectedDate = Date()
     @State private var showExportMenu = false
@@ -27,60 +26,126 @@ struct ReportingView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    periodSelector
-                    insightsSection
-                    chartsSection
-                }
-                .padding(.horizontal, AppTheme.Spacing.md)
-                .padding(.vertical, 20)
+        ScrollView {
+            VStack(spacing: 24) {
+                periodSelector
+                insightsSection
+                chartsSection
+                moreSection
             }
-            .background(AppTheme.Colors.bg.ignoresSafeArea())
-            .navigationTitle("Reports & Analytics")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button {
-                            performExport(asCSV: true)
-                        } label: {
-                            Label("Export as CSV", systemImage: "doc.text")
-                        }
-                        .disabled(isExporting)
-                        Button {
-                            performExport(asCSV: false)
-                        } label: {
-                            Label("Export as PDF", systemImage: "doc.richtext")
-                        }
-                        .disabled(isExporting)
+            .padding(.horizontal, AppTheme.Spacing.md)
+            .padding(.vertical, 20)
+        }
+        .background(AppTheme.Colors.bg.ignoresSafeArea())
+        .navigationTitle("Stats")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        performExport(asCSV: true)
                     } label: {
-                        if isExporting {
-                            ProgressView().scaleEffect(0.9)
-                        } else {
-                            Image(systemName: "square.and.arrow.up")
-                        }
+                        Label("Export as CSV", systemImage: "doc.text")
+                    }
+                    .disabled(isExporting)
+                    Button {
+                        performExport(asCSV: false)
+                    } label: {
+                        Label("Export as PDF", systemImage: "doc.richtext")
+                    }
+                    .disabled(isExporting)
+                } label: {
+                    if isExporting {
+                        ProgressView().scaleEffect(0.9)
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
                     }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
             }
-            .sheet(item: $shareItem) { item in
-                ShareSheet(items: [item.url]) { shareItem = nil }
+        }
+        .sheet(item: $shareItem) { item in
+            ShareSheet(items: [item.url]) { shareItem = nil }
+        }
+        .alert("Export Failed", isPresented: .init(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK") { exportError = nil }
+        } message: {
+            Text(exportError ?? "Export failed. Please try again.")
+        }
+    }
+
+    // MARK: - More (Insights + Pay History destinations)
+
+    private var moreSection: some View {
+        VStack(spacing: AppSpacing.xs) {
+            statsLinkRow(
+                icon: "lightbulb.fill",
+                title: "Insights",
+                subtitle: "Patterns and trends from your shifts"
+            ) {
+                InsightsView(store: store)
+                    .navigationTitle("Insights")
+                    .navigationBarTitleDisplayMode(.inline)
             }
-            .alert("Export Failed", isPresented: .init(
-                get: { exportError != nil },
-                set: { if !$0 { exportError = nil } }
-            )) {
-                Button("OK") { exportError = nil }
-            } message: {
-                Text(exportError ?? "Export failed. Please try again.")
+            statsLinkRow(
+                icon: "chart.line.uptrend.xyaxis",
+                title: "Pay History",
+                subtitle: "Raises, roles, and your rate timeline"
+            ) {
+                PayHistoryView(store: store)
             }
         }
     }
-    
+
+    private func statsLinkRow<Destination: View>(
+        icon: String,
+        title: String,
+        subtitle: String,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            HStack(spacing: AppSpacing.sm) {
+                ZStack {
+                    Circle()
+                        .fill(AppColors.accent.opacity(0.15))
+                        .frame(width: 34, height: 34)
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.accent)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(AppTypography.headline)
+                        .foregroundStyle(AppColors.text)
+                    Text(subtitle)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: AppSpacing.xs)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.faint)
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.vertical, AppSpacing.sm)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                    .fill(AppColors.card.opacity(0.55))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                    .stroke(AppColors.stroke, lineWidth: 0.5)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     private var exportCompanyName: String {
         store.payHistoryEntries.sorted(by: { $0.year > $1.year }).first?.companyName ?? ""
     }

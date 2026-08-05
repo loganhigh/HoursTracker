@@ -3,7 +3,6 @@ import SwiftUI
 struct FriendsView: View {
     @ObservedObject var store: HoursStore
     @EnvironmentObject private var authService: AuthService
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
     @ObservedObject private var friendsService = FriendsService.shared
@@ -20,52 +19,113 @@ struct FriendsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if !authService.isSignedIn {
-                    signedOutPlaceholder
-                } else {
-                    friendsContent
-                }
-            }
-            .background(AppTheme.Colors.bg.ignoresSafeArea())
-            .navigationTitle("Friends")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .onAppear {
-                if let uid = authService.user?.uid {
-                    friendsService.startListening(uid: uid)
-                    Task { await friendsService.refreshFriendProfiles() }
-                }
-                store.syncProfileSnapshotToCloud()
-            }
-            .onChange(of: authService.user?.uid) { _, uid in
-                if let uid {
-                    friendsService.startListening(uid: uid)
-                } else {
-                    friendsService.stopListening()
-                }
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .active, let uid = authService.user?.uid {
-                    friendsService.startListening(uid: uid)
-                    Task { await friendsService.refreshFriendProfiles() }
-                }
-            }
-            .navigationDestination(item: $profileFriendUid) { uid in
-                FriendProfileDetailView(
-                    friendUid: uid,
-                    friendsService: friendsService,
-                    onRemoveFriend: { friend in
-                        await removeFriend(friend)
-                    }
-                )
+        Group {
+            if !authService.isSignedIn {
+                signedOutPlaceholder
+            } else {
+                friendsContent
             }
         }
+        .background(AppTheme.Colors.bg.ignoresSafeArea())
+        .navigationTitle("Friends")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if let uid = authService.user?.uid {
+                friendsService.startListening(uid: uid)
+                Task { await friendsService.refreshFriendProfiles() }
+            }
+            store.syncProfileSnapshotToCloud()
+        }
+        .onChange(of: authService.user?.uid) { _, uid in
+            if let uid {
+                friendsService.startListening(uid: uid)
+            } else {
+                friendsService.stopListening()
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active, let uid = authService.user?.uid {
+                friendsService.startListening(uid: uid)
+                Task { await friendsService.refreshFriendProfiles() }
+            }
+        }
+        .navigationDestination(item: $profileFriendUid) { uid in
+            FriendProfileDetailView(
+                friendUid: uid,
+                friendsService: friendsService,
+                onRemoveFriend: { friend in
+                    await removeFriend(friend)
+                }
+            )
+        }
+    }
+
+    // MARK: - Quick links (Activity / Leaderboards)
+
+    private var friendsQuickLinks: some View {
+        VStack(spacing: 0) {
+            friendsLinkRow(icon: "bolt.fill", title: "Activity Feed") {
+                ActivityFeedView(
+                    feed: ActivityFeedService.shared,
+                    friendsService: FriendsService.shared
+                )
+            }
+            Divider()
+                .overlay(AppColors.stroke)
+                .padding(.leading, 56)
+            friendsLinkRow(icon: "trophy.fill", title: "Friends Leaderboard") {
+                FriendsLeaderboardView(
+                    store: store,
+                    friendsService: FriendsService.shared
+                )
+            }
+            Divider()
+                .overlay(AppColors.stroke)
+                .padding(.leading, 56)
+            friendsLinkRow(icon: "globe", title: "Global Leaderboard") {
+                GlobalLeaderboardView()
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                .fill(AppColors.card.opacity(0.55))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                .stroke(AppColors.stroke, lineWidth: 0.5)
+        )
+    }
+
+    private func friendsLinkRow<Destination: View>(
+        icon: String,
+        title: String,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            HStack(spacing: AppSpacing.sm) {
+                ZStack {
+                    Circle()
+                        .fill(AppColors.accent.opacity(0.15))
+                        .frame(width: 34, height: 34)
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.accent)
+                }
+                Text(title)
+                    .font(AppTypography.headline)
+                    .foregroundStyle(AppColors.text)
+                Spacer(minLength: AppSpacing.xs)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.faint)
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.vertical, AppSpacing.sm)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var signedOutPlaceholder: some View {
@@ -93,6 +153,9 @@ struct FriendsView: View {
 
                 notifyCaption
                     .frame(maxWidth: .infinity)
+                    .padding(.horizontal, AppTheme.Spacing.md)
+
+                friendsQuickLinks
                     .padding(.horizontal, AppTheme.Spacing.md)
 
                 if let actionMessage {

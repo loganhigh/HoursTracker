@@ -11,7 +11,6 @@ struct FriendsLeaderboardView: View {
     @ObservedObject private var statsListener = StatsListenerService.shared
     @EnvironmentObject private var authService: AuthService
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.semanticColors) private var theme
 
     // MARK: - Category
@@ -46,39 +45,32 @@ struct FriendsLeaderboardView: View {
     // MARK: - Body
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    categoryPicker
-                    if rows.isEmpty {
-                        emptyState
-                    } else {
-                        if rows.count >= 3 { podium }
-                        leaderboardList
-                    }
-                }
-                .padding(.horizontal, AppTheme.Spacing.lg)
-                .padding(.vertical, AppTheme.Spacing.md)
-            }
-            .refreshable {
-                store.syncProfileSnapshotToCloud()
-                await friendsService.refreshFriendProfiles()
-            }
-            .background(AppTheme.Colors.bg.ignoresSafeArea())
-            .navigationTitle("Leaderboard")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+        ScrollView {
+            VStack(spacing: 20) {
+                categoryPicker
+                if rows.isEmpty {
+                    emptyState
+                } else {
+                    if rows.count >= 3 { podium }
+                    leaderboardList
                 }
             }
-            .onAppear {
-                // Same recovery hook as CareerView: guarantees the server-stats
-                // listeners are attached whenever a level-displaying screen appears.
-                StatsListenerService.shared.ensureListening()
-                store.syncProfileSnapshotToCloud()
-                Task { await friendsService.refreshFriendProfiles() }
-            }
+            .padding(.horizontal, AppTheme.Spacing.lg)
+            .padding(.vertical, AppTheme.Spacing.md)
+        }
+        .refreshable {
+            store.syncProfileSnapshotToCloud()
+            await friendsService.refreshFriendProfiles()
+        }
+        .background(AppTheme.Colors.bg.ignoresSafeArea())
+        .navigationTitle("Leaderboard")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            // Same recovery hook as CareerView: guarantees the server-stats
+            // listeners are attached whenever a level-displaying screen appears.
+            StatsListenerService.shared.ensureListening()
+            store.syncProfileSnapshotToCloud()
+            Task { await friendsService.refreshFriendProfiles() }
         }
     }
 

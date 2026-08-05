@@ -9,7 +9,6 @@ struct ActivityFeedView: View {
     @ObservedObject var friendsService: FriendsService
     @EnvironmentObject private var authService: AuthService
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.semanticColors) private var theme
 
     private let relativeFormatter: RelativeDateTimeFormatter = {
@@ -19,28 +18,20 @@ struct ActivityFeedView: View {
     }()
 
     var body: some View {
-        NavigationStack {
-            content
-                .background(AppTheme.Colors.bg.ignoresSafeArea())
-                .navigationTitle("Activity")
-                .navigationBarTitleDisplayMode(.large)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
-                            .buttonStyle(PremiumPressStyle())
-                    }
-                }
-                .onAppear {
-                    refreshSubscription()
-                    Task { await friendsService.refreshFriendProfiles() }
-                }
-                .onChange(of: authService.user?.uid) { _, _ in
-                    refreshSubscription()
-                }
-                .onChange(of: friendsService.friends.map { "\($0.uid):\($0.weeklyHours):\($0.totalHours)" }) { _, _ in
-                    refreshSubscription()
-                }
-        }
+        content
+            .background(AppTheme.Colors.bg.ignoresSafeArea())
+            .navigationTitle("Activity")
+            .navigationBarTitleDisplayMode(.large)
+            .onAppear {
+                refreshSubscription()
+                Task { await friendsService.refreshFriendProfiles() }
+            }
+            .onChange(of: authService.user?.uid) { _, _ in
+                refreshSubscription()
+            }
+            .onChange(of: friendsService.friends.map { "\($0.uid):\($0.weeklyHours):\($0.totalHours)" }) { _, _ in
+                refreshSubscription()
+            }
     }
 
     @ViewBuilder

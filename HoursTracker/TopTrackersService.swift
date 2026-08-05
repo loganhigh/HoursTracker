@@ -247,15 +247,13 @@ final class TopTrackersService: ObservableObject {
 struct GlobalLeaderboardView: View {
     @ObservedObject private var topTrackers = TopTrackersService.shared
     @EnvironmentObject private var authService: AuthService
-    @Environment(\.dismiss) private var dismiss
 
     private var myTracker: TopTracker? {
         topTrackers.tracker(for: authService.user?.uid)
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
+        Group {
                 if topTrackers.isLoadingFull && topTrackers.allTrackers.isEmpty {
                     ProgressView("Loading rankings…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -298,17 +296,11 @@ struct GlobalLeaderboardView: View {
                     }
                 }
             }
-            .background(AppTheme.Colors.bg.ignoresSafeArea())
-            .navigationTitle("Global leaderboard")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .task {
-                await topTrackers.ensureFullLeaderboardLoaded()
-            }
+        .background(AppTheme.Colors.bg.ignoresSafeArea())
+        .navigationTitle("Global leaderboard")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await topTrackers.ensureFullLeaderboardLoaded()
         }
     }
 

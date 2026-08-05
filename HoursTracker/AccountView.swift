@@ -10,11 +10,11 @@ struct AccountView: View {
     // server snapshot lands (HoursStore itself doesn't republish on it).
     @ObservedObject private var statsListener = StatsListenerService.shared
     @EnvironmentObject private var authService: AuthService
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     @AppStorage("profile_display_name") private var storedDisplayName: String = ""
 
-    @State private var showingFriends = false
+    @State private var showingSettings = false
     @State private var showingDeleteAccountConfirm = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError: String?
@@ -74,8 +74,7 @@ struct AccountView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
+        ScrollView {
                 VStack(spacing: AppTheme.Spacing.xl) {
                     heroProfileCard
 
@@ -159,9 +158,8 @@ struct AccountView: View {
                         trailing: nil,
                         centerHeader: true
                     ) {
-                        Button {
-                            guard authService.isSignedIn else { return }
-                            showingFriends = true
+                        NavigationLink {
+                            FriendsView(store: store)
                         } label: {
                             HStack(spacing: 12) {
                                 ZStack {
@@ -199,6 +197,14 @@ struct AccountView: View {
                         .opacity(authService.isSignedIn ? 1 : 0.55)
                     }
 
+                    appSection
+
+                    Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppColors.subtext.opacity(0.4))
+                        .tracking(1.5)
+                        .padding(.top, 8)
+
                 }
                 .padding(.horizontal, AppTheme.Spacing.md)
                 .padding(.top, 10)
@@ -206,18 +212,10 @@ struct AccountView: View {
             }
             .scrollContentBackground(.hidden)
             .background(AppTheme.Colors.bg.ignoresSafeArea())
-            .navigationTitle("Account")
+            .navigationTitle("You")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        saveChanges()
-                        dismiss()
-                    }
-                }
-            }
-            .sheet(isPresented: $showingFriends) {
-                FriendsView(store: store)
+            .sheet(isPresented: $showingSettings) {
+                SettingsView(store: store, settings: $store.paySettings)
                     .environmentObject(authService)
             }
             .onAppear {
@@ -231,6 +229,53 @@ struct AccountView: View {
                     }
                 }
             }
+    }
+
+    // MARK: - App section (settings + support links, rehomed from the drawer)
+
+    private var appSection: some View {
+        SectionCard(
+            title: "App",
+            subtitle: "Settings and support",
+            trailing: nil,
+            centerHeader: true
+        ) {
+            VStack(spacing: 10) {
+                Button {
+                    Haptics.lightTap()
+                    showingSettings = true
+                } label: {
+                    profileActionRow(
+                        icon: "gearshape.fill",
+                        title: "Settings",
+                        subtitle: "Pay, notifications, and data"
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    openURL(AppLegalURLs.website)
+                } label: {
+                    profileActionRow(
+                        icon: "globe",
+                        title: "Website",
+                        subtitle: "Visit the Hour Tracker site"
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    openURL(AppLegalURLs.support)
+                } label: {
+                    profileActionRow(
+                        icon: "envelope.fill",
+                        title: "Contact",
+                        subtitle: "Get help or report a bug"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.vertical, 8)
         }
     }
 
@@ -508,13 +553,5 @@ struct AccountView: View {
             Haptics.error()
             deleteAccountError = error.localizedDescription
         }
-    }
-
-    // MARK: - Save
-
-    private func saveChanges() {
-        // Profile-details fields were removed; nothing to persist when the user
-        // taps Done. Kept as a hook so future settings can plug in.
-        store.save()
     }
 }

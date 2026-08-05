@@ -9,9 +9,6 @@ struct RootView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var cloudSync: CloudSyncManager
-    @State private var showingContactSupport = false
-    @State private var showingRateApp = false
-    @State private var showingSettings = false
     @AppStorage("has_prompted_rate_after_5") private var hasPromptedRateAfter5 = false
     @AppStorage("display_name_prompt_last_tier") private var displayNamePromptLastTier: Int = 0
     @State private var showingDisplayNamePrompt = false
@@ -19,35 +16,7 @@ struct RootView: View {
     @State private var showingCountryFlagPicker = false
 
     var body: some View {
-        SideMenuContainer(
-            store: store,
-            onContactSupport: { showingContactSupport = true },
-            onReportBug: {
-                if let url = URL(string: "mailto:trackedhours@gmail.com") {
-                    UIApplication.shared.open(url)
-                }
-            },
-            onRateApp: { showingRateApp = true },
-            onSettings: { showingSettings = true }
-        ) {
-            NavigationStack {
-                HoursHomeView(showingSettings: $showingSettings)
-                    .environmentObject(store)
-                    .background(AppTheme.Colors.bg.ignoresSafeArea())
-                    .onChange(of: showingContactSupport) { _, show in
-                        if show {
-                            AppActions.contactSupportEmail()
-                            showingContactSupport = false
-                        }
-                    }
-                    .onChange(of: showingRateApp) { _, show in
-                        if show {
-                            AppActions.rateApp()
-                            showingRateApp = false
-                        }
-                    }
-            }
-        }
+        AppTabView()
         .onChange(of: store.entries.count) { _, newCount in
             if newCount >= 5 && !hasPromptedRateAfter5 {
                 hasPromptedRateAfter5 = true
@@ -174,11 +143,11 @@ private struct ScenePhaseFriendsRefreshObserver: View {
 }
 
 // MARK: - Main Home Screen
-private struct HoursHomeView: View {
+struct HoursHomeView: View {
     @EnvironmentObject private var store: HoursStore
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var premium: PremiumManager
-    @Environment(\.sideMenu) private var sideMenu
+    @EnvironmentObject private var tabRouter: TabRouter
     @ObservedObject private var friendsService = FriendsService.shared
     @ObservedObject private var statsListener = StatsListenerService.shared
     @ObservedObject private var topTrackers = TopTrackersService.shared
@@ -186,8 +155,7 @@ private struct HoursHomeView: View {
     @State private var showingAdd = false
     @State private var showTrackingHint = false
     @AppStorage("tracking_hint_dismissed") private var trackingHintDismissed: Bool = false
-    @Binding var showingSettings: Bool
-    
+
     @AppStorage("company_name") private var companyName: String = ""
     @AppStorage("company_occupation") private var occupation: String = ""
     @State private var addButtonVisible = true
@@ -598,7 +566,7 @@ private struct HoursHomeView: View {
                 }
 
                 Button {
-                    sideMenu.friendsSheet = true
+                    tabRouter.selection = .friends
                 } label: {
                     homeSection("Friends", boxed: true) {
                         HomeFriendsCardContent(
@@ -683,21 +651,6 @@ private struct HoursHomeView: View {
         }
         .animation(.spring(response: 0.5, dampingFraction: 0.75), value: showPersonalBestBanner)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button { 
-                    Haptics.lightTap()
-                    sideMenu.open()
-                } label: {
-                    Image(systemName: "line.3.horizontal")
-                        .foregroundStyle(AppTheme.Colors.text)
-                        .frame(minWidth: 64, minHeight: 48)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(InteractiveButtonStyle(minScale: 0.92))
-            }
-            
-        }
         .sheet(isPresented: $showingAdd) {
             EntryEditorView(store: store, mode: .add)
         }
@@ -717,10 +670,6 @@ private struct HoursHomeView: View {
             Button("OK") { }
         } message: {
             Text("Log your shifts each day. Your hours and pay are calculated automatically. Monthly totals appear here once you have entries.")
-        }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView(store: store, settings: $store.paySettings)
-                .environmentObject(authService)
         }
         .sheet(isPresented: $showingPrestigeInfoFromHeroCard) {
             PrestigeInfoSheet(currentPrestige: store.displayedGamificationProfile().prestige)
@@ -1099,9 +1048,8 @@ private struct HoursHomeView: View {
                         }
                     }
 
-                    Button {
-                        Haptics.lightTap()
-                        sideMenu.globalLeaderboardSheet = true
+                    NavigationLink {
+                        GlobalLeaderboardView()
                     } label: {
                         Text("See more")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
