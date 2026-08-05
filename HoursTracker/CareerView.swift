@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Lifetime career overview: total hours, days worked, personal bests, level
-/// progression. Pay-rate progression lives in PayHistoryView.
+/// progression.
 struct CareerView: View {
     @ObservedObject var store: HoursStore
     @AppStorage("company_name") private var companyName: String = ""

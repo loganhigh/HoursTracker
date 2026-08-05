@@ -153,6 +153,7 @@ struct HoursHomeView: View {
     @ObservedObject private var topTrackers = TopTrackersService.shared
 
     @State private var showingAdd = false
+    @State private var editingEntry: WorkEntry?
     @State private var showTrackingHint = false
     @AppStorage("tracking_hint_dismissed") private var trackingHintDismissed: Bool = false
 
@@ -362,47 +363,7 @@ struct HoursHomeView: View {
         PayCycleEngine.normalizedPaydayBoundary(settings: store.paySettings)
     }
 
-    private var currentPayCycle: PayCycle {
-        store.currentPayCycle()
-    }
-
-    private var periodEntries: [WorkEntry] {
-        PayCycleEngine.entries(store.entries, in: currentPayCycle)
-    }
-
-    // MARK: - Logged months (current + previous)
-    private var loggedMonths: [Date] {
-        MonthHistoryHelper.loggedMonthStarts(from: store.entries)
-    }
-
-    private var previewLoggedMonths: [Date] {
-        Array(loggedMonths.prefix(4))
-    }
-
-    // Shared month-abbreviation formatter — hoisted out of the render path so the
-    // 12-month chart doesn't allocate a DateFormatter on every body evaluation.
-    private static let monthAbbrevFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "MMM"
-        return f
-    }()
-
-    // MARK: - Monthly hours (last 12 months) for chart
-    private var monthlyHoursByMonth: [(label: String, hours: Double)] {
-        let cal = Calendar.current
-        let year = cal.component(.year, from: Date())
-        return (1...12).compactMap { month -> (String, Double)? in
-            var comps = DateComponents()
-            comps.year = year
-            comps.month = month
-            guard let start = cal.date(from: comps) else { return nil }
-            let hours = store.monthTotalHours(monthDate: start)
-            let label = Self.monthAbbrevFormatter.string(from: start)
-            return (label, hours)
-        }
-    }
-    
-    // MARK: - Weekly hours (Sun–Sat) for chart
+    // MARK: - Best month (personal-best detection)
     private var bestMonthSoFar: (monthStart: Date, hours: Double)? {
         let cal = Calendar.current
         let monthStarts = Set(store.entries.map {
@@ -415,14 +376,6 @@ struct HoursHomeView: View {
         return best
     }
     
-    private var bestMonthText: String? {
-        guard let best = bestMonthSoFar else { return nil }
-        let f = DateFormatter()
-        f.dateFormat = "MMMM yyyy"
-        let monthName = f.string(from: best.monthStart)
-        return "Your best month: \(monthName) (\(AppTheme.Format.hours(best.hours)))"
-    }
-
     private var hasAnyShifts: Bool {
         !store.entries.isEmpty
     }
@@ -440,16 +393,21 @@ struct HoursHomeView: View {
             AppTheme.Colors.bg.ignoresSafeArea()
 
             ScrollView {
-            VStack(spacing: AppDesignSystem.Spacing.xxl) {
+            VStack(spacing: AppSpacing.xl) {
 
-                chequeHeroCard
-                    .cardAppear(index: 0)
+                TodayHeroCard(store: store) {
+                    showingPrestigeInfoFromHeroCard = true
+                }
+                .cardAppear(index: 0)
 
                 progressionCard
                     .cardAppear(index: 1)
 
-                statTriplet
+                HomeStatTriplet(store: store)
                     .cardAppear(index: 2)
+
+                HoursTypeChipsRow(store: store)
+                    .cardAppear(index: 3)
 
                 VStack(spacing: 10) {
                     PrimaryButton("Add Shift", systemImage: "plus") {
@@ -462,7 +420,7 @@ struct HoursHomeView: View {
                         minimalActionTile(
                             title: "Off day",
                             systemImage: "xmark.circle.fill",
-                            tint: Color(red: 0.94, green: 0.30, blue: 0.34)
+                            tint: AppColors.offDayAction
                         ) {
                             Haptics.lightTap()
                             offDayBurst &+= 1
@@ -473,7 +431,7 @@ struct HoursHomeView: View {
                         minimalActionTile(
                             title: "Holiday",
                             systemImage: "airplane",
-                            tint: Color(red: 0.34, green: 0.74, blue: 0.46)
+                            tint: AppColors.holidayAction
                         ) {
                             Haptics.lightTap()
                             holidayBurst &+= 1
@@ -484,80 +442,32 @@ struct HoursHomeView: View {
                         .tapBurst(trigger: holidayBurst)
                     }
                 }
-                .cardAppear(index: 3)
-
-                // Hours Logged
-                homeSection("Hours Logged") {
-                    if loggedMonths.isEmpty {
-                        EmptyStateView(
-                            icon: "calendar.badge.plus",
-                            title: "No shifts logged yet",
-                            subtitle: "Log a shift to see your monthly totals here.",
-                            primaryTitle: hasAnyShifts ? "Add Shift" : "Add First Shift",
-                            primaryAction: {
-                                Haptics.lightTap()
-                                logShiftBurst &+= 1
-                                showingAdd = true
-                            },
-                            secondaryTitle: trackingHintDismissed ? nil : "How tracking works",
-                            secondaryAction: {
-                                trackingHintDismissed = true
-                                showTrackingHint = true
-                            }
-                        )
-                        .padding(.vertical, 8)
-                    } else {
-                        VStack(spacing: 12) {
-                            ForEach(previewLoggedMonths, id: \.self) { monthDate in
-                                NavigationLink {
-                                    MonthDetailView(store: store, monthDate: monthDate)
-                                } label: {
-                                    MonthSummaryRow(
-                                        title: monthTitle(monthDate),
-                                        hours: store.monthTotalHours(monthDate: monthDate),
-                                        pay: store.monthEstimatedPay(monthDate: monthDate),
-                                        currencyCode: store.paySettings.currencyCode,
-                                        showPay: store.paySettings.showPayCalculations
-                                    )
-                                }
-                                .premiumPress()
-                            }
-
-                            NavigationLink {
-                                PreviousMonthsView(store: store)
-                            } label: {
-                                Text(loggedMonths.count > previewLoggedMonths.count
-                                     ? "View all \(loggedMonths.count) months"
-                                     : "View all months")
-                                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(AppTheme.Colors.accent)
-                                    .multilineTextAlignment(.center)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .padding(.horizontal, 14)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                            .fill(AppTheme.Colors.accent.opacity(0.1))
-                                    )
-                            }
-                            .premiumPress()
-                        }
-                    }
-                }
                 .cardAppear(index: 4)
 
-                // Monthly Overview (year-at-a-glance)
-                homeSection("Yearly Overview", boxed: true) {
-                    VStack(spacing: 14) {
-                        Text(verbatim: "\(Calendar.current.component(.year, from: Date()))")
-                            .font(.system(size: 22, weight: .heavy, design: .rounded))
-                            .foregroundStyle(AppTheme.Colors.text)
-                            .frame(maxWidth: .infinity, alignment: .center)
-
-                        MonthlyOverviewChart(data: monthlyHoursByMonth)
+                RecentShiftsSection(
+                    store: store,
+                    hasAnyShifts: hasAnyShifts,
+                    onSelect: { entry in
+                        editingEntry = entry
+                    },
+                    onViewAll: {
+                        Haptics.lightTap()
+                        tabRouter.selection = .history
+                    },
+                    onAddShift: {
+                        Haptics.lightTap()
+                        logShiftBurst &+= 1
+                        showingAdd = true
+                    },
+                    onTrackingHint: trackingHintDismissed ? nil : {
+                        trackingHintDismissed = true
+                        showTrackingHint = true
                     }
-                }
+                )
                 .cardAppear(index: 5)
+
+                YearlyOverviewSection(store: store)
+                    .cardAppear(index: 6)
 
                 if !premium.isPremium {
                     BannerAdView()
@@ -565,22 +475,18 @@ struct HoursHomeView: View {
                         .frame(maxWidth: .infinity)
                 }
 
-                Button {
-                    tabRouter.selection = .friends
-                } label: {
-                    homeSection("Friends", boxed: true) {
-                        HomeFriendsCardContent(
-                            friendsService: friendsService,
-                            store: store,
-                            authService: authService
-                        )
+                HomeFriendsCard(
+                    friendsService: friendsService,
+                    store: store,
+                    authService: authService,
+                    onOpenFriends: {
+                        tabRouter.selection = .friends
                     }
-                }
-                .buttonStyle(.plain)
-                .cardAppear(index: 6)
+                )
+                .cardAppear(index: 7)
 
                 homeTopTrackersSection
-                    .cardAppear(index: 7)
+                    .cardAppear(index: 8)
 
                 Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
@@ -653,6 +559,9 @@ struct HoursHomeView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingAdd) {
             EntryEditorView(store: store, mode: .add)
+        }
+        .sheet(item: $editingEntry) { entry in
+            EntryEditorView(store: store, mode: .edit(entry))
         }
         .sheet(isPresented: $showingHolidayPicker) {
             HolidayPickerSheet(
@@ -809,7 +718,7 @@ struct HoursHomeView: View {
 
     private var progressionCard: some View {
         VStack(spacing: 12) {
-            levelStrip
+            HomeXPStrip(store: store)
 
             if store.gamificationProfile.canPrestige {
                 PrestigeCallToAction(currentPrestige: store.gamificationProfile.prestige) {
@@ -821,210 +730,6 @@ struct HoursHomeView: View {
                 .animation(.spring(response: 0.4, dampingFraction: 0.75), value: store.gamificationProfile.canPrestige)
             }
         }
-    }
-
-    // MARK: - Cheque Hero (Hero Ledger)
-
-    private var periodHours: Double {
-        periodEntries.reduce(0) { $0 + $1.paidHours }
-    }
-
-    private var periodPay: Double {
-        periodEntries.reduce(0) { $0 + store.payBreakdown(for: $1).pay }
-    }
-
-    private var periodDaysWorked: Int {
-        let cal = Calendar.current
-        return Set(periodEntries.filter { !$0.isOffDay }.map { cal.startOfDay(for: $0.date) }).count
-    }
-
-    private var daysUntilPayday: Int {
-        let cal = Calendar.current
-        return max(0, cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: nextPayday)).day ?? 0)
-    }
-
-    private var paydayShortText: String {
-        let f = DateFormatter()
-        f.dateFormat = "MMM d"
-        return f.string(from: nextPayday)
-    }
-
-    /// How far through the pay period we are.
-    private var heroProgress: (value: Double, caption: String) {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        let total = max(currentPayCycle.spanDays, 1)
-        let elapsed = max(0, min(cal.dateComponents([.day], from: cal.startOfDay(for: currentPayCycle.start), to: today).day ?? 0, total))
-        return (Double(elapsed) / Double(total), "Day \(min(elapsed + 1, total)) of \(total)")
-    }
-
-    private var chequeHeroCard: some View {
-        NavigationLink {
-            PayCycleDetailView(store: store, initialCycle: currentPayCycle)
-        } label: {
-            VStack(spacing: 16) {
-                VStack(spacing: 2) {
-                    Text("THIS CHEQUE")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .tracking(1.6)
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                    Text(currentPayCycle.workRangeText())
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(AppTheme.Colors.faint)
-                }
-                .frame(maxWidth: .infinity)
-
-                HStack(spacing: 0) {
-                    VStack(spacing: 4) {
-                        HStack(alignment: .firstTextBaseline, spacing: 4) {
-                            AnimatedMetricText(value: periodHours) { AppTheme.Format.hours($0, suffix: "") }
-                                .font(AppDesignSystem.Typography.heroNumerals(size: 34, weight: .heavy))
-                                .foregroundStyle(AppTheme.Colors.text)
-                            Text("hrs")
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
-                                .foregroundStyle(AppTheme.Colors.subtext)
-                        }
-                        if store.paySettings.showPayCalculations {
-                            AnimatedMetricText(currency: periodPay, code: store.paySettings.currencyCode)
-                                .font(.system(size: 13, weight: .bold, design: .rounded))
-                                .foregroundStyle(AppTheme.Colors.accent)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    Rectangle()
-                        .fill(AppTheme.Colors.stroke)
-                        .frame(width: 1, height: 44)
-
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("\(periodDaysWorked)")
-                            .font(AppDesignSystem.Typography.heroNumerals(size: 34, weight: .heavy))
-                            .foregroundStyle(AppTheme.Colors.text)
-                        Text(periodDaysWorked == 1 ? "day" : "days")
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(AppTheme.Colors.subtext)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-
-                let _profile = store.displayedGamificationProfile()
-                let _tier = PrestigeTheme.tier(for: _profile.prestige)
-                Button {
-                    showingPrestigeInfoFromHeroCard = true
-                } label: {
-                    Label(
-                        _profile.prestige == 0 ? "Unranked" : "Prestige \(_profile.prestige) (\(_tier.name))",
-                        systemImage: _tier.icon
-                    )
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(_profile.prestige == 0 ? AppTheme.Colors.subtext : _tier.primary)
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(20)
-            .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(AppTheme.Colors.card2)
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    AppTheme.Colors.accent.opacity(0.14),
-                                    Color.clear,
-                                    AppTheme.Colors.accent.opacity(0.05)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                }
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                AppTheme.Colors.accent.opacity(0.4),
-                                AppTheme.Colors.accent.opacity(0.08),
-                                Color.clear
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-            )
-            .shadow(color: AppTheme.Colors.accent.opacity(0.18), radius: 18, y: 8)
-        }
-        .buttonStyle(PremiumPressStyle())
-        .id(currentPayCycle)
-    }
-
-    // MARK: - Compact Level Strip
-
-    private var levelStrip: some View {
-        let profile = store.displayedGamificationProfile()
-        return NavigationLink {
-            CareerView(store: store)
-        } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(stripPrestigeColor(profile).opacity(0.15))
-                        .frame(width: 30, height: 30)
-                    Image(systemName: PrestigeTheme.tier(for: profile.prestige).icon)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(stripPrestigeColor(profile))
-                }
-
-                Text("LVL \(profile.level)")
-                    .font(.system(size: 15, weight: .black, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.text)
-                    .layoutPriority(1)
-
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.white.opacity(0.08))
-                            .frame(height: 6)
-                        Capsule()
-                            .fill(AppTheme.Colors.accentGradient)
-                            .frame(width: max(6, geo.size.width * stripXPProgress(profile)), height: 6)
-                    }
-                    .frame(maxHeight: .infinity, alignment: .center)
-                }
-                .frame(height: 30)
-
-                if profile.currentStreak > 0 {
-                    HStack(spacing: 3) {
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(Color(hex: 0xF97316))
-                        Text("\(profile.currentStreak)")
-                            .font(.system(size: 14, weight: .black, design: .rounded))
-                            .foregroundStyle(AppTheme.Colors.text)
-                    }
-                    .layoutPriority(1)
-                }
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(AppTheme.Colors.faint)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 13)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(AppTheme.Colors.card.opacity(0.55))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
-                    )
-            )
-        }
-        .buttonStyle(PremiumPressStyle())
     }
 
     // MARK: - Top 5 Hour Trackers (moved from the side menu)
@@ -1123,480 +828,8 @@ struct HoursHomeView: View {
         .padding(.vertical, 8)
     }
 
-    private func stripPrestigeColor(_ profile: GamificationProfile) -> Color {
-        profile.prestige == 0 ? AppTheme.Colors.accent : PrestigeTheme.color(for: profile.prestige)
-    }
-
-    private func stripXPProgress(_ profile: GamificationProfile) -> Double {
-        guard profile.xpForNextLevel > 0 else { return 0 }
-        return min(max(Double(profile.xpIntoCurrentLevel) / Double(profile.xpForNextLevel), 0), 1)
-    }
-
-    // MARK: - Stat Triplet
-
-    private var thisWeekHours: Double {
-        var cal = Calendar.current
-        cal.firstWeekday = 2 // Monday
-        guard let interval = cal.dateInterval(of: .weekOfYear, for: Date()) else { return 0 }
-        return store.entries
-            .filter { !$0.isOffDay && $0.date >= interval.start && $0.date < interval.end }
-            .reduce(0) { $0 + $1.paidHours }
-    }
-
-    private var statTriplet: some View {
-        HStack(spacing: 10) {
-            statTile(
-                label: "This Week",
-                value: AppTheme.Format.hours(thisWeekHours)
-            )
-            statTile(
-                label: "This Cheque",
-                value: AppTheme.Format.hours(periodHours)
-            )
-            statTile(
-                label: "This Month",
-                value: AppTheme.Format.hours(store.monthTotalHours(monthDate: Date()))
-            )
-        }
-    }
-
-    private func statTile(label: String, value: String) -> some View {
-        VStack(spacing: 4) {
-            Text(label.uppercased())
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .tracking(1.2)
-                .foregroundStyle(AppTheme.Colors.faint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            Text(value)
-                .font(AppDesignSystem.Typography.heroNumerals(size: 20, weight: .bold))
-                .foregroundStyle(AppTheme.Colors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(AppTheme.Colors.card.opacity(0.55))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
-                )
-        )
-    }
-    
-    private func monthTitle(_ d: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "LLLL yyyy"
-        return f.string(from: d)
-    }
-    
-    // MARK: - Pay Period Progress (Animated)
-    private var payPeriodProgressView: some View {
-        let cal = Calendar.current
-        let now = Date()
-        let today = cal.startOfDay(for: now)
-        let totalDays = currentPayCycle.spanDays
-        let accrualEnd = PayCycleEngine.usesSavedCutoff(store.paySettings)
-            ? currentPayCycle.cutoff
-            : cal.date(byAdding: .day, value: -1, to: currentPayCycle.end) ?? currentPayCycle.cutoff
-        let elapsedCap = min(today, accrualEnd)
-        let daysElapsed = max(0, cal.dateComponents([.day], from: currentPayCycle.start, to: elapsedCap).day ?? 0)
-        let daysRemaining = max(0, cal.dateComponents([.day], from: today, to: nextPayday).day ?? 0)
-        let progressValue = min(max(Double(daysElapsed) / Double(totalDays), 0), 1)
-        
-        let f = DateFormatter()
-        f.dateFormat = "MMM d"
-        let paydayText = f.string(from: nextPayday)
-        
-        return AnimatedProgressBarView(
-            progress: progressValue,
-            paydayText: paydayText,
-            daysRemaining: daysRemaining
-        )
-    }
-    
 }
 
-// MARK: - Home Friends Card
-private struct HomeFriendsCardContent: View {
-    @ObservedObject var friendsService: FriendsService
-    @ObservedObject var store: HoursStore
-    @ObservedObject var authService: AuthService
-    @ObservedObject private var statsListener = StatsListenerService.shared
-
-    private struct WeeklyStandingsRow: Identifiable {
-        let id: String
-        let name: String
-        let hours: Double
-        let levelLine: String
-        let profilePhotoURL: String?
-        let isMe: Bool
-    }
-
-    private func levelLine(for friend: FriendProfile) -> String {
-        friend.levelDisplayLine
-    }
-
-    private var weeklyStandings: [WeeklyStandingsRow] {
-        let myName = UserDefaults.standard.string(forKey: "profile_display_name") ?? "You"
-        let profile = store.gamificationProfile
-        let currentCycle = store.currentPayCycle()
-        let myHours = PayCycleEngine.entries(store.entries, in: currentCycle)
-            .reduce(0.0) { $0 + $1.paidHours }
-        let myLevelLine = GamificationLevelCalculator.displayLevelLine(
-            level: store.displayedLevel,
-            prestige: profile.prestige
-        )
-        var rows: [WeeklyStandingsRow] = [
-            WeeklyStandingsRow(
-                id: authService.user?.uid ?? "self",
-                name: myName,
-                hours: myHours,
-                levelLine: myLevelLine,
-                profilePhotoURL: ProfilePhotoManager.shared.remotePhotoURL,
-                isMe: true
-            )
-        ]
-        rows += friendsService.friends
-            .filter { $0.privacy.shareHours }
-            .map {
-                WeeklyStandingsRow(
-                    id: $0.uid,
-                    name: $0.displayName,
-                    hours: $0.chequeHours,
-                    levelLine: levelLine(for: $0),
-                    profilePhotoURL: $0.profilePhotoURL,
-                    isMe: false
-                )
-            }
-        return rows
-            .sorted {
-                if $0.hours != $1.hours { return $0.hours > $1.hours }
-                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(weeklyStandings.prefix(3).enumerated()), id: \.element.id) { index, row in
-                if index > 0 {
-                    Divider().opacity(0.2)
-                }
-                standingsRow(row, rank: index + 1)
-            }
-        }
-        .animation(nil, value: weeklyStandings.map { "\($0.id)-\($0.hours)" })
-        .frame(maxWidth: .infinity, alignment: .top)
-        .padding(.vertical, 8)
-        .animation(nil, value: friendsService.friends.map { "\($0.uid):\($0.weeklyHours):\($0.totalHours):\($0.level)" })
-        .onAppear {
-            store.syncProfileSnapshotToCloud()
-            Task { await friendsService.refreshFriendProfiles() }
-        }
-    }
-
-    private func standingsRow(_ row: WeeklyStandingsRow, rank: Int) -> some View {
-        HStack(spacing: 10) {
-            Text("\(rank)")
-                .font(.system(size: 13, weight: .black, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.faint)
-                .frame(width: 18, alignment: .leading)
-
-            ProfileAvatarView(
-                name: row.name,
-                size: 32,
-                photoURL: row.profilePhotoURL,
-                uid: row.id
-            )
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(row.name)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundStyle(AppTheme.Colors.text)
-                        .lineLimit(1)
-
-                    if row.isMe {
-                        Text("YOU")
-                            .font(.system(size: 9, weight: .black))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(AppTheme.Colors.accent.opacity(0.22)))
-                            .foregroundStyle(AppTheme.Colors.accent)
-                    }
-                }
-
-                Text(row.levelLine)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-            }
-
-            Spacer(minLength: 8)
-
-            Text(AppTheme.Format.hours(row.hours))
-                .font(AppDesignSystem.Typography.heroNumerals(size: 16, weight: .bold))
-                .foregroundStyle(rank == 1 ? AppTheme.Colors.accent : AppTheme.Colors.text)
-                .monospacedDigit()
-        }
-        .padding(.vertical, 8)
-    }
-}
-
-// MARK: - Monthly Overview Bar Chart
-private struct MonthlyOverviewChart: View {
-    let data: [(label: String, hours: Double)]
-    @State private var appeared = false
-    
-    private var maxHours: Double {
-        max(data.map(\.hours).max() ?? 8, 8)
-    }
-
-    /// Compact label above bars. Shows whole hours for values ≥ 10 so labels
-    /// never truncate inside the narrow bar columns.
-    private func compactHours(_ value: Double) -> String {
-        guard value.isFinite, value > 0 else { return "0h" }
-        if value >= 10 {
-            return "\(Int(value.rounded()))h"
-        }
-        // Below 10h show one decimal to distinguish e.g. 4.5h from 4h
-        let tenths = (value * 10).rounded() / 10
-        return tenths == tenths.rounded(.towardZero) ? "\(Int(tenths))h" : "\(tenths)h"
-    }
-
-    var body: some View {
-        let chartHeight: CGFloat = 160
-        let barSpacing: CGFloat = 4
-        let labelReserve: CGFloat = 22
-
-        VStack(spacing: 12) {
-            GeometryReader { geo in
-                let barWidth = max(16, (geo.size.width - barSpacing * CGFloat(max(data.count - 1, 0))) / CGFloat(max(data.count, 1)))
-                
-                HStack(alignment: .bottom, spacing: barSpacing) {
-                    ForEach(Array(data.enumerated()), id: \.offset) { index, item in
-                        VStack(spacing: 6) {
-                            Text(item.hours > 0 ? compactHours(item.hours) : " ")
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                .foregroundStyle(AppTheme.Colors.text)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: .infinity)
-                                .opacity(item.hours > 0 ? 1 : 0)
-                            
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [AppTheme.Colors.accent, AppTheme.Colors.accent2],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-                                .frame(
-                                    width: barWidth,
-                                    height: appeared && item.hours > 0
-                                        ? (maxHours > 0 ? max(4, CGFloat(item.hours / maxHours) * (chartHeight - labelReserve - 8)) : 4)
-                                        : 0
-                                )
-                                .opacity(item.hours > 0 ? 1 : 0)
-                                .shadow(color: item.hours > 0 ? AppTheme.Colors.accent.opacity(0.25) : .clear, radius: 3, y: 2)
-                                .animation(.spring(response: 0.6, dampingFraction: 0.7).delay(Double(index) * 0.04), value: appeared)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            }
-            .frame(height: chartHeight)
-
-            HStack(spacing: 0) {
-                ForEach(Array(data.enumerated()), id: \.offset) { _, item in
-                    Text(item.label)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                        .frame(maxWidth: .infinity)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-            }
-        }
-        .padding(.vertical, 8)
-        .onAppear { appeared = true }
-    }
-}
-
-// MARK: - Animated Progress Bar (Enhanced)
-private struct AnimatedProgressBarView: View {
-    let progress: Double
-    let paydayText: String
-    let daysRemaining: Int
-    
-    @State private var animatedProgress: Double = 0
-    @State private var pulseScale: CGFloat = 1.0
-    @State private var paydayBounce: CGFloat = 1.0
-    @State private var paydayGlow: Double = 0.5
-    @State private var emojiOffset: CGFloat = 0
-    
-    private let barHeight: CGFloat = 12
-    private var isNearPayday: Bool { daysRemaining > 0 && daysRemaining <= 3 }
-    private var isPayday: Bool { daysRemaining == 0 }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: "calendar.badge.clock")
-                        .font(.system(size: 13))
-                        .foregroundStyle(AppTheme.Colors.accent)
-                    Text(isPayday ? "Payday!" : "Next Payday")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(isPayday ? AppTheme.Colors.accent : AppTheme.Colors.text)
-                }
-                Spacer()
-                Text(paydayText)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.accent)
-                    .animation(.default, value: paydayText)
-            }
-            
-            GeometryReader { geometry in
-                let width = geometry.size.width
-                ZStack(alignment: .leading) {
-                    // Track
-                    Capsule()
-                        .fill(AppTheme.Colors.stroke.opacity(0.4))
-                        .frame(height: barHeight)
-                    
-                    // Milestone markers (25%, 50%, 75%)
-                    ForEach([0.25, 0.5, 0.75], id: \.self) { pct in
-                        Rectangle()
-                            .fill(AppTheme.Colors.stroke.opacity(0.5))
-                            .frame(width: 1, height: barHeight - 2)
-                            .position(x: width * pct, y: barHeight / 2)
-                    }
-                    
-                    Capsule()
-                        .fill(
-                            isPayday
-                            ? LinearGradient(colors: [Color(hex: 0xFFD700), Color(hex: 0xFF9500), Color(hex: 0xFFD700)], startPoint: .leading, endPoint: .trailing)
-                            : LinearGradient(colors: [AppTheme.Colors.accent, AppTheme.Colors.accent2, AppTheme.Colors.accentHighlight], startPoint: .leading, endPoint: .trailing)
-                        )
-                        .frame(width: max(0, width * animatedProgress), height: barHeight)
-                        .overlay(
-                            Capsule()
-                                .fill(LinearGradient(colors: [Color.white.opacity(0.25), Color.clear], startPoint: .top, endPoint: .bottom))
-                                .frame(width: max(0, width * animatedProgress), height: barHeight)
-                                .allowsHitTesting(false)
-                        )
-                        .shadow(color: (isPayday ? Color(hex: 0xFFD700) : AppTheme.Colors.accent).opacity(0.45 * pulseScale), radius: 6 * pulseScale, x: 0, y: 1)
-                        .scaleEffect(x: 1.0, y: pulseScale, anchor: .center)
-                    
-                    // Progress cap bubble
-                    if animatedProgress > 0.03 {
-                        Circle()
-                            .fill(isPayday ? Color(hex: 0xFFD700) : AppTheme.Colors.accent)
-                            .frame(width: (barHeight + 2) * pulseScale, height: (barHeight + 2) * pulseScale)
-                            .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 1))
-                            .shadow(color: (isPayday ? Color(hex: 0xFFD700) : AppTheme.Colors.accent).opacity(0.5 * pulseScale), radius: 3 * pulseScale)
-                            .offset(x: max(0, width * animatedProgress - (barHeight + 2) * pulseScale / 2.0))
-                    }
-                }
-            }
-            .frame(height: barHeight)
-            .onAppear {
-                withAnimation(.easeOut(duration: 1.0)) {
-                    animatedProgress = progress
-                }
-                startPulseAnimation()
-                if isPayday { startPaydayAnimation() }
-            }
-            .onChange(of: progress) { _, newValue in
-                withAnimation(.easeOut(duration: 0.8)) { animatedProgress = newValue }
-            }
-            .onChange(of: isPayday) { _, nowPayday in
-                if nowPayday { startPaydayAnimation() }
-            }
-            
-            // Countdown badge
-            HStack(spacing: 8) {
-                Spacer(minLength: 0)
-                if isPayday {
-                    HStack(spacing: 6) {
-                        Text("💰")
-                            .font(.system(size: 14))
-                            .offset(y: emojiOffset)
-                        Text("Payday!")
-                            .font(.system(size: 14, weight: .black, design: .rounded))
-                            .foregroundStyle(
-                                LinearGradient(colors: [Color(hex: 0xFFD700), Color(hex: 0xFF9500)], startPoint: .leading, endPoint: .trailing)
-                            )
-                        Text("💸")
-                            .font(.system(size: 14))
-                            .offset(y: -emojiOffset)
-                    }
-                    .scaleEffect(paydayBounce)
-                } else {
-                    HStack(spacing: 4) {
-                        Text("\(daysRemaining)")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(AppTheme.Colors.accent)
-                        Text("day\(daysRemaining == 1 ? "" : "s") until payday")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(AppTheme.Colors.subtext)
-                        if isNearPayday {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 11))
-                                .foregroundStyle(AppTheme.Colors.accent)
-                        }
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(isPayday
-                          ? Color(hex: 0xFFD700).opacity(0.15)
-                          : (isNearPayday ? AppTheme.Colors.accent.opacity(0.15) : AppTheme.Colors.card2.opacity(0.6)))
-                    .overlay(
-                        Capsule()
-                            .stroke(isPayday
-                                    ? Color(hex: 0xFFD700).opacity(paydayGlow)
-                                    : (isNearPayday ? AppTheme.Colors.accent.opacity(0.4) : AppTheme.Colors.stroke.opacity(0.3)),
-                                    lineWidth: isPayday ? 1.5 : 1)
-                    )
-                    .shadow(color: isPayday ? Color(hex: 0xFFD700).opacity(0.25) : .clear, radius: 8)
-            )
-        }
-    }
-    
-    // MARK: - Animations
-    
-    private func startPulseAnimation() {
-        withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-            pulseScale = 1.15
-        }
-    }
-    
-    private func startPaydayAnimation() {
-        // Gentle bounce on the badge
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.5).repeatForever(autoreverses: true)) {
-            paydayBounce = 1.06
-        }
-        // Alternating emoji float
-        withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-            emojiOffset = -4
-        }
-        // Glow pulse on the border
-        withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-            paydayGlow = 0.9
-        }
-    }
-}
 
 // MARK: - Helper Functions
 

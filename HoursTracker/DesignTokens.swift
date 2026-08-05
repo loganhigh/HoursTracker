@@ -51,6 +51,18 @@ enum AppColors {
         LinearGradient(colors: [gold, goldDeep], startPoint: .leading, endPoint: .trailing)
     }
 
+    // Podium metals (leaderboard rank pips — fixed, not prestige-retinted).
+    static let rankGold = Color(red: 0.98, green: 0.79, blue: 0.28)
+    static let rankSilver = Color(red: 0.75, green: 0.79, blue: 0.85)
+    static let rankBronze = Color(red: 0.83, green: 0.55, blue: 0.35)
+
+    /// Streak flame — fixed ember orange (matches the flame icon everywhere).
+    static let streak = Color(hex: 0xF97316)
+
+    // Quick-action tints (semantic: off day = rest/red, holiday = away/green).
+    static let offDayAction = Color(red: 0.94, green: 0.30, blue: 0.34)
+    static let holidayAction = Color(red: 0.34, green: 0.74, blue: 0.46)
+
     // Overlay tints (scrims behind sheets / photo viewers)
     static var overlay: Color { Color.black.opacity(0.45) }
     static var overlaySubtle: Color { Color.black.opacity(0.2) }

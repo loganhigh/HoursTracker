@@ -3,12 +3,13 @@ import Combine
 
 // MARK: - Tabs
 
-/// The five root destinations of the app. Replaces the old side-drawer
-/// navigation (SideMenu) with a native tab bar.
+/// The root destinations of the app. Replaces the old side-drawer navigation
+/// (SideMenu) with a native tab bar. `.add` is a pseudo-tab: selecting it
+/// never switches screens — it presents the add-shift editor instead.
 enum AppTab: Hashable {
     case home
     case history
-    case stats
+    case add
     case friends
     case you
 }
@@ -21,14 +22,33 @@ final class TabRouter: ObservableObject {
 
 // MARK: - App tab view
 
-/// Root 5-tab structure: Home · History · Stats · Friends · You.
-/// Each tab owns its own `NavigationStack` so pushes stay scoped per tab.
+/// Root tab structure: Home · History · + · Friends · You.
+/// Each real tab owns its own `NavigationStack` so pushes stay scoped per tab.
+/// The middle "+" item is intercepted: choosing it keeps the current tab
+/// selected and presents the same `EntryEditorView` add sheet Home uses.
 struct AppTabView: View {
     @EnvironmentObject private var store: HoursStore
     @StateObject private var tabRouter = TabRouter()
+    @State private var showingAddShift = false
+
+    /// Intercepting selection binding: the "+" item opens the add-shift sheet
+    /// instead of becoming the selected tab.
+    private var selection: Binding<AppTab> {
+        Binding(
+            get: { tabRouter.selection },
+            set: { newValue in
+                if newValue == .add {
+                    Haptics.lightTap()
+                    showingAddShift = true
+                } else {
+                    tabRouter.selection = newValue
+                }
+            }
+        )
+    }
 
     var body: some View {
-        TabView(selection: $tabRouter.selection) {
+        TabView(selection: selection) {
             NavigationStack {
                 HoursHomeView()
                     .background(AppColors.bg.ignoresSafeArea())
@@ -42,11 +62,10 @@ struct AppTabView: View {
             .tabItem { Label("History", systemImage: "calendar") }
             .tag(AppTab.history)
 
-            NavigationStack {
-                ReportingView(store: store)
-            }
-            .tabItem { Label("Stats", systemImage: "chart.bar.fill") }
-            .tag(AppTab.stats)
+            // Never actually selected — the binding intercepts this tag.
+            Color.clear
+                .tabItem { Label("Add Shift", systemImage: "plus.circle.fill") }
+                .tag(AppTab.add)
 
             NavigationStack {
                 FriendsView(store: store)
@@ -62,5 +81,8 @@ struct AppTabView: View {
         }
         .tint(AppColors.accent)
         .environmentObject(tabRouter)
+        .sheet(isPresented: $showingAddShift) {
+            EntryEditorView(store: store, mode: .add)
+        }
     }
 }
