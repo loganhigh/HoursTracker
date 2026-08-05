@@ -410,11 +410,28 @@ struct HoursHomeView: View {
                     .cardAppear(index: 3)
 
                 VStack(spacing: 10) {
-                    PrimaryButton("Add Shift", systemImage: "plus") {
+                    // Quiet primary action: flat accent fill, hairline-free,
+                    // no glow — the hero card owns this screen's one glow.
+                    Button {
                         Haptics.lightTap()
                         logShiftBurst &+= 1
                         showingAdd = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 16, weight: .bold))
+                            Text("Add Shift")
+                                .font(.system(size: 16, weight: .bold, design: .rounded))
+                        }
+                        .foregroundStyle(AppColors.textOnAccent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 15)
+                        .background(
+                            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                                .fill(AppColors.accent)
+                        )
                     }
+                    .buttonStyle(TapBurstButtonStyle())
                     .tapBurst(trigger: logShiftBurst)
                     HStack(spacing: 10) {
                         minimalActionTile(

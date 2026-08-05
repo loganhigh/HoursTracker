@@ -51,19 +51,26 @@ struct TodayHeroCard: View {
             VStack(spacing: AppSpacing.md) {
                 SectionEyebrow("Today", subtitle: Self.todayFormatter.string(from: Date()))
 
-                HStack(spacing: 0) {
+                // Both columns lead with their numeral row so the split shares
+                // a baseline (July split-stats recipe). The divider is an
+                // overlay so it can't disturb the baseline alignment.
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
                     todayColumn
                         .frame(maxWidth: .infinity)
-
-                    Rectangle()
-                        .fill(AppColors.stroke)
-                        .frame(width: 1, height: 48)
 
                     chequeColumn
                         .frame(maxWidth: .infinity)
                 }
+                .overlay(
+                    Rectangle()
+                        .fill(AppColors.stroke)
+                        .frame(width: 1, height: 48)
+                )
 
-                prestigeRow
+                // Rank is earned chrome — an "Unranked" shield is just noise.
+                if store.displayedGamificationProfile().prestige > 0 {
+                    prestigeRow
+                }
             }
             .padding(AppSpacing.lg)
             .background(heroBackground)
@@ -98,20 +105,20 @@ struct TodayHeroCard: View {
                     .appText(.headline)
                     .foregroundStyle(AppColors.subtext)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(todayIsOffDay ? "Enjoy the rest" : "Log a shift when you're done")
                     .appText(.caption)
                     .foregroundStyle(AppColors.faint)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
     // Secondary split column: this cheque's hours (+ pay when enabled).
+    // Numeral-first so its baseline lines up with the today numeral.
     private var chequeColumn: some View {
         VStack(spacing: AppSpacing.xxs) {
-            Text("This cheque")
-                .appText(.eyebrow)
-                .foregroundStyle(AppColors.faint)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 AnimatedMetricText(value: chequeHours) { AppTheme.Format.hours($0, suffix: "") }
                     .font(AppTypography.metricValue)
@@ -120,6 +127,9 @@ struct TodayHeroCard: View {
                     .appText(.caption)
                     .foregroundStyle(AppColors.subtext)
             }
+            Text("this cheque")
+                .appText(.caption)
+                .foregroundStyle(AppColors.faint)
             if store.paySettings.showPayCalculations {
                 AnimatedMetricText(currency: chequePay, code: store.paySettings.currencyCode)
                     .appText(.caption)
@@ -278,9 +288,13 @@ struct HomeXPStrip: View {
                 Capsule()
                     .fill(AppColors.stroke.opacity(0.6))
                     .frame(height: 6)
-                Capsule()
-                    .fill(AppColors.accentGradient)
-                    .frame(width: max(6, geo.size.width * displayedProgress), height: 6)
+                // No fill at zero progress — an empty track is honest; a
+                // floating 6pt knob reads as a rendering bug.
+                if displayedProgress > 0 {
+                    Capsule()
+                        .fill(AppColors.accentGradient)
+                        .frame(width: max(6, geo.size.width * displayedProgress), height: 6)
+                }
             }
             .frame(maxHeight: .infinity, alignment: .center)
         }
@@ -427,7 +441,9 @@ struct HomeStatTile: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 
-            if let progress {
+            // Context bar only when there is actual progress to show — an
+            // empty track with a floating dot under "0h" reads as broken.
+            if let progress, progress > 0 {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule()

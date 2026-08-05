@@ -184,7 +184,6 @@ struct MonthlyOverviewChart: View {
                                         : 0
                                 )
                                 .opacity(item.hours > 0 ? 1 : 0)
-                                .shadow(color: item.hours > 0 ? AppColors.accent.opacity(0.25) : .clear, radius: 3, y: 2)
                                 .animation(AppMotion.Spring.smooth.delay(Double(index) * 0.04), value: appeared)
                         }
                         .frame(maxWidth: .infinity)

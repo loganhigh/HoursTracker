@@ -188,10 +188,11 @@ struct PrimaryButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
             .background(
+                // Quiet primary: flat accent fill, no glow — cards own their
+                // screens' single glow, buttons never do.
                 RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                    .fill(AppColors.accentGradient)
+                    .fill(AppColors.accent)
             )
-            .shadow(color: AppColors.accent.opacity(0.4), radius: 12, x: 0, y: 5)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
             .opacity(configuration.isPressed ? 0.96 : 1)
             .animation(AppMotion.Spring.press, value: configuration.isPressed)
