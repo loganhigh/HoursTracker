@@ -1,9 +1,16 @@
 import SwiftUI
 
+// MARK: - Friends hub (Phase 6)
+//
+// Friend-code card, pending requests, then a Friends / Activity / Leaderboards
+// segmented hub. Rows and cards live in FriendsSections.swift; the inline
+// activity feed lives in ActivityFeedView.swift (ActivityFeedInlineSection).
+
 struct FriendsView: View {
     @ObservedObject var store: HoursStore
     @EnvironmentObject private var authService: AuthService
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @ObservedObject private var friendsService = FriendsService.shared
     @State private var codeInput = ""
@@ -13,6 +20,13 @@ struct FriendsView: View {
     @State private var isSending = false
     @State private var sendTimeoutTask: Task<Void, Never>?
     @State private var profileFriendUid: String?
+
+    /// Persisted segment selection — restored across launches.
+    @AppStorage("friends_selected_segment") private var segmentRaw: String = FriendsSegment.friends.rawValue
+
+    private var segment: FriendsSegment {
+        FriendsSegment(rawValue: segmentRaw) ?? .friends
+    }
 
     private var myName: String {
         UserDefaults.standard.string(forKey: "profile_display_name") ?? "Worker"
@@ -26,7 +40,7 @@ struct FriendsView: View {
                 friendsContent
             }
         }
-        .background(AppTheme.Colors.bg.ignoresSafeArea())
+        .background(AppColors.bg.ignoresSafeArea())
         .navigationTitle("Friends")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -60,111 +74,38 @@ struct FriendsView: View {
         }
     }
 
-    // MARK: - Quick links (Activity / Leaderboards)
-
-    private var friendsQuickLinks: some View {
-        VStack(spacing: 0) {
-            friendsLinkRow(icon: "bolt.fill", title: "Activity Feed") {
-                ActivityFeedView(
-                    feed: ActivityFeedService.shared,
-                    friendsService: FriendsService.shared
-                )
-            }
-            Divider()
-                .overlay(AppColors.stroke)
-                .padding(.leading, 56)
-            friendsLinkRow(icon: "trophy.fill", title: "Friends Leaderboard") {
-                FriendsLeaderboardView(
-                    store: store,
-                    friendsService: FriendsService.shared
-                )
-            }
-            Divider()
-                .overlay(AppColors.stroke)
-                .padding(.leading, 56)
-            friendsLinkRow(icon: "globe", title: "Global Leaderboard") {
-                GlobalLeaderboardView()
-            }
-        }
-        .background(
-            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                .fill(AppColors.card.opacity(0.55))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                .stroke(AppColors.stroke, lineWidth: 0.5)
-        )
-    }
-
-    private func friendsLinkRow<Destination: View>(
-        icon: String,
-        title: String,
-        @ViewBuilder destination: () -> Destination
-    ) -> some View {
-        NavigationLink {
-            destination()
-        } label: {
-            HStack(spacing: AppSpacing.sm) {
-                ZStack {
-                    Circle()
-                        .fill(AppColors.accent.opacity(0.15))
-                        .frame(width: 34, height: 34)
-                    Image(systemName: icon)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(AppColors.accent)
-                }
-                Text(title)
-                    .font(AppTypography.headline)
-                    .foregroundStyle(AppColors.text)
-                Spacer(minLength: AppSpacing.xs)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(AppColors.faint)
-            }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.vertical, AppSpacing.sm)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
     private var signedOutPlaceholder: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "person.2.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(AppTheme.Colors.subtext.opacity(0.5))
-            Text("Sign in to use Friends")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.text)
-            Text("Sign in with Apple from Account to add friends and see their stats.")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(AppTheme.Colors.subtext)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-        }
+        AppEmptyState(
+            icon: "person.2",
+            title: "Sign in to use Friends",
+            message: "Sign in with Apple from Account to add friends and see their stats."
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    // MARK: - Content
+
     private var friendsContent: some View {
         ScrollView {
-            VStack(spacing: 18) {
-                friendCodeHeroCard
-                    .padding(.horizontal, AppTheme.Spacing.md)
+            VStack(spacing: AppSpacing.md) {
+                FriendCodeCard(
+                    code: friendsService.myFriendCode,
+                    codeInput: $codeInput,
+                    isSending: isSending,
+                    copyConfirmation: copyConfirmation,
+                    onCopy: { copyCode() },
+                    onAdd: { Task { await sendRequest() } }
+                )
 
                 notifyCaption
                     .frame(maxWidth: .infinity)
-                    .padding(.horizontal, AppTheme.Spacing.md)
-
-                friendsQuickLinks
-                    .padding(.horizontal, AppTheme.Spacing.md)
 
                 if let actionMessage {
                     Text(actionMessage)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(actionMessageIsError ? .red : AppTheme.Colors.accent)
+                        .appText(.caption)
+                        .foregroundStyle(actionMessageIsError ? AppColors.negative : AppColors.accent)
                         .frame(maxWidth: .infinity)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, AppTheme.Spacing.md)
                         .transition(.opacity)
                 }
 
@@ -172,58 +113,41 @@ struct FriendsView: View {
                 // without this, a permission or network error just looked
                 // like "no friends" with no indication anything went wrong.
                 if let serviceError = friendsService.errorMessage {
-                    HStack(spacing: 8) {
+                    HStack(spacing: AppSpacing.xs) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(AppColors.warning)
                         Text(serviceError)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(AppTheme.Colors.text)
+                            .appText(.caption)
+                            .foregroundStyle(AppColors.text)
                     }
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.orange.opacity(0.12)))
-                    .padding(.horizontal, AppTheme.Spacing.md)
+                    .padding(AppSpacing.sm)
+                    .background(
+                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                            .fill(AppColors.warning.opacity(0.12))
+                    )
                 }
 
-
                 if !friendsService.pendingRequests.isEmpty {
-                    centeredSectionHeader(title: "Requests", subtitle: nil)
-                        .padding(.horizontal, AppTheme.Spacing.md)
-                        .padding(.top, 4)
+                    SectionEyebrow("Requests")
+                        .padding(.top, AppSpacing.xxs)
                     ForEach(friendsService.pendingRequests) { request in
                         FriendRequestRow(request: request) {
                             Task { await accept(request) }
                         } onDecline: {
                             Task { await decline(request) }
                         }
-                        .padding(.horizontal, AppTheme.Spacing.md)
                     }
                 }
 
-                if !friendsService.friends.isEmpty {
-                    centeredSectionHeader(title: "Friends", subtitle: "Tap a friend to view their profile")
-                        .padding(.horizontal, AppTheme.Spacing.md)
-                        .padding(.top, 4)
-                    ForEach(friendsService.friends) { friend in
-                        FriendStatsRow(
-                            friend: friend,
-                            onOpenProfile: {
-                                profileFriendUid = friend.uid
-                            }
-                        )
-                        .padding(.horizontal, AppTheme.Spacing.md)
-                    }
-                } else if friendsService.isLoading {
-                    AppLoadingState(message: "Loading friends…")
-                        .padding(.top, AppSpacing.sm)
-                } else {
-                    emptyFriendsBubble
-                        .padding(.horizontal, AppTheme.Spacing.md)
-                        .padding(.top, 4)
-                }
+                segmentPicker
+                    .padding(.top, AppSpacing.xxs)
+
+                segmentContent
             }
-            .padding(.vertical, 16)
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.vertical, AppSpacing.md)
         }
         .refreshable {
             store.syncProfileSnapshotToCloud()
@@ -233,188 +157,107 @@ struct FriendsView: View {
         }
     }
 
-    /// Hero card combining the user's shareable code (tap to copy) with the
-    /// add-by-code field. Replaces the old plain code row + separate caption.
-    private var friendCodeHeroCard: some View {
-        VStack(spacing: 18) {
-            VStack(spacing: 8) {
-                Text("YOUR FRIEND CODE")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .tracking(1.6)
-                    .foregroundStyle(AppTheme.Colors.subtext)
+    // MARK: - Segments
 
-                Button {
-                    copyCode()
-                } label: {
-                    HStack(spacing: 12) {
-                        Text(friendsService.myFriendCode ?? "—")
-                            .font(.system(size: 36, weight: .heavy, design: .rounded))
-                            .foregroundStyle(AppTheme.Colors.text)
-                            .monospacedDigit()
-                        Image(systemName: copyConfirmation ? "checkmark.circle.fill" : "doc.on.doc.fill")
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(copyConfirmation ? AppTheme.Colors.success : AppTheme.Colors.accent)
-                    }
-                    .contentShape(Rectangle())
+    private var segmentPicker: some View {
+        HStack(spacing: AppSpacing.xs) {
+            ForEach(FriendsSegment.allCases) { item in
+                MotionSegmentChip(
+                    title: item.rawValue,
+                    systemImage: nil,
+                    isSelected: segment == item
+                ) {
+                    segmentRaw = item.rawValue
                 }
-                .buttonStyle(.plain)
-                .disabled(friendsService.myFriendCode == nil)
-
-                Text(copyConfirmation ? "Copied to clipboard" : "Tap to copy your code")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(copyConfirmation ? AppTheme.Colors.success : AppTheme.Colors.faint)
             }
-
-            Rectangle()
-                .fill(AppTheme.Colors.stroke)
-                .frame(height: 1)
-                .opacity(0.7)
-
-            addFriendRow
         }
-        .padding(20)
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(AppTheme.Colors.card2)
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                AppTheme.Colors.accent.opacity(0.14),
-                                Color.clear,
-                                AppTheme.Colors.accent.opacity(0.05)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            }
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            AppTheme.Colors.accent.opacity(0.4),
-                            AppTheme.Colors.accent.opacity(0.08),
-                            Color.clear
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    @ViewBuilder
+    private var segmentContent: some View {
+        Group {
+            switch segment {
+            case .friends:
+                friendsSegment
+            case .activity:
+                ActivityFeedInlineSection(
+                    feed: ActivityFeedService.shared,
+                    friendsService: friendsService
                 )
-        )
-        .shadow(color: AppTheme.Colors.accent.opacity(0.18), radius: 18, y: 8)
-    }
-
-    /// Section header with centered title/subtitle for the Friends screen —
-    /// same small-caps language as the Home sections.
-    private func centeredSectionHeader(title: String, subtitle: String?) -> some View {
-        VStack(spacing: 2) {
-            Text(title.uppercased())
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .tracking(1.6)
-                .foregroundStyle(AppTheme.Colors.subtext)
-            if let subtitle {
-                Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.faint)
+            case .boards:
+                leaderboardsSegment
             }
         }
-        .frame(maxWidth: .infinity)
-        .multilineTextAlignment(.center)
+        .id(segmentRaw)
+        .transition(.opacity)
+        .animation(
+            AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion),
+            value: segmentRaw
+        )
     }
 
-    private var addFriendRow: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: "person.crop.circle.badge.plus")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                TextField("Enter friend code", text: $codeInput)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    .foregroundStyle(AppTheme.Colors.text)
-                    .onChange(of: codeInput) { _, newValue in
-                        let sanitized = newValue
-                            .uppercased()
-                            .filter { $0.isLetter || $0.isNumber }
-                        if sanitized != newValue {
-                            codeInput = String(sanitized.prefix(8))
-                        } else if sanitized.count > 8 {
-                            codeInput = String(sanitized.prefix(8))
+    private var friendsSegment: some View {
+        let maxWeekly = friendsService.friends
+            .filter { $0.privacy.shareHours }
+            .map(\.weeklyHours)
+            .max() ?? 0
+
+        return VStack(spacing: AppSpacing.sm) {
+            if !friendsService.friends.isEmpty {
+                ForEach(friendsService.friends) { friend in
+                    FriendStatsRow(
+                        friend: friend,
+                        maxWeeklyHours: maxWeekly,
+                        onOpenProfile: {
+                            profileFriendUid = friend.uid
                         }
-                    }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(AppTheme.Colors.card)
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(AppTheme.Colors.stroke, lineWidth: 1)
                     )
-            )
-
-            Button {
-                Task { await sendRequest() }
-            } label: {
-                HStack(spacing: 6) {
-                    if isSending {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                            .tint(.white)
-                    } else {
-                        Text("Add")
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                    }
                 }
-                .padding(.horizontal, 22)
-                .padding(.vertical, 13)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(AppTheme.Colors.accentGradient)
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(AppTheme.Colors.accentHighlight.opacity(0.6), lineWidth: 1)
-                        )
-                        .shadow(color: AppTheme.Colors.accent.opacity(0.55), radius: 12, y: 4)
+            } else if friendsService.isLoading {
+                AppLoadingState(message: "Loading friends…")
+                    .frame(minHeight: 160)
+            } else {
+                AppEmptyState(
+                    icon: "person.2",
+                    title: "No friends yet",
+                    message: "Share your code or add someone else's to compare weeks."
                 )
             }
-            .buttonStyle(TapBurstButtonStyle())
-            .disabled(codeInput.trimmingCharacters(in: .whitespaces).isEmpty || isSending)
-            .opacity(codeInput.trimmingCharacters(in: .whitespaces).isEmpty ? 0.9 : 1.0)
+        }
+    }
+
+    private var leaderboardsSegment: some View {
+        VStack(spacing: AppSpacing.sm) {
+            LeaderboardLinkCard(
+                icon: "trophy",
+                title: "Friends Leaderboard",
+                subtitle: "Weekly podium across your friends"
+            ) {
+                FriendsLeaderboardView(
+                    store: store,
+                    friendsService: FriendsService.shared
+                )
+            }
+            LeaderboardLinkCard(
+                icon: "globe",
+                title: "Global Top Trackers",
+                subtitle: "The most-logged hours worldwide"
+            ) {
+                GlobalLeaderboardView()
+            }
         }
     }
 
     private var notifyCaption: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AppSpacing.xs) {
             Image(systemName: "bell")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(AppTheme.Colors.subtext)
+                .foregroundStyle(AppColors.subtext)
             Text("You'll be connected instantly")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(AppTheme.Colors.subtext)
+                .appText(.caption)
+                .foregroundStyle(AppColors.subtext)
         }
-    }
-
-    private var emptyFriendsBubble: some View {
-        Text("No friends yet. Share your code or add someone else's.")
-            .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(AppTheme.Colors.subtext)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(AppTheme.Colors.card2)
-            )
-            .gentleFadeIn()
     }
 
     // MARK: - Actions
@@ -423,7 +266,7 @@ struct FriendsView: View {
         guard let code = friendsService.myFriendCode else { return }
         UIPasteboard.general.string = code
         Haptics.lightTap()
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(AppMotion.animation(AppMotion.Spring.snappy, reduceMotion: reduceMotion)) {
             copyConfirmation = true
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
@@ -522,165 +365,5 @@ struct FriendsView: View {
             actionMessage = error.localizedDescription
             return false
         }
-    }
-
-}
-
-// MARK: - Rows
-
-struct FriendStatsRow: View {
-    let friend: FriendProfile
-    var onOpenProfile: (() -> Void)? = nil
-
-    var body: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 14) {
-                ZStack(alignment: .bottomTrailing) {
-                    ProfileAvatarView(
-                        name: friend.displayName,
-                        size: 52,
-                        photoURL: friend.profilePhotoURL,
-                        uid: friend.uid
-                    )
-                    Text("\(friend.level)")
-                        .font(.system(size: 11, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(AppTheme.Colors.accentGradient))
-                        .overlay(Capsule().stroke(AppTheme.Colors.card, lineWidth: 2))
-                        .offset(x: 5, y: 5)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(friend.displayName)
-                            .font(.system(size: 17, weight: .bold, design: .rounded))
-                            .foregroundStyle(AppTheme.Colors.text)
-                    }
-                    Text(friend.levelDisplayLine)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(AppTheme.Colors.faint)
-            }
-
-            if friend.privacy.shareHours {
-                HStack(spacing: 10) {
-                    statChip(
-                        icon: "clock.fill",
-                        value: AppTheme.Format.hours(friend.chequeHours),
-                        label: "this cheque",
-                        tint: AppTheme.Colors.accent
-                    )
-                    statChip(
-                        icon: "flame.fill",
-                        value: "\(friend.currentStreak)",
-                        label: "day streak",
-                        tint: .orange
-                    )
-                }
-            } else {
-                HStack(spacing: 6) {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text("Hours hidden")
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .foregroundStyle(AppTheme.Colors.subtext)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AppTheme.Colors.card2))
-            }
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(AppTheme.Colors.card.opacity(0.55))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(AppTheme.Colors.stroke, lineWidth: 0.5))
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            Haptics.lightTap()
-            onOpenProfile?()
-        }
-        .accessibilityHint("Opens friend profile")
-    }
-
-    private func statChip(icon: String, value: String, label: String, tint: Color) -> some View {
-        HStack(spacing: 9) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(tint)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(value)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.text)
-                Text(label)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(tint.opacity(0.13)))
-    }
-}
-
-struct FriendRequestRow: View {
-    let request: FriendRequestItem
-    let onAccept: () -> Void
-    let onDecline: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ProfileAvatarView(
-                name: request.fromName,
-                size: 44,
-                photoURL: nil,
-                uid: request.fromUid
-            )
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(request.fromName)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.text)
-                Text("Wants to be friends")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-            }
-
-            Spacer()
-
-            Button(action: onDecline) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(AppTheme.Colors.card))
-            }
-            .buttonStyle(.plain)
-
-            Button(action: onAccept) {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(AppTheme.Colors.accentGradient))
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(AppTheme.Colors.accent.opacity(0.4), lineWidth: 1.5))
-        )
     }
 }

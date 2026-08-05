@@ -1,15 +1,18 @@
 import SwiftUI
 
-/// Reverse-chronological list of recent activity from the user and their
-/// friends. Reads from `ActivityFeedService.events` which is kept fresh by
-/// per-author snapshot listeners; the view itself is a thin presentation layer.
-struct ActivityFeedView: View {
+// MARK: - Inline activity feed (Phase 6)
+//
+// Reverse-chronological list of recent activity from the user and their
+// friends, embedded directly in the Friends hub's Activity segment (it was
+// previously a separate pushed screen). Reads from `ActivityFeedService.events`
+// which is kept fresh by per-author snapshot listeners; this view is a thin
+// presentation layer and owns only the subscription lifecycle.
+
+struct ActivityFeedInlineSection: View {
 
     @ObservedObject var feed: ActivityFeedService
     @ObservedObject var friendsService: FriendsService
     @EnvironmentObject private var authService: AuthService
-
-    @Environment(\.semanticColors) private var theme
 
     private let relativeFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
@@ -19,12 +22,8 @@ struct ActivityFeedView: View {
 
     var body: some View {
         content
-            .background(AppTheme.Colors.bg.ignoresSafeArea())
-            .navigationTitle("Activity")
-            .navigationBarTitleDisplayMode(.large)
             .onAppear {
                 refreshSubscription()
-                Task { await friendsService.refreshFriendProfiles() }
             }
             .onChange(of: authService.user?.uid) { _, _ in
                 refreshSubscription()
@@ -40,100 +39,89 @@ struct ActivityFeedView: View {
             AppErrorState(title: "Couldn't load activity", message: error) {
                 refreshSubscription()
             }
+            .frame(minHeight: 220)
         } else if feed.isLoading && feed.events.isEmpty {
             AppLoadingState(message: "Catching up on friends…")
+                .frame(minHeight: 220)
         } else if feed.events.isEmpty {
-            emptyState
+            AppEmptyState(
+                icon: "sparkles",
+                title: "Nothing new yet",
+                message: "Friend events — shifts logged, badges unlocked, milestones — will show up here as they happen."
+            )
         } else {
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    ForEach(feed.events) { event in
-                        eventRow(event)
-                    }
+            eventList
+        }
+    }
+
+    /// One quiet card containing every event row, separated by hairlines.
+    private var eventList: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(Array(feed.events.enumerated()), id: \.element.id) { index, event in
+                eventRow(event)
+                if index < feed.events.count - 1 {
+                    Divider()
+                        .overlay(AppColors.stroke)
+                        .padding(.leading, 66)
                 }
-                .animation(nil, value: feed.events.map(\.id))
-                .padding(.horizontal, AppTheme.Spacing.lg)
-                .padding(.vertical, AppTheme.Spacing.md)
             }
         }
+        .animation(nil, value: feed.events.map(\.id))
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                .fill(AppColors.card.opacity(0.55))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                .stroke(AppColors.stroke, lineWidth: 0.5)
+        )
     }
 
     private func eventRow(_ event: ActivityEvent) -> some View {
-        Button {
-            Haptics.lightTap()
-        } label: {
-            HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack(alignment: .bottomTrailing) {
+                ProfileAvatarView(
+                    name: event.authorDisplayName,
+                    size: 40,
+                    photoURL: photoURL(for: event.authorUid),
+                    uid: event.authorUid
+                )
                 ZStack {
                     Circle()
-                        .fill(theme.accent.opacity(0.16))
-                        .frame(width: 38, height: 38)
+                        .fill(AppColors.accent.opacity(0.15))
+                        .background(Circle().fill(AppColors.bg))
+                        .frame(width: 20, height: 20)
+                        .overlay(Circle().stroke(AppColors.card, lineWidth: 1.5))
                     Image(systemName: event.iconName)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(theme.accent)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(AppColors.accent)
                 }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    (Text(event.authorDisplayName)
-                        .font(.system(size: 14.5, weight: .bold, design: .rounded))
-                        .foregroundColor(theme.textPrimary)
-                    + Text(" ")
-                    + Text(event.body)
-                        .font(.system(size: 14.5, weight: .medium))
-                        .foregroundColor(theme.textPrimary))
-                        .lineLimit(2)
-
-                    Text(relativeFormatter.localizedString(for: event.createdAt, relativeTo: Date()))
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(theme.textTertiary)
-                }
-
-                Spacer(minLength: 0)
-
-                reactionChip(for: event)
+                .offset(x: 4, y: 4)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
-                    .fill(theme.card)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
-                    .stroke(theme.border, lineWidth: 0.5)
-            )
+
+            VStack(alignment: .leading, spacing: 3) {
+                (Text(event.authorDisplayName)
+                    .font(.system(size: 14.5, weight: .bold, design: .rounded))
+                    .foregroundColor(AppColors.text)
+                + Text(" ")
+                + Text(event.body)
+                    .font(.system(size: 14.5, weight: .medium))
+                    .foregroundColor(AppColors.text))
+                    .lineLimit(2)
+
+                Text(relativeFormatter.localizedString(for: event.createdAt, relativeTo: Date()))
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(AppColors.faint)
+            }
+
+            Spacer(minLength: 0)
         }
-        .buttonStyle(PremiumPressStyle())
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 
-    @ViewBuilder
-    private func reactionChip(for event: ActivityEvent) -> some View {
-        let emoji: String? = {
-            switch event.kind {
-            case .shiftLogged: return "🔥"
-            case .badgeUnlocked: return "🏅"
-            case .streakMilestone: return "⚡️"
-            case .monthlyMilestone: return "📈"
-            case .weeklyMilestone: return "📅"
-            case .prestige: return "✨"
-            default: return nil
-            }
-        }()
-
-        if let emoji {
-            Text(emoji)
-                .font(.system(size: 18))
-                .padding(6)
-                .background(Circle().fill(theme.cardSecondary))
-        }
-    }
-
-    private var emptyState: some View {
-        AppEmptyState(
-            icon: "sparkles",
-            title: "Nothing new yet",
-            message: "Friend events — shifts logged, badges unlocked, milestones — will show up here as they happen."
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    private func photoURL(for uid: String) -> String? {
+        friendsService.friends.first { $0.uid == uid }?.profilePhotoURL
     }
 
     // MARK: - Subscription lifecycle

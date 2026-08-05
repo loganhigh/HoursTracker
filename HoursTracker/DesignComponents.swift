@@ -16,6 +16,9 @@ struct MetricDisplay: View {
     let value: String
     /// Icon tint. Defaults to the prestige-aware accent when nil.
     var tint: Color? = nil
+    /// Numeral tint. Defaults to primary text when nil (e.g. friend profiles
+    /// tint stat numerals with the friend's prestige-tier color).
+    var valueTint: Color? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.xs) {
@@ -31,7 +34,7 @@ struct MetricDisplay: View {
             }
             Text(value)
                 .appText(.metricValue)
-                .foregroundStyle(AppColors.text)
+                .foregroundStyle(valueTint ?? AppColors.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
         }
