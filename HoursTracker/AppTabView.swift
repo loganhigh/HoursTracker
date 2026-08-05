@@ -64,7 +64,7 @@ struct AppTabView: View {
 
             // Never actually selected — the binding intercepts this tag.
             Color.clear
-                .tabItem { Label("Add Shift", systemImage: "plus.circle.fill") }
+                .tabItem { Label("Add", systemImage: "plus.circle.fill") }
                 .tag(AppTab.add)
 
             NavigationStack {

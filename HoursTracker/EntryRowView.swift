@@ -126,9 +126,13 @@ struct EntryRowView: View {
         return f.string(from: NSNumber(value: value)) ?? "$0.00"
     }
 
+    /// Weekday-first date: "Mon, Aug 4". The year appears only when the
+    /// entry's year differs from the current year.
     private func fullDate(_ date: Date) -> String {
         let f = DateFormatter()
-        f.dateFormat = "MMM d, yyyy"
+        let cal = Calendar.current
+        let sameYear = cal.component(.year, from: date) == cal.component(.year, from: Date())
+        f.dateFormat = sameYear ? "EEE, MMM d" : "EEE, MMM d, yyyy"
         return f.string(from: date)
     }
 

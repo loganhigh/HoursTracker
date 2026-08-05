@@ -31,11 +31,6 @@ struct TodayHeroCard: View {
             .reduce(0) { $0 + $1.paidHours }
     }
 
-    private var todayIsOffDay: Bool {
-        let cal = Calendar.current
-        return store.entries.contains { cal.isDateInToday($0.date) && $0.isOffDay }
-    }
-
     private var chequeHours: Double {
         cycleEntries.reduce(0) { $0 + $1.paidHours }
     }
@@ -51,21 +46,18 @@ struct TodayHeroCard: View {
             VStack(spacing: AppSpacing.md) {
                 SectionEyebrow("Today", subtitle: Self.todayFormatter.string(from: Date()))
 
-                // Both columns lead with their numeral row so the split shares
-                // a baseline (July split-stats recipe). The divider is an
-                // overlay so it can't disturb the baseline alignment.
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    todayColumn
-                        .frame(maxWidth: .infinity)
+                // ONE dominant numeral — today's hours — over one compact
+                // cheque line. Zero renders quiet (subtext), never alarming,
+                // and there is no instructional copy.
+                VStack(spacing: AppSpacing.xs) {
+                    AnimatedMetricText(value: todayHours) { AppTheme.Format.hours($0) }
+                        .font(AppTypography.heroNumber)
+                        .foregroundStyle(todayHours > 0 ? AppColors.text : AppColors.subtext)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
 
-                    chequeColumn
-                        .frame(maxWidth: .infinity)
+                    chequeLine
                 }
-                .overlay(
-                    Rectangle()
-                        .fill(AppColors.stroke)
-                        .frame(width: 1, height: 48)
-                )
 
                 // Rank is earned chrome — an "Unranked" shield is just noise.
                 if store.displayedGamificationProfile().prestige > 0 {
@@ -81,65 +73,27 @@ struct TodayHeroCard: View {
         .id(cycle)
     }
 
-    // Dominant numeral: hours worked today. Zero-shift days get a gentle
-    // message instead of a "0.0" that reads like an error.
-    @ViewBuilder
-    private var todayColumn: some View {
-        if todayHours > 0 {
-            VStack(spacing: AppSpacing.xxs) {
-                HStack(alignment: .firstTextBaseline, spacing: AppSpacing.xxs) {
-                    AnimatedMetricText(value: todayHours) { AppTheme.Format.hours($0, suffix: "") }
-                        .font(AppTypography.heroNumber)
-                        .foregroundStyle(AppColors.text)
-                    Text("hrs")
-                        .appText(.headline)
-                        .foregroundStyle(AppColors.subtext)
-                }
-                Text("worked today")
-                    .appText(.caption)
-                    .foregroundStyle(AppColors.faint)
-            }
-        } else {
-            VStack(spacing: AppSpacing.xxs) {
-                Text(todayIsOffDay ? "Off day" : "No hours yet today")
-                    .appText(.headline)
-                    .foregroundStyle(AppColors.subtext)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(todayIsOffDay ? "Enjoy the rest" : "Log a shift when you're done")
-                    .appText(.caption)
-                    .foregroundStyle(AppColors.faint)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    // Secondary split column: this cheque's hours (+ pay when enabled).
-    // Numeral-first so its baseline lines up with the today numeral.
-    private var chequeColumn: some View {
-        VStack(spacing: AppSpacing.xxs) {
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                AnimatedMetricText(value: chequeHours) { AppTheme.Format.hours($0, suffix: "") }
-                    .font(AppTypography.metricValue)
-                    .foregroundStyle(AppColors.text)
-                Text("hrs")
-                    .appText(.caption)
-                    .foregroundStyle(AppColors.subtext)
-            }
-            Text("this cheque")
+    // One compact secondary line: "10h this cheque · Aug 2 – Aug 15", with
+    // the pay amount appended when pay display is on ("· $350").
+    private var chequeLine: some View {
+        HStack(spacing: 4) {
+            AnimatedMetricText(value: chequeHours) { AppTheme.Format.hours($0) }
+                .font(AppTypography.caption.weight(.semibold))
+                .foregroundStyle(AppColors.text)
+            Text("this cheque · \(cycle.workRangeText())")
                 .appText(.caption)
-                .foregroundStyle(AppColors.faint)
+                .foregroundStyle(AppColors.subtext)
             if store.paySettings.showPayCalculations {
+                Text("·")
+                    .appText(.caption)
+                    .foregroundStyle(AppColors.subtext)
                 AnimatedMetricText(currency: chequePay, code: store.paySettings.currencyCode)
                     .appText(.caption)
-                    .foregroundStyle(AppColors.accent)
-            } else {
-                Text(cycle.workRangeText())
-                    .appText(.caption)
-                    .foregroundStyle(AppColors.faint)
+                    .foregroundStyle(AppColors.subtext)
             }
         }
+        .lineLimit(1)
+        .minimumScaleFactor(0.65)
     }
 
     private var prestigeRow: some View {
@@ -333,15 +287,10 @@ struct HomeXPStrip: View {
     }
 }
 
-// MARK: - Stat Triplet (Week / Cheque / Month, with deltas + week progress)
+// MARK: - Stat Triplet (Week / Cheque / Month, with week progress)
 
 struct HomeStatTriplet: View {
     @ObservedObject var store: HoursStore
-
-    struct Delta {
-        let text: String
-        let isPositive: Bool
-    }
 
     // MARK: Week sums (Mon–Sun, matching the pay engine's week)
 
@@ -356,32 +305,16 @@ struct HomeStatTriplet: View {
 
     private var weekHours: Double { hoursInWeek(containing: Date()) }
 
-    private var lastWeekHours: Double {
-        guard let d = Calendar.current.date(byAdding: .weekOfYear, value: -1, to: Date()) else { return 0 }
-        return hoursInWeek(containing: d)
-    }
-
     // MARK: Cheque sums
 
-    private func hours(in cycle: PayCycle) -> Double {
-        PayCycleEngine.entries(store.entries, in: cycle).reduce(0) { $0 + $1.paidHours }
-    }
-
-    private var chequeHours: Double { hours(in: store.currentPayCycle()) }
-
-    private var lastChequeHours: Double {
-        let previous = PayCycleEngine.previousCycle(before: store.currentPayCycle(), settings: store.paySettings)
-        return hours(in: previous)
+    private var chequeHours: Double {
+        PayCycleEngine.entries(store.entries, in: store.currentPayCycle())
+            .reduce(0) { $0 + $1.paidHours }
     }
 
     // MARK: Month sums
 
     private var monthHours: Double { store.monthTotalHours(monthDate: Date()) }
-
-    private var lastMonthHours: Double {
-        guard let d = Calendar.current.date(byAdding: .month, value: -1, to: Date()) else { return 0 }
-        return store.monthTotalHours(monthDate: d)
-    }
 
     /// Weekly reference line for the context bar: the weekly OT threshold when
     /// weekly rules apply, else daily threshold × 5. Nil hides the bar.
@@ -395,32 +328,21 @@ struct HomeStatTriplet: View {
         }
     }
 
-    private func delta(current: Double, previous: Double, versus: String) -> Delta? {
-        guard current > 0 || previous > 0 else { return nil }
-        let diff = current - previous
-        let magnitude = AppTheme.Format.hours(abs(diff))
-        let sign = diff >= 0 ? "+" : "−"
-        return Delta(text: "\(sign)\(magnitude) vs \(versus)", isPositive: diff >= 0)
-    }
-
     var body: some View {
         HStack(spacing: AppSpacing.xs + 2) {
             HomeStatTile(
                 label: "This Week",
                 hours: weekHours,
-                delta: delta(current: weekHours, previous: lastWeekHours, versus: "last week"),
                 progress: weekTarget.map { min(max(weekHours / $0, 0), 1) }
             )
             HomeStatTile(
                 label: "This Cheque",
                 hours: chequeHours,
-                delta: delta(current: chequeHours, previous: lastChequeHours, versus: "last cheque"),
                 progress: nil
             )
             HomeStatTile(
                 label: "This Month",
                 hours: monthHours,
-                delta: delta(current: monthHours, previous: lastMonthHours, versus: "last month"),
                 progress: nil
             )
         }
@@ -428,11 +350,10 @@ struct HomeStatTriplet: View {
 }
 
 /// One quiet stat tile: eyebrow label, monospaced numeral, optional thin
-/// context bar and muted delta caption.
+/// context bar. Two text lines max — nothing else.
 struct HomeStatTile: View {
     let label: String
     let hours: Double
-    let delta: HomeStatTriplet.Delta?
     let progress: Double?
 
     var body: some View {
@@ -463,14 +384,6 @@ struct HomeStatTile: View {
                 }
                 .frame(height: 3)
                 .padding(.horizontal, AppSpacing.xs)
-            }
-
-            if let delta {
-                Text(delta.text)
-                    .font(AppTypography.eyebrow.monospacedDigit())
-                    .foregroundStyle(delta.isPositive ? AppColors.positive : AppColors.subtext)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.55) // keep "vs last …" whole at AX sizes
             }
         }
         .frame(maxWidth: .infinity)
