@@ -63,7 +63,7 @@ struct PrestigeCelebrationView: View {
 
                 VStack(spacing: 10) {
                     Text("PRESTIGE UNLOCKED")
-                        .font(.system(size: 13, weight: .black, design: .rounded))
+                        .font(.system(.footnote, design: .rounded, weight: .black))
                         .tracking(3.5)
                         .foregroundStyle(tier.highlight)
                         .opacity(headerVisible ? 1 : 0)
@@ -75,15 +75,15 @@ struct PrestigeCelebrationView: View {
 
                     VStack(spacing: 8) {
                         Text(tier.name)
-                            .font(.system(size: 28, weight: .black, design: .rounded))
+                            .font(.system(.title, design: .rounded, weight: .black))
                             .foregroundStyle(AppColors.textOnAccent)
 
                         Text(rankTransitionLabel)
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .font(.system(.footnote, design: .rounded, weight: .semibold))
                             .foregroundStyle(AppColors.textOnAccent.opacity(0.55))
 
                         Text(Self.tagline(for: prestige))
-                            .font(.system(size: 15, weight: .medium, design: .rounded))
+                            .font(.system(.subheadline, design: .rounded, weight: .medium))
                             .foregroundStyle(AppColors.textOnAccent.opacity(0.72))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 28)
@@ -116,9 +116,9 @@ struct PrestigeCelebrationView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "crown.fill")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.system(.callout, weight: .bold))
                         Text("Claim Your Rank")
-                            .font(.system(size: 17, weight: .black, design: .rounded))
+                            .font(.system(.body, design: .rounded, weight: .black))
                     }
                     .foregroundStyle(AppColors.textOnAccent)
                     .frame(maxWidth: .infinity)
@@ -173,13 +173,13 @@ struct PrestigeCelebrationView: View {
 
             VStack(spacing: 4) {
                 Image(systemName: tier.icon)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(.system(.title, design: .rounded, weight: .bold))
                     .foregroundStyle(
                         LinearGradient(colors: tier.gradient, startPoint: .top, endPoint: .bottom)
                     )
 
                 Text("P\(prestige)")
-                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .font(.system(.largeTitle, design: .rounded, weight: .black))
                     .foregroundStyle(AppColors.textOnAccent)
             }
             .shadow(color: tier.primary.opacity(0.5), radius: 10)
@@ -215,10 +215,10 @@ struct PrestigeCelebrationView: View {
     private func perkChip(icon: String, label: String) -> some View {
         VStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(.footnote, weight: .bold))
                 .foregroundStyle(tier.highlight)
             Text(label)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .font(.system(.caption2, design: .rounded, weight: .semibold))
                 .foregroundStyle(AppColors.textOnAccent.opacity(0.75))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)

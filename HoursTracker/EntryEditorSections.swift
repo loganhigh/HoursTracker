@@ -228,6 +228,8 @@ struct EntryBreakSection: View {
             Text(label)
                 .font(.system(.footnote, design: .rounded, weight: .semibold).monospacedDigit())
                 .foregroundStyle(isSelected ? AppColors.accent : AppColors.subtext)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6) // six chips abreast — no mid-word wraps at AX sizes
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 9)
                 .entryQuietChip(isSelected: isSelected, radius: AppRadius.capsule)
@@ -298,6 +300,8 @@ struct EntryShiftTypeSection: View {
                     .font(.system(size: 12, weight: .semibold))
                 Text(option.1)
                     .font(.system(.footnote, design: .rounded, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6) // "Off day" / "Holiday" stay whole at AX sizes
             }
             .foregroundStyle(isSelected ? AppColors.accent : AppColors.subtext)
             .frame(maxWidth: .infinity)

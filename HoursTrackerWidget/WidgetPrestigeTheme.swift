@@ -1,5 +1,11 @@
 import SwiftUI
 
+// ⚠️ KEEP IN SYNC with HoursTracker/PrestigeTheme.swift (tier `gradient`
+// values, P0–P10). The widget extension target cannot see the app target's
+// sources (separate synchronized folders), so the 11 tier gradients are
+// duplicated here as raw hex. If a tier color changes in PrestigeTheme,
+// change it here too. Verified matching 2026-08-05 (Phase 13).
+
 /// Prestige-driven widget backgrounds — mirrors main app rank colors.
 enum WidgetPrestigeTheme {
     static func backgroundGradient(for prestige: Int) -> LinearGradient {

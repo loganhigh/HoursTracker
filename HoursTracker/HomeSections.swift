@@ -441,7 +441,7 @@ struct HomeStatTile: View {
                 .appText(.eyebrow)
                 .foregroundStyle(AppColors.faint)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.6) // three tiles abreast at AX sizes
 
             Text(AppTheme.Format.hours(hours))
                 .font(AppTypography.metricValue)
@@ -470,7 +470,7 @@ struct HomeStatTile: View {
                     .font(AppTypography.eyebrow.monospacedDigit())
                     .foregroundStyle(delta.isPositive ? AppColors.positive : AppColors.subtext)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.65)
+                    .minimumScaleFactor(0.55) // keep "vs last …" whole at AX sizes
             }
         }
         .frame(maxWidth: .infinity)

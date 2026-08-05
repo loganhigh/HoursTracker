@@ -92,7 +92,7 @@ struct BadgeUnlockCelebrationSheet: View {
                     .multilineTextAlignment(.center)
 
                 Text(badgeName)
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .font(.system(.title3, design: .rounded, weight: .bold))
                     .foregroundStyle(AppTheme.Colors.accent)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 18)

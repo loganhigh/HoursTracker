@@ -82,16 +82,16 @@ private struct DisplayNamePromptSheet: View {
         NavigationStack {
             VStack(spacing: 24) {
                 Text("Add your display name")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(.title2, weight: .semibold))
                     .foregroundStyle(AppTheme.Colors.text)
                     .multilineTextAlignment(.center)
                 Text("Your name appears throughout the app.")
-                    .font(.system(size: 16))
+                    .font(.system(.callout))
                     .foregroundStyle(AppTheme.Colors.subtext)
                     .multilineTextAlignment(.center)
                 
                 TextField("Your name", text: $displayName)
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(.body, weight: .medium))
                     .foregroundStyle(AppTheme.Colors.text)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 20)
@@ -419,9 +419,9 @@ struct HoursHomeView: View {
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "plus")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.system(.callout, weight: .bold))
                             Text("Add Shift")
-                                .font(.system(size: 16, weight: .bold, design: .rounded))
+                                .font(.system(.callout, design: .rounded, weight: .bold))
                         }
                         .foregroundStyle(AppColors.textOnAccent)
                         .frame(maxWidth: .infinity)
@@ -506,7 +506,7 @@ struct HoursHomeView: View {
                     .cardAppear(index: 8)
 
                 Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .font(.system(.caption, design: .rounded, weight: .bold))
                     .foregroundStyle(AppTheme.Colors.subtext.opacity(0.4))
                     .tracking(1.5)
                     .padding(.top, 8)
@@ -668,10 +668,10 @@ struct HoursHomeView: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(.subheadline, weight: .bold))
                     .foregroundStyle(tint)
                 Text(title)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
                     .foregroundStyle(AppColors.text)
             }
             .frame(maxWidth: .infinity)
@@ -702,12 +702,12 @@ struct HoursHomeView: View {
         VStack(spacing: 12) {
             VStack(spacing: 2) {
                 Text(title.uppercased())
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .font(.system(.caption, design: .rounded, weight: .bold))
                     .tracking(1.6)
                     .foregroundStyle(AppTheme.Colors.subtext)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(.caption, weight: .medium))
                         .foregroundStyle(AppTheme.Colors.faint)
                 }
             }
@@ -756,7 +756,7 @@ struct HoursHomeView: View {
             VStack(spacing: 0) {
                 if topTrackers.topTrackers.isEmpty {
                     Text(topTrackers.hasLoaded ? "No rankings yet" : "Loading…")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(.footnote, weight: .medium))
                         .foregroundStyle(AppTheme.Colors.faint)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
@@ -774,7 +774,7 @@ struct HoursHomeView: View {
                         GlobalLeaderboardView()
                     } label: {
                         Text("See more")
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
                             .foregroundStyle(AppTheme.Colors.accent)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
@@ -814,7 +814,7 @@ struct HoursHomeView: View {
                     .fill(topTrackerRankColor(tracker.rank).opacity(tracker.rank <= 3 ? 0.22 : 0.12))
                     .frame(width: 28, height: 28)
                 Text("\(tracker.rank)")
-                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .font(.system(.footnote, design: .rounded, weight: .heavy))
                     .foregroundStyle(topTrackerRankColor(tracker.rank))
             }
 
@@ -831,14 +831,14 @@ struct HoursHomeView: View {
                     )
                 ) {
                     Text(flag)
-                        .font(.system(size: 15))
+                        .font(.system(.subheadline))
                 }
             }
 
             Spacer()
 
             Text(topTrackerHoursLabel(tracker.hours))
-                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .font(.system(.footnote, design: .rounded, weight: .bold))
                 .monospacedDigit()
                 .foregroundStyle(AppTheme.Colors.subtext)
         }
@@ -892,6 +892,7 @@ private func copyAllGroupedText(for entries: [WorkEntry]) -> String {
 private struct PrestigeCallToAction: View {
     let currentPrestige: Int
     let onPrestige: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var glowPulse: CGFloat = 0.6
 
     private var prestigeLevel: Int { 25 }
@@ -903,17 +904,17 @@ private struct PrestigeCallToAction: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(.body, weight: .bold))
                 VStack(spacing: 1) {
                     Text("YOU'VE REACHED LEVEL \(prestigeLevel)")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .font(.system(.caption2, design: .rounded, weight: .bold))
                         .tracking(1.5)
                         .opacity(0.85)
                     Text("Tap to Prestige →")
-                        .font(.system(size: 17, weight: .black, design: .rounded))
+                        .font(.system(.body, design: .rounded, weight: .black))
                 }
                 Image(systemName: "sparkles")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(.body, weight: .bold))
             }
             .foregroundStyle(AppColors.textOnAccent)
             .frame(maxWidth: .infinity)
@@ -931,10 +932,10 @@ private struct PrestigeCallToAction: View {
         }
         .buttonStyle(InteractiveButtonStyle())
         .onAppear {
+            guard !reduceMotion else { return } // static glow under Reduce Motion
             withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
                 glowPulse = 1.0
             }
-
         }
     }
 }
@@ -943,13 +944,14 @@ private struct PrestigeCallToAction: View {
 
 private struct FloatingXPGainView: View {
     let text: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var offsetY: CGFloat = 0
     @State private var opacity: Double = 0
     @State private var scale: CGFloat = 0.7
 
     var body: some View {
         Text(text)
-            .font(.system(size: 22, weight: .black, design: .rounded))
+            .font(.system(.title2, design: .rounded, weight: .black))
             .foregroundStyle(
                 LinearGradient(
                     colors: [Color(hex: 0xFBBF24), Color(hex: 0xF97316)],
@@ -972,6 +974,15 @@ private struct FloatingXPGainView: View {
             .offset(y: offsetY)
             .opacity(opacity)
             .onAppear {
+                if reduceMotion {
+                    // Fade only — no pop, no float.
+                    opacity = 1
+                    scale = 1.0
+                    withAnimation(.easeIn(duration: 0.45).delay(2.0)) {
+                        opacity = 0
+                    }
+                    return
+                }
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
                     opacity = 1
                     scale = 1.0
@@ -1020,17 +1031,17 @@ struct PrestigeInfoSheet: View {
                                 .frame(width: 80, height: 80)
 
                             Image(systemName: "sparkles")
-                                .font(.system(size: 34, weight: .bold))
+                                .font(.system(.largeTitle, weight: .bold))
                                 .foregroundStyle(AppTheme.Colors.accent)
                                 .shadow(color: AppTheme.Colors.accent.opacity(0.4), radius: 10)
                         }
 
                         Text("What is Prestige?")
-                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .font(.system(.title2, design: .rounded, weight: .bold))
                             .foregroundStyle(AppColors.text)
 
                         Text("Hit Level 25 to Prestige. Your level resets, your rank goes up.")
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.system(.subheadline, weight: .medium))
                             .foregroundStyle(AppTheme.Colors.subtext)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 16)
@@ -1039,7 +1050,7 @@ struct PrestigeInfoSheet: View {
 
                     VStack(spacing: 6) {
                         Text("HOW IT WORKS")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .font(.system(.caption, design: .rounded, weight: .bold))
                             .tracking(1)
                             .foregroundStyle(AppTheme.Colors.subtext)
                             .frame(maxWidth: .infinity, alignment: .center)
@@ -1062,7 +1073,7 @@ struct PrestigeInfoSheet: View {
 
                     VStack(spacing: 6) {
                         Text("PRESTIGE RANKS")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .font(.system(.caption, design: .rounded, weight: .bold))
                             .tracking(1)
                             .foregroundStyle(AppTheme.Colors.subtext)
                             .frame(maxWidth: .infinity, alignment: .center)
@@ -1071,25 +1082,25 @@ struct PrestigeInfoSheet: View {
                             ForEach(tiers, id: \.level) { tier in
                                 HStack(spacing: 12) {
                                     Image(systemName: tier.icon)
-                                        .font(.system(size: 16, weight: .bold))
+                                        .font(.system(.callout, weight: .bold))
                                         .foregroundStyle(tier.color)
                                         .shadow(color: tier.level == currentPrestige ? tier.color.opacity(0.5) : .clear, radius: 6)
                                         .frame(width: 24)
 
                                     Text("P\(tier.level)")
-                                        .font(.system(size: 14, weight: .black, design: .rounded))
+                                        .font(.system(.footnote, design: .rounded, weight: .black))
                                         .foregroundStyle(tier.color)
                                         .frame(width: 30, alignment: .leading)
 
                                     Text(tier.title)
-                                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
                                         .foregroundStyle(tier.level == currentPrestige ? AppColors.text : AppTheme.Colors.subtext)
 
                                     Spacer()
 
                                     if tier.level == currentPrestige {
                                         Text("YOU")
-                                            .font(.system(size: 10, weight: .black, design: .rounded))
+                                            .font(.system(.caption2, design: .rounded, weight: .black))
                                             .tracking(1)
                                             .foregroundStyle(AppColors.textOnAccent)
                                             .padding(.horizontal, 8)
@@ -1143,11 +1154,11 @@ struct PrestigeInfoSheet: View {
     private func infoRow(icon: String, text: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(.callout, weight: .semibold))
                 .foregroundStyle(AppTheme.Colors.accent)
                 .frame(width: 22)
             Text(text)
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(.footnote, weight: .medium))
                 .foregroundStyle(AppTheme.Colors.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -1158,15 +1169,13 @@ struct PrestigeInfoSheet: View {
 // MARK: - Personal Best Banner
 
 private struct PersonalBestBanner: View {
-    @State private var shimmer: CGFloat = -200
-
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "trophy.fill")
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(.subheadline, weight: .bold))
                 .foregroundStyle(Color(hex: 0xFBBF24))
             Text("New Personal Best Month! 🏆")
-                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .font(.system(.footnote, design: .rounded, weight: .bold))
                 .foregroundStyle(AppColors.textOnAccent)
         }
         .padding(.horizontal, 20)
@@ -1183,11 +1192,8 @@ private struct PersonalBestBanner: View {
             }
         )
         .shadow(color: Color(hex: 0xF59E0B).opacity(0.4), radius: 14, y: 4)
-        .onAppear {
-            withAnimation(.linear(duration: 1.8).repeatForever(autoreverses: false)) {
-                shimmer = 250
-            }
-        }
+        // (Dead shimmer state + its repeatForever animation removed — it never
+        // drove any visual, but kept a perpetual animation running.)
     }
 }
 
@@ -1195,6 +1201,7 @@ private struct PersonalBestBanner: View {
 
 private struct StreakBurstView: View {
     let streakCount: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var particles: [BurstParticle] = []
 
     struct BurstParticle: Identifiable {
@@ -1229,16 +1236,17 @@ private struct StreakBurstView: View {
 
                 VStack(spacing: 4) {
                     Text("\(streakCount) DAY STREAK")
-                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .font(.system(.title2, design: .rounded, weight: .black))
                         .tracking(2)
                         .foregroundStyle(AppColors.text)
                     Text("You're on fire. Keep it up!")
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .font(.system(.footnote, design: .rounded, weight: .medium))
                         .foregroundStyle(AppColors.subtext)
                 }
             }
         }
         .onAppear {
+            guard !reduceMotion else { return } // flame + text only, no burst
             spawnParticles()
         }
     }
@@ -1283,6 +1291,7 @@ private struct AddButtonVisibilityKey: PreferenceKey {
 private struct PaydayConfettiOverlay: View {
     let onDismiss: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var burst = false
     @State private var visible = true
     @State private var badgeScale: CGFloat = 0.4
@@ -1324,14 +1333,14 @@ private struct PaydayConfettiOverlay: View {
 
                 VStack(spacing: 8) {
                     Text("Payday!")
-                        .font(.system(size: 38, weight: .black, design: .rounded))
+                        .font(.system(.largeTitle, design: .rounded, weight: .black))
                         .foregroundStyle(
                             LinearGradient(colors: [Color(hex: 0xFFD700), Color(hex: 0xFF9500)], startPoint: .leading, endPoint: .trailing)
                         )
                         .shadow(color: Color(hex: 0xFFD700).opacity(0.4), radius: 10)
 
                     Text("You earned it. Go get it. 💸")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(.callout, weight: .semibold))
                         .foregroundStyle(AppColors.subtext)
                         .multilineTextAlignment(.center)
                 }
@@ -1340,7 +1349,7 @@ private struct PaydayConfettiOverlay: View {
                     dismiss()
                 } label: {
                     Text("Let's go!")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .font(.system(.body, design: .rounded, weight: .bold))
                         .foregroundStyle(.black)
                         .padding(.horizontal, 36)
                         .padding(.vertical, 14)
@@ -1368,13 +1377,21 @@ private struct PaydayConfettiOverlay: View {
         }
         .opacity(visible ? 1 : 0)
         .onAppear {
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.6)) {
+            if reduceMotion {
+                // Static badge: no pop-in spring, no floating emoji.
+                // (ConfettiLayer already renders nothing under Reduce Motion.)
                 burst = true
                 badgeScale = 1.0
                 badgeOpacity = 1.0
-            }
-            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                emojiFloat = -8
+            } else {
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.6)) {
+                    burst = true
+                    badgeScale = 1.0
+                    badgeOpacity = 1.0
+                }
+                withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                    emojiFloat = -8
+                }
             }
             // Auto-dismiss after 5 seconds
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
@@ -1422,21 +1439,21 @@ private struct HolidayPickerSheet: View {
                 VStack(spacing: 20) {
                     VStack(spacing: 6) {
                         Image(systemName: "airplane")
-                            .font(.system(size: 32, weight: .bold))
+                            .font(.system(.title, weight: .bold))
                             .foregroundStyle(AppTheme.Colors.accentGradient)
                             .padding(.top, 4)
                         Text("Log Holiday")
-                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .font(.system(.title2, design: .rounded, weight: .bold))
                             .foregroundStyle(AppTheme.Colors.text)
                         Text("Block off the days you'll be away.")
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .font(.system(.footnote, design: .rounded, weight: .medium))
                             .foregroundStyle(AppTheme.Colors.subtext)
                             .multilineTextAlignment(.center)
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Starting")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .font(.system(.footnote, design: .rounded, weight: .bold))
                             .tracking(0.6)
                             .foregroundStyle(AppTheme.Colors.subtext)
                         DatePicker(
@@ -1460,7 +1477,7 @@ private struct HolidayPickerSheet: View {
 
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Number of days")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .font(.system(.footnote, design: .rounded, weight: .bold))
                             .tracking(0.6)
                             .foregroundStyle(AppTheme.Colors.subtext)
                         HStack(spacing: 16) {
@@ -1471,7 +1488,7 @@ private struct HolidayPickerSheet: View {
                                 }
                             } label: {
                                 Image(systemName: "minus")
-                                    .font(.system(size: 18, weight: .bold))
+                                    .font(.system(.body, weight: .bold))
                                     .foregroundStyle(dayCount > 1 ? AppTheme.Colors.text : AppTheme.Colors.subtext.opacity(0.5))
                                     .frame(width: 44, height: 44)
                                     .background(
@@ -1484,12 +1501,12 @@ private struct HolidayPickerSheet: View {
 
                             VStack(spacing: 2) {
                                 Text("\(dayCount)")
-                                    .font(.system(size: 44, weight: .bold, design: .rounded).monospacedDigit())
+                                    .font(.system(.largeTitle, design: .rounded, weight: .bold).monospacedDigit())
                                     .foregroundStyle(AppTheme.Colors.accentGradient)
                                     .contentTransition(.numericText())
                                     .animation(.spring(response: 0.3, dampingFraction: 0.7), value: dayCount)
                                 Text(dayWord)
-                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .font(.system(.footnote, design: .rounded, weight: .semibold))
                                     .foregroundStyle(AppTheme.Colors.subtext)
                             }
                             .frame(maxWidth: .infinity)
@@ -1501,7 +1518,7 @@ private struct HolidayPickerSheet: View {
                                 }
                             } label: {
                                 Image(systemName: "plus")
-                                    .font(.system(size: 18, weight: .bold))
+                                    .font(.system(.body, weight: .bold))
                                     .foregroundStyle(dayCount < 90 ? AppTheme.Colors.text : AppTheme.Colors.subtext.opacity(0.5))
                                     .frame(width: 44, height: 44)
                                     .background(
@@ -1525,12 +1542,12 @@ private struct HolidayPickerSheet: View {
 
                     VStack(spacing: 4) {
                         Text("Will be logged for")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
                             .tracking(0.6)
                             .textCase(.uppercase)
                             .foregroundStyle(AppTheme.Colors.subtext)
                         Text(rangeText)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .font(.system(.subheadline, design: .rounded, weight: .bold))
                             .foregroundStyle(AppTheme.Colors.text)
                             .multilineTextAlignment(.center)
                     }
