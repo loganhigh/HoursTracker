@@ -25,12 +25,6 @@ enum AppDesignSystem {
         static let cardLight = (color: Color.black.opacity(0.08), radius: CGFloat(6), x: CGFloat(0), y: CGFloat(2))
     }
 
-    /// Shared animation presets — use with `AppMotion.animation(_:reduceMotion:)`.
-    enum Motion {
-        static let springSnappy = Animation.spring(response: 0.32, dampingFraction: 0.86)
-        static let springSmooth = Animation.spring(response: 0.42, dampingFraction: 0.88)
-    }
-
     enum Typography {
         static let largeTitle = Font.system(size: 32, weight: .bold, design: .rounded)
         static let title1 = Font.system(size: 24, weight: .bold, design: .rounded)

@@ -29,7 +29,6 @@ class SideMenuController: ObservableObject {
     @Published var payCycleSheet: PayCycleMenuPresentation?
     @Published var reportingSheet: Bool = false
     @Published var insightsSheet: Bool = false
-    @Published var profileSheet: Bool = false
     @Published var careerSheet: Bool = false
     @Published var payHistorySheet: Bool = false
     @Published var friendsSheet: Bool = false
@@ -128,9 +127,6 @@ struct SideMenuContainer<Content: View>: View {
         }
         .sheet(isPresented: $menuController.insightsSheet) {
             InsightsMenuSheetHost(store: store)
-        }
-        .sheet(isPresented: $menuController.profileSheet) {
-            ProfileView(store: store)
         }
         .sheet(isPresented: $menuController.careerSheet) {
             NavigationStack {
