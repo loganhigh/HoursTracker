@@ -69,6 +69,7 @@ struct MonthDetailView: View {
     @State private var showingAddEntry = false
     @State private var didCopyAll = false
     @State private var copyAllBurst = 0
+    @State private var selectedCalendarDay: Date?
 
     init(store: HoursStore, monthDate: Date) {
         self.store = store
@@ -88,6 +89,28 @@ struct MonthDetailView: View {
         ZStack {
             AppTheme.Colors.bg.ignoresSafeArea()
             List {
+            Section {
+                MonthCalendarView(
+                    monthDate: monthDate,
+                    entries: entries,
+                    selectedDay: $selectedCalendarDay
+                )
+                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
+                if let day = selectedCalendarDay {
+                    MonthDayDetailStrip(
+                        store: store,
+                        day: day,
+                        entries: entries.filter { Calendar.current.isDate($0.date, inSameDayAs: day) }
+                    )
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 4, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
+            }
+
             Section {
                 VStack(alignment: .leading, spacing: 12) {
                     // Total hours
