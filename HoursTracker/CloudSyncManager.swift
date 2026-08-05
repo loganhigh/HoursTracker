@@ -159,6 +159,16 @@ final class CloudSyncManager: ObservableObject {
                     self.markEntryAsSynced(entry.id)
                     self.checkPendingChanges()
                     self.traceRepairGate(reason: "saveEntrySuccess")
+                    // The direct write above lands in the legacy `entries`
+                    // collection only (entriesCollectionName) — but server stats
+                    // read `timeEntries`, which this save otherwise reaches at
+                    // the NEXT daily repair. Since that repair typically ran at
+                    // the day's first app-open, every shift logged later in the
+                    // day was invisible to stats/leaderboard until tomorrow
+                    // (observed live: Career header and leaderboard stuck 10h
+                    // behind the device). Push through the batch callable now —
+                    // idempotent, and it triggers the server recompute itself.
+                    self.uploadEntryViaBatchCallable(entry, reason: "mirror-to-timeEntries")
                     if FirebaseMigrationFlags.useServerStats {
                         Task { @MainActor in
                             StatsListenerService.shared.markEntryWritePending()
@@ -427,11 +437,14 @@ final class CloudSyncManager: ObservableObject {
         }
     }
 
-    /// Fast-path fallback for a single stalled direct write (see the watchdog
-    /// in `saveEntry`): pushes one entry through clientUploadTimeEntriesBatch.
-    /// Never surfaces an error to the user — the direct write may still land,
-    /// and the entry remains covered by the daily repair either way.
-    private func uploadEntryViaBatchCallable(_ entry: WorkEntry) {
+    /// Pushes one entry through clientUploadTimeEntriesBatch (Admin SDK writes
+    /// BOTH `timeEntries` and the legacy `entries` doc, then recomputes stats
+    /// server-side when anything was written). Used two ways: as the stalled
+    /// direct-write watchdog, and unconditionally after every successful save —
+    /// the direct write only reaches the legacy collection, which server stats
+    /// ignore. Never surfaces an error to the user — the entry remains covered
+    /// by the daily repair either way.
+    private func uploadEntryViaBatchCallable(_ entry: WorkEntry, reason: String = "direct write stalled >5s") {
         guard currentUID != nil, networkMonitor.isConnected else { return }
         let payload = entryCallablePayload(entry)
         Task { @MainActor [weak self] in
@@ -446,11 +459,11 @@ final class CloudSyncManager: ObservableObject {
                     StatsListenerService.shared.markEntryWritePending()
                 }
                 self.scheduleStatsRecomputeDebounced()
-                AppLogger.db.info("saveEntry watchdog: direct write stalled >5s; entry \(entry.id.uuidString, privacy: .public) uploaded via batch callable")
+                AppLogger.db.info("saveEntry batch upload (\(reason, privacy: .public)): entry \(entry.id.uuidString, privacy: .public) uploaded via batch callable")
             } catch {
                 // Keep it queued so the daily repair still covers it.
                 self.queueEntryForSync(entry)
-                AppLogger.db.warning("saveEntry watchdog: batch fallback failed (\(error.localizedDescription, privacy: .public)); entry queued for repair")
+                AppLogger.db.warning("saveEntry batch upload (\(reason, privacy: .public)) failed (\(error.localizedDescription, privacy: .public)); entry queued for repair")
             }
         }
     }
