@@ -170,6 +170,13 @@ private struct MainAppWithStartup: View {
     @EnvironmentObject private var cloudSync: CloudSyncManager
     @EnvironmentObject private var startupCoordinator: StartupCoordinator
 
+    /// Shown once per cold launch, the first time startup reaches `.ready`.
+    /// Lives on this view (not inside the `.id(rootResetToken)`-scoped child),
+    /// so a sign-out/sign-in reset mid-session does NOT bring it back — only
+    /// an actual fresh process launch does.
+    @State private var hasShownWelcome = false
+    @State private var showingWelcome = false
+
     var body: some View {
         ZStack {
             AppTheme.Colors.bg.ignoresSafeArea()
@@ -182,7 +189,7 @@ private struct MainAppWithStartup: View {
                     ContentView()
                         // Friends system hidden for now — revisit later.
                         .transition(.opacity.combined(with: .scale(scale: 0.985)))
-                        .onAppear { deferHeavyWork() }
+                        .onAppear { deferHeavyWork(); presentWelcomeIfNeeded() }
                 case .error(let msg):
                     StartupErrorView(
                         message: msg,
@@ -193,12 +200,24 @@ private struct MainAppWithStartup: View {
                 }
             }
             .animation(AppMotion.Spring.smooth, value: startupCoordinator.state)
+
+            if showingWelcome {
+                WelcomeBackView { showingWelcome = false }
+                    .transition(.opacity)
+                    .zIndex(1)
+            }
         }
         .onAppear {
             if case .loading = startupCoordinator.state {
                 startupCoordinator.start()
             }
         }
+    }
+
+    private func presentWelcomeIfNeeded() {
+        guard !hasShownWelcome else { return }
+        hasShownWelcome = true
+        showingWelcome = true
     }
 
     private func deferHeavyWork() {
