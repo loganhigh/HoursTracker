@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // ⚠️ KEEP IN SYNC with HoursTrackerWidget/WidgetPrestigeTheme.swift: the
 // widget extension cannot see this file (separate synchronized folders), so
@@ -26,6 +27,20 @@ enum PrestigeTheme {
         let chartBar: [Color]
 
         var id: Int { prestige }
+
+        /// Readable text/icon color for content drawn directly on `primary`
+        /// (buttons, earned-badge glyphs, anything using `AppColors.textOnAccent`).
+        /// A single hardcoded white broke down on light tiers — Silver
+        /// (0xCBD5E1) and Gold (0xFACC15) both wash white text out to near
+        /// invisibility. Perceived-brightness threshold picks white on dark/
+        /// saturated tiers and a near-black ink on light/pale ones, so every
+        /// tier gets readable text automatically, including future ones.
+        var onPrimary: Color {
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            UIColor(primary).getRed(&r, green: &g, blue: &b, alpha: &a)
+            let perceivedBrightness = 0.299 * r + 0.587 * g + 0.114 * b
+            return perceivedBrightness > 0.62 ? Color(hex: 0x14141C) : Color.white
+        }
 
         /// Colors for the days-worked ring on the pay-cycle hero card.
         var daysRingColors: [Color] { gradient }

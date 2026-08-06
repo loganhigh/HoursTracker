@@ -67,6 +67,11 @@ struct SemanticColors {
     var accentGradientColors: [Color]
     var chartBarColors: [Color]
     var accentMuted: Color
+    /// Readable text/icon color for content drawn on `accent` (buttons,
+    /// earned-badge glyphs). Restamped per prestige tier alongside `accent` —
+    /// see `PrestigeTheme.Tier.onPrimary`. A fixed white broke down on light
+    /// tiers (Silver, Gold).
+    var textOnAccent: Color
     let border: Color
     let success: Color
     let warning: Color
@@ -88,6 +93,7 @@ extension SemanticColors {
         accentGradientColors: [Color(hex: 0x7C3AED), Color(hex: 0x6366F1), Color(hex: 0x3B82F6)],
         chartBarColors: [Color(hex: 0x7C3AED), Color(hex: 0x6366F1)],
         accentMuted: Color(hex: 0x8B5CF6).opacity(0.25),
+        textOnAccent: Color.white,
         border: Color.white.opacity(0.08),
         success: Color(hex: 0x34D399),
         warning: Color(hex: 0xFBBF24),
@@ -108,6 +114,7 @@ extension SemanticColors {
         accentGradientColors: [Color(hex: 0x7C3AED), Color(hex: 0x6366F1), Color(hex: 0x3B82F6)],
         chartBarColors: [Color(hex: 0x7C3AED), Color(hex: 0x6366F1)],
         accentMuted: Color(hex: 0x7C3AED).opacity(0.18),
+        textOnAccent: Color.white,
         border: Color.black.opacity(0.1),
         success: Color(hex: 0x059669),
         warning: Color(hex: 0xD97706),
@@ -124,6 +131,7 @@ extension SemanticColors {
         copy.accentGradientColors = tier.gradient
         copy.chartBarColors = tier.chartBar
         copy.accentMuted = tier.primary.opacity(0.25)
+        copy.textOnAccent = tier.onPrimary
         return copy
     }
 }
@@ -171,6 +179,7 @@ extension SemanticColors {
         accentGradientColors: dark.accentGradientColors,
         chartBarColors: dark.chartBarColors,
         accentMuted: .schemeAdaptive(dark: dark.accentMuted, light: light.accentMuted),
+        textOnAccent: .schemeAdaptive(dark: dark.textOnAccent, light: light.textOnAccent),
         border: .schemeAdaptive(dark: dark.border, light: light.border),
         success: .schemeAdaptive(dark: dark.success, light: light.success),
         warning: .schemeAdaptive(dark: dark.warning, light: light.warning),

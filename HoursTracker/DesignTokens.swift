@@ -28,8 +28,10 @@ enum AppColors {
     static var text: Color { AppTheme.Colors.text }
     static var subtext: Color { AppTheme.Colors.subtext }
     static var faint: Color { AppTheme.Colors.faint }
-    /// Text placed on top of accent-gradient fills (buttons, chips).
-    static var textOnAccent: Color { Color.white }
+    /// Text placed on top of accent-gradient fills (buttons, chips, earned
+    /// badges). Tracks the active prestige tier's readable-text color — a
+    /// fixed white washed out on light tiers like Silver and Gold.
+    static var textOnAccent: Color { AppTheme.Colors.textOnAccent }
 
     // Accent (prestige-driven)
     static var accent: Color { AppTheme.Colors.accent }

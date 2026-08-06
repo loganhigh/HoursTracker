@@ -34,6 +34,9 @@ enum AppTheme {
         static var brandSoft: Color { c.accentMuted }
         static var glow: Color { c.accent.opacity(0.45) }
         static var accentHighlight: Color { c.accentHighlight }
+        /// Readable text/icon color for content drawn on `accent` — tracks the
+        /// active prestige tier so it never washes out on light tiers.
+        static var textOnAccent: Color { c.textOnAccent }
 
         // Utility
         static var success: Color { c.success }
