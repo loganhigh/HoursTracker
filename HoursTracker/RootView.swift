@@ -398,13 +398,16 @@ struct HoursHomeView: View {
                 progressionCard
                     .cardAppear(index: 0)
 
+                LiveShiftCardView(store: store)
+                    .cardAppear(index: 1)
+
                 TodayHeroCard(store: store) {
                     showingPrestigeInfoFromHeroCard = true
                 }
-                .cardAppear(index: 1)
+                .cardAppear(index: 2)
 
                 HomeStatTriplet(store: store)
-                    .cardAppear(index: 2)
+                    .cardAppear(index: 3)
 
                 VStack(spacing: 10) {
                     // Quiet primary action: flat accent fill, hairline-free,
@@ -456,7 +459,7 @@ struct HoursHomeView: View {
                         .tapBurst(trigger: holidayBurst)
                     }
                 }
-                .cardAppear(index: 3)
+                .cardAppear(index: 4)
 
                 RecentShiftsSection(
                     store: store,
@@ -478,10 +481,10 @@ struct HoursHomeView: View {
                         showTrackingHint = true
                     }
                 )
-                .cardAppear(index: 4)
+                .cardAppear(index: 5)
 
                 YearlyOverviewSection(store: store)
-                    .cardAppear(index: 5)
+                    .cardAppear(index: 6)
 
                 if !premium.isPremium {
                     BannerAdView()
@@ -498,11 +501,11 @@ struct HoursHomeView: View {
                             tabRouter.selection = .friends
                         }
                     )
-                    .cardAppear(index: 6)
+                    .cardAppear(index: 7)
 
                     // Global leaderboard — social surface, hidden with Friends.
                     homeTopTrackersSection
-                        .cardAppear(index: 7)
+                        .cardAppear(index: 8)
                 }
 
                 Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
