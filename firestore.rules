@@ -238,5 +238,32 @@ service cloud.firestore {
         }
       }
     }
+
+    // Teams (crews) — slice 1: create a crew, join by invite code. All writes
+    // go through the createCrew / joinCrewByCode Cloud Functions (Admin SDK,
+    // which bypasses these rules), matching the friendships precedent above.
+    match /crews/{crewId} {
+      // Any member (manager or worker) can read the crew doc — needed for a
+      // future dashboard. Non-members get nothing, so crew name/size/invite
+      // code aren't discoverable without already being in the crew.
+      allow read: if isSignedIn()
+        && exists(/databases/$(database)/documents/crews/$(crewId)/members/$(request.auth.uid));
+      allow write: if false;
+
+      match /members/{uid} {
+        // Any fellow member can read the roster (future dashboard); writes
+        // are Admin-SDK-only via the Cloud Functions above.
+        allow read: if isSignedIn()
+          && exists(/databases/$(database)/documents/crews/$(crewId)/members/$(request.auth.uid));
+        allow write: if false;
+      }
+    }
+
+    // Top-level code→crewId lookup. Completely inaccessible to clients in
+    // both directions so crew existence can't be enumerated by guessing
+    // codes — joinCrewByCode does this lookup server-side with the Admin SDK.
+    match /crewInviteCodes/{code} {
+      allow read, write: if false;
+    }
   }
 }

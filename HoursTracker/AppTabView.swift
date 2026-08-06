@@ -57,6 +57,7 @@ struct AppTabView: View {
     @StateObject private var tabRouter = TabRouter()
     @State private var showingSettings = false
     @AppStorage(FriendsFeature.storageKey) private var friendsEnabled = true
+    @ObservedObject private var crewService = CrewService.shared
 
     /// Intercepting selection binding: the gear item opens the Settings sheet
     /// instead of becoming the selected tab, and a request for a tab that isn't
@@ -126,6 +127,15 @@ struct AppTabView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView(store: store, settings: $store.paySettings)
                 .environmentObject(authService)
+        }
+        .onChange(of: crewService.pendingJoinCode) { _, newValue in
+            // A `join-crew` deep link can land while Settings isn't open
+            // (e.g. the user is on Home) — present it so SettingsView's own
+            // `onAppear`/`onChange` can pick up the pending code and open
+            // the Join a Crew sheet pre-filled.
+            if newValue != nil && !showingSettings {
+                showingSettings = true
+            }
         }
     }
 }

@@ -20,6 +20,9 @@ struct SettingsView: View {
     @State private var showRestoreSuccessAlert = false
     @State private var backupErrorMessage: String?
     @State private var showingPremiumSheet = false
+    @State private var showingCreateCrewSheet = false
+    @State private var showingJoinCrewSheet = false
+    @State private var joinCrewInitialCode = ""
     @AppStorage("auto_yearly_reset_enabled") private var autoYearlyResetEnabled = true
     /// Master switch for the Friends/social experience on this device. Absence
     /// of the stored value reads as `true`, so fresh installs and upgrading
@@ -29,6 +32,7 @@ struct SettingsView: View {
     @ObservedObject private var smartNotifier = SmartNotifier.shared
     @ObservedObject private var weeklyNotifier = WeeklyMilestoneNotifier.shared
     @ObservedObject private var premium = PremiumManager.shared
+    @ObservedObject private var crewService = CrewService.shared
 
     private var paydayDate: Date {
         let span = PayCycleEngine.spanDays(for: settings.payPeriodType)
@@ -193,6 +197,43 @@ struct SettingsView: View {
                     Text(friendsEnabled
                          ? "Friends only see what you share. Toggle anything off to hide it instantly."
                          : "Hides the Friends tab and social features on this device. Your friends and privacy settings are kept, and your stats stay on the leaderboards.")
+                        .appText(.caption)
+                        .foregroundStyle(AppColors.subtext)
+                }
+                .listRowBackground(AppColors.card.opacity(0.55))
+                .listRowSeparatorTint(AppColors.stroke)
+
+                // MARK: - Teams
+                Section {
+                    Button {
+                        // TODO(teams-monetization): gate crew creation behind
+                        // a Team subscription once that product/tier exists.
+                        // No Teams subscription product exists yet as of this
+                        // slice (Hour Tracker Pro's StoreKit products are
+                        // unrelated), so creation is fully open for now.
+                        showingCreateCrewSheet = true
+                    } label: {
+                        HStack(spacing: AppSpacing.sm) {
+                            SettingsRowLabel(icon: "person.3.fill", title: "Create a Crew")
+                            Spacer(minLength: AppSpacing.xs)
+                            SettingsChevron()
+                        }
+                    }
+
+                    Button {
+                        joinCrewInitialCode = ""
+                        showingJoinCrewSheet = true
+                    } label: {
+                        HStack(spacing: AppSpacing.sm) {
+                            SettingsRowLabel(icon: "person.badge.plus", title: "Join a Crew")
+                            Spacer(minLength: AppSpacing.xs)
+                            SettingsChevron()
+                        }
+                    }
+                } header: {
+                    SectionEyebrow("Teams")
+                } footer: {
+                    Text("Crews let a team track hours together. Create one as manager, or join with an invite code.")
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
                 }
@@ -425,6 +466,18 @@ struct SettingsView: View {
             .sheet(isPresented: $showingPremiumSheet) {
                 PremiumUpgradeView()
             }
+            .sheet(isPresented: $showingCreateCrewSheet) {
+                CreateCrewSheet()
+            }
+            .sheet(isPresented: $showingJoinCrewSheet) {
+                JoinCrewSheet(initialCode: joinCrewInitialCode)
+            }
+            .onAppear {
+                consumePendingJoinCodeIfNeeded()
+            }
+            .onChange(of: crewService.pendingJoinCode) { _, _ in
+                consumePendingJoinCodeIfNeeded()
+            }
             .alert("Delete All Data", isPresented: $showingDeleteConfirm) {
                 Button("Cancel", role: .cancel) { }
                 Button("Delete", role: .destructive) {
@@ -471,6 +524,17 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    /// Consumes a `join-crew` deep link's pending code (set by
+    /// `CrewService.handleIncomingURL`) by presenting the Join a Crew sheet
+    /// pre-filled with it. Clears the pending code immediately so it isn't
+    /// re-consumed if this view reappears.
+    private func consumePendingJoinCodeIfNeeded() {
+        guard let code = crewService.pendingJoinCode else { return }
+        crewService.pendingJoinCode = nil
+        joinCrewInitialCode = code
+        showingJoinCrewSheet = true
     }
 
     private func performLocalBackup() {

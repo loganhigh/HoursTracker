@@ -2017,3 +2017,145 @@ exports.reconcileFriendships = onCall(
     return { ok: true, repaired: partners.size, writes };
   }
 );
+
+// MARK: - Teams (crews) — slice 1: create a crew, join by invite code.
+//
+// crewInviteCodes/{code} is a top-level, Admin-SDK-only lookup collection
+// (see firestore.rules — no client read/write) so crew existence can't be
+// enumerated by guessing/scanning codes; only these callables ever touch it.
+
+/** Uppercase alphanumeric charset avoiding visually ambiguous 0/O/1/I. */
+const CREW_CODE_CHARSET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const CREW_CODE_LENGTH = 6;
+const CREW_CODE_FORMAT = /^[A-Z0-9]{6}$/;
+const DEFAULT_CREW_MEMBER_LIMIT = 20;
+
+function generateCrewInviteCode() {
+  let code = "";
+  for (let i = 0; i < CREW_CODE_LENGTH; i++) {
+    code += CREW_CODE_CHARSET[Math.floor(Math.random() * CREW_CODE_CHARSET.length)];
+  }
+  return code;
+}
+
+/** Create a crew — caller becomes its manager. Returns { crewId, inviteCode }. */
+exports.createCrew = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+    const uid = request.auth.uid;
+
+    const rawName = request.data?.name;
+    const name = typeof rawName === "string" ? rawName.trim() : "";
+    if (!name) {
+      throw new HttpsError("invalid-argument", "Enter a crew name.");
+    }
+    if (name.length > 60) {
+      throw new HttpsError("invalid-argument", "Crew name is too long.");
+    }
+
+    const callerDoc = await db.collection("users").doc(uid).get();
+    const callerName = callerDoc.data()?.displayName || "Manager";
+
+    // Check-and-retry for a code that isn't already taken. The write below
+    // still races against a concurrent create — collisions are astronomically
+    // unlikely with a 32-char, 6-length code (32^6 ≈ 1.07B combinations) and
+    // are self-healing on retry, so we don't need a transaction here.
+    let code = null;
+    for (let attempt = 0; attempt < 5 && !code; attempt++) {
+      const candidate = generateCrewInviteCode();
+      const existing = await db.collection("crewInviteCodes").doc(candidate).get();
+      if (!existing.exists) {
+        code = candidate;
+      }
+    }
+    if (!code) {
+      throw new HttpsError("resource-exhausted", "Couldn't generate a unique invite code. Try again.");
+    }
+
+    const crewRef = db.collection("crews").doc();
+    const now = FieldValue.serverTimestamp();
+
+    const batch = db.batch();
+    batch.set(crewRef, {
+      name,
+      ownerId: uid,
+      inviteCode: code,
+      // Real tier enforcement (Team subscription levels) is a later slice —
+      // stored as a real field now so it can be changed per-crew without a
+      // schema migration once that's designed.
+      memberLimit: DEFAULT_CREW_MEMBER_LIMIT,
+      memberCount: 1,
+      createdAt: now,
+    });
+    batch.set(crewRef.collection("members").doc(uid), {
+      role: "manager",
+      status: "active",
+      displayName: callerName,
+      joinedAt: now,
+    });
+    batch.set(db.collection("crewInviteCodes").doc(code), {
+      crewId: crewRef.id,
+    });
+    await batch.commit();
+
+    return { crewId: crewRef.id, inviteCode: code };
+  }
+);
+
+/** Join a crew by its 6-character invite code. Returns { crewId, crewName }. */
+exports.joinCrewByCode = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+    const uid = request.auth.uid;
+
+    const rawCode = request.data?.code;
+    const code = typeof rawCode === "string" ? rawCode.trim().toUpperCase() : "";
+    if (!CREW_CODE_FORMAT.test(code)) {
+      throw new HttpsError("invalid-argument", "Enter a valid 6-character invite code.");
+    }
+
+    // The code→crewId lookup happens server-side only — crewInviteCodes is
+    // unreadable by clients (see firestore.rules).
+    const codeDoc = await db.collection("crewInviteCodes").doc(code).get();
+    if (!codeDoc.exists) {
+      throw new HttpsError("not-found", "That invite code wasn't found.");
+    }
+    const crewId = codeDoc.data().crewId;
+    const crewRef = db.collection("crews").doc(crewId);
+    const memberRef = crewRef.collection("members").doc(uid);
+
+    const callerDoc = await db.collection("users").doc(uid).get();
+    const callerName = callerDoc.data()?.displayName || "Worker";
+
+    const crewName = await db.runTransaction(async (tx) => {
+      const [crewSnap, memberSnap] = await Promise.all([tx.get(crewRef), tx.get(memberRef)]);
+      if (!crewSnap.exists) {
+        throw new HttpsError("not-found", "This crew no longer exists.");
+      }
+      if (memberSnap.exists) {
+        throw new HttpsError("already-exists", "You're already a member of this crew.");
+      }
+      const crewData = crewSnap.data();
+      const memberLimit = typeof crewData.memberLimit === "number"
+        ? crewData.memberLimit : DEFAULT_CREW_MEMBER_LIMIT;
+      const memberCount = typeof crewData.memberCount === "number" ? crewData.memberCount : 0;
+      if (memberCount >= memberLimit) {
+        throw new HttpsError("resource-exhausted", "This crew is full.");
+      }
+
+      tx.set(memberRef, {
+        role: "worker",
+        status: "active",
+        displayName: callerName,
+        joinedAt: FieldValue.serverTimestamp(),
+      });
+      tx.update(crewRef, { memberCount: FieldValue.increment(1) });
+
+      return crewData.name;
+    });
+
+    return { crewId, crewName };
+  }
+);
