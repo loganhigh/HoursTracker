@@ -4,6 +4,8 @@ import SwiftUI
 
 enum AppDesignSystem {
 
+    // DEPRECATED: use AppSpacing (DesignTokens.swift) — the canonical 4/8/12/16/20/24/32
+    // scale that matches real call-site usage. Do not use in new code; kept until screens migrate.
     enum Spacing {
         static let xs: CGFloat = 6
         static let sm: CGFloat = 10
@@ -25,12 +27,9 @@ enum AppDesignSystem {
         static let cardLight = (color: Color.black.opacity(0.08), radius: CGFloat(6), x: CGFloat(0), y: CGFloat(2))
     }
 
-    /// Shared animation presets — use with `AppMotion.animation(_:reduceMotion:)`.
-    enum Motion {
-        static let springSnappy = Animation.spring(response: 0.32, dampingFraction: 0.86)
-        static let springSmooth = Animation.spring(response: 0.42, dampingFraction: 0.88)
-    }
-
+    // DEPRECATED: use AppTypography (DesignTokens.swift) — the ONE Dynamic Type-relative
+    // scale. This fixed-size scale conflicts with AppTheme.Typography (e.g. callout 14 vs 15);
+    // do not use in new code. Kept until screens migrate.
     enum Typography {
         static let largeTitle = Font.system(size: 32, weight: .bold, design: .rounded)
         static let title1 = Font.system(size: 24, weight: .bold, design: .rounded)
@@ -138,12 +137,80 @@ extension Color {
         let b = Double(hex & 0xFF) / 255.0
         self.init(.sRGB, red: r, green: g, blue: b, opacity: alpha)
     }
+
+    /// Scheme-dynamic color: wraps a `UIColor` trait provider so the color
+    /// resolves per-render from the view's current appearance. This is what
+    /// lets `AppTheme.Colors` / `AppColors` tokens stay correct when the
+    /// scheme flips, even in views that never re-evaluate their body.
+    static func schemeAdaptive(dark: Color, light: Color) -> Color {
+        Color(UIColor { trait in
+            trait.userInterfaceStyle == .dark ? UIColor(dark) : UIColor(light)
+        })
+    }
+}
+
+// MARK: - Adaptive palette (dynamic dark/light)
+
+extension SemanticColors {
+    /// The palette the app actually runs on: every scheme-dependent slot is a
+    /// dynamic color built from `.dark` / `.light`, so tokens resolve at
+    /// render time from the current trait collection. Accent slots start as
+    /// dynamic too, but `AdaptiveThemeModifier` replaces them with the user's
+    /// prestige tier (identical in both schemes).
+    static let adaptive = SemanticColors(
+        background: .schemeAdaptive(dark: dark.background, light: light.background),
+        surface: .schemeAdaptive(dark: dark.surface, light: light.surface),
+        card: .schemeAdaptive(dark: dark.card, light: light.card),
+        cardSecondary: .schemeAdaptive(dark: dark.cardSecondary, light: light.cardSecondary),
+        textPrimary: .schemeAdaptive(dark: dark.textPrimary, light: light.textPrimary),
+        textSecondary: .schemeAdaptive(dark: dark.textSecondary, light: light.textSecondary),
+        textTertiary: .schemeAdaptive(dark: dark.textTertiary, light: light.textTertiary),
+        accent: .schemeAdaptive(dark: dark.accent, light: light.accent),
+        accent2: .schemeAdaptive(dark: dark.accent2, light: light.accent2),
+        accentHighlight: .schemeAdaptive(dark: dark.accentHighlight, light: light.accentHighlight),
+        accentGradientColors: dark.accentGradientColors,
+        chartBarColors: dark.chartBarColors,
+        accentMuted: .schemeAdaptive(dark: dark.accentMuted, light: light.accentMuted),
+        border: .schemeAdaptive(dark: dark.border, light: light.border),
+        success: .schemeAdaptive(dark: dark.success, light: light.success),
+        warning: .schemeAdaptive(dark: dark.warning, light: light.warning),
+        danger: .schemeAdaptive(dark: dark.danger, light: light.danger)
+    )
+}
+
+// MARK: - Appearance preference (System / Light / Dark)
+
+/// User-facing appearance setting, stored in `@AppStorage(AppAppearance.storageKey)`
+/// and applied via `.preferredColorScheme` at the app root.
+enum AppAppearance: String, CaseIterable, Identifiable {
+    case system, light, dark
+
+    static let storageKey = "appearance_mode"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: return "System"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+
+    /// `nil` follows the system appearance.
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
 }
 
 // MARK: - Environment Key
 
 private struct SemanticColorsKey: EnvironmentKey {
-    static var defaultValue: SemanticColors = .dark
+    static var defaultValue: SemanticColors = .adaptive
 }
 
 extension EnvironmentValues {
@@ -153,17 +220,23 @@ extension EnvironmentValues {
     }
 }
 
-/// Updates ThemeProvider and injects semantic colors based on system color scheme.
-/// When a `prestige` value is provided, the accent color (and all derived gradients)
-/// are overridden to match the user's prestige rank.
+/// Updates ThemeProvider and injects semantic colors. When a `prestige` value
+/// is provided, the accent color (and all derived gradients) are overridden to
+/// match the user's prestige rank.
+///
+/// Scheme handling: the base palette is `SemanticColors.adaptive`, whose
+/// scheme-dependent slots are dynamic `UIColor` trait providers. That means
+/// `ThemeProvider.current` never needs restamping on a scheme flip — every
+/// token resolves per-render from the view's own trait collection, so the old
+/// "mutable global written from body" hazard only applies to the prestige
+/// accent (which IS re-stamped here whenever prestige changes and is identical
+/// in both schemes).
 struct AdaptiveThemeModifier: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
     let prestige: Int
 
     func body(content: Content) -> some View {
-        let base = colorScheme == .dark ? SemanticColors.dark : SemanticColors.light
         let tier = PrestigeTheme.tier(for: prestige)
-        let colors = base.applying(prestige: tier)
+        let colors = SemanticColors.adaptive.applying(prestige: tier)
         ThemeProvider.current = colors
         return content
             .environment(\.semanticColors, colors)

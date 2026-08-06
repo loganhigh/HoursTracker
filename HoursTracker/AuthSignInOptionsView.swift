@@ -50,7 +50,7 @@ struct AuthSignInOptionsView: View {
                 Text("Continue with Google")
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.text)
             .frame(maxWidth: .infinity)
             .frame(height: 50)
             .background(
@@ -118,12 +118,12 @@ struct AuthSignInOptionsView: View {
                     if authService.isSigningIn {
                         ProgressView()
                             .progressViewStyle(.circular)
-                            .tint(.white)
+                            .tint(AppColors.textOnAccent)
                     }
                     Text(isCreatingAccount ? "Create account" : "Sign in with email")
                         .font(.system(size: 16, weight: .bold, design: .rounded))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textOnAccent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(

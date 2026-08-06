@@ -66,9 +66,11 @@ struct FriendsBoardView: View {
     @ViewBuilder
     private var content: some View {
         if let error = board.errorMessage, board.posts.isEmpty {
-            errorState(error)
+            AppErrorState(title: "Couldn't load the board", message: error) {
+                refreshSubscription()
+            }
         } else if board.isLoading && board.posts.isEmpty {
-            SoftLoadingIndicator(title: "Loading the crew board…")
+            AppLoadingState(message: "Loading the crew board…")
         } else {
             ScrollView {
                 LazyVStack(spacing: 12) {
@@ -473,46 +475,12 @@ struct FriendsBoardView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "text.bubble.fill")
-                .font(.system(size: 36, weight: .light))
-                .foregroundStyle(theme.textTertiary)
-            Text("No posts yet")
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundStyle(theme.textPrimary)
-            Text("Be the first to post your grind — share hours, OT, badges, or ask who's still on the clock.")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(theme.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 12)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
-        .gentleFadeIn()
-    }
-
-    private func errorState(_ message: String) -> some View {
-        VStack(spacing: 14) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 36, weight: .light))
-                .foregroundStyle(AppTheme.Colors.danger)
-            Text("Couldn't load the board")
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundStyle(theme.textPrimary)
-            Text(message)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(theme.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-            Button("Try again") {
-                Haptics.lightTap()
-                refreshSubscription()
-            }
-            .buttonStyle(.bordered)
-            .tint(AppTheme.Colors.accent)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .gentleFadeIn()
+        AppEmptyState(
+            icon: "text.bubble.fill",
+            title: "No posts yet",
+            message: "Be the first to post your grind — share hours, OT, badges, or ask who's still on the clock."
+        )
+        .padding(.vertical, 8)
     }
 
     // MARK: - Actions

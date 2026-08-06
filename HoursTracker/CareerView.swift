@@ -1,7 +1,11 @@
 import SwiftUI
 
 /// Lifetime career overview: total hours, days worked, personal bests, level
-/// progression. Pay-rate progression lives in PayHistoryView.
+/// progression. Phase 9 restyle: canonical tokens throughout, standard hero
+/// anatomy without the glow (Home owns the app's single hero glow), and the
+/// shared FriendRecordRow / FriendProfileFormat building blocks instead of
+/// local duplicates. Structure (hero → stats → bests → company → history)
+/// unchanged.
 struct CareerView: View {
     @ObservedObject var store: HoursStore
     @AppStorage("company_name") private var companyName: String = ""
@@ -78,7 +82,7 @@ struct CareerView: View {
 
     private var yearsAtCompany: Double {
         guard let start = companyStartDate else { return 0 }
-        return max(0, Date().timeIntervalSince(start) / (60 * 60 * 24 * 365.25))
+        return FriendProfileFormat.yearsAtCompany(from: start)
     }
 
     private var companyHoursLogged: Double {
@@ -102,23 +106,6 @@ struct CareerView: View {
         return days.count
     }
 
-    private var nextWorkAnniversary: Date? {
-        guard let start = companyStartDate else { return nil }
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        let startParts = cal.dateComponents([.month, .day], from: start)
-        guard let month = startParts.month, let day = startParts.day else { return nil }
-
-        var thisYear = cal.dateComponents([.year], from: today)
-        thisYear.month = month
-        thisYear.day = day
-        guard var anniversary = cal.date(from: thisYear) else { return nil }
-        if cal.startOfDay(for: anniversary) < today {
-            anniversary = cal.date(byAdding: .year, value: 1, to: anniversary) ?? anniversary
-        }
-        return anniversary
-    }
-
     private var bestMonthEntry: (label: String, hours: Double)? {
         guard !workEntries.isEmpty else { return nil }
         let cal = Calendar.current
@@ -133,17 +120,14 @@ struct CareerView: View {
         comps.month = top.key.month
         comps.day = 1
         guard let date = cal.date(from: comps) else { return nil }
-        let df = DateFormatter()
-        df.dateFormat = "MMM yyyy"
-        return (df.string(from: date), top.value)
+        return (FriendProfileFormat.companyStartedString(from: date), top.value)
     }
-
 
     // MARK: - Body
 
     var body: some View {
         ScrollView {
-            VStack(spacing: AppTheme.Spacing.xl) {
+            VStack(spacing: AppSpacing.xl) {
                 heroSummary
 
                 SectionCard(
@@ -152,18 +136,16 @@ struct CareerView: View {
                     trailing: nil,
                     centerHeader: true
                 ) {
-                    VStack(spacing: 14) {
-                        LazyVGrid(columns: [
-                            GridItem(.flexible(), spacing: 12),
-                            GridItem(.flexible(), spacing: 12)
-                        ], spacing: 12) {
-                            CareerStatTile(label: "All-Time Hours", value: hoursDisplay(totalHours), icon: "clock.fill")
-                            CareerStatTile(label: "Days Worked", value: "\(daysWorked)", icon: "calendar")
-                            CareerStatTile(label: "Avg Shift", value: AppTheme.Format.hours(averageShiftHours), icon: "chart.bar.fill")
-                            CareerStatTile(label: "Overtime", value: AppTheme.Format.hours(totalOvertimeHours), icon: "bolt.fill")
-                        }
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(), spacing: AppSpacing.sm),
+                        GridItem(.flexible(), spacing: AppSpacing.sm)
+                    ], spacing: AppSpacing.sm) {
+                        MetricDisplay(icon: "clock.fill", label: "All-Time Hours", value: FriendProfileFormat.hoursDisplay(totalHours))
+                        MetricDisplay(icon: "calendar", label: "Days Worked", value: "\(daysWorked)")
+                        MetricDisplay(icon: "chart.bar.fill", label: "Avg Shift", value: AppTheme.Format.hours(averageShiftHours))
+                        MetricDisplay(icon: "bolt.fill", label: "Overtime", value: AppTheme.Format.hours(totalOvertimeHours))
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, AppSpacing.xs)
                 }
 
                 SectionCard(
@@ -173,35 +155,35 @@ struct CareerView: View {
                     centerHeader: true
                 ) {
                     VStack(spacing: 10) {
-                        recordRow(
+                        FriendRecordRow(
                             icon: "trophy.fill",
                             title: "Longest Shift",
                             value: AppTheme.Format.hours(longestShiftHours),
-                            tint: .orange
+                            tint: AppColors.gold
                         )
-                        recordRow(
+                        FriendRecordRow(
                             icon: "flame.fill",
                             title: "Best Streak",
-                            value: streakValueString(store.gamificationProfile.bestStreak),
-                            tint: .red
+                            value: FriendProfileFormat.streakValueString(store.gamificationProfile.bestStreak),
+                            tint: AppColors.streak
                         )
-                        recordRow(
+                        FriendRecordRow(
                             icon: "flame",
                             title: "Current Streak",
-                            value: streakValueString(store.gamificationProfile.currentStreak),
-                            tint: AppTheme.Colors.accent
+                            value: FriendProfileFormat.streakValueString(store.gamificationProfile.currentStreak),
+                            tint: AppColors.accent
                         )
                         if let best = bestMonthEntry {
-                            recordRow(
+                            FriendRecordRow(
                                 icon: "calendar.badge.checkmark",
                                 title: "Best Month",
-                                value: "\(AppTheme.Format.hours(best.hours))",
+                                value: AppTheme.Format.hours(best.hours),
                                 detail: best.label,
-                                tint: .green
+                                tint: AppColors.positive
                             )
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, AppSpacing.xs)
                 }
 
                 companyCard
@@ -213,37 +195,37 @@ struct CareerView: View {
                     centerHeader: true
                 ) {
                     VStack(spacing: 10) {
-                        recordRow(
+                        FriendRecordRow(
                             icon: "hourglass",
                             title: "Tracking Since",
                             value: trackingSinceString,
-                            tint: AppTheme.Colors.accent
+                            tint: AppColors.accent
                         )
-                        recordRow(
+                        FriendRecordRow(
                             icon: "calendar.circle.fill",
                             title: "Months Tracked",
                             value: "\(monthsTracked)",
-                            tint: .blue
+                            tint: AppColors.accent2
                         )
                         if yearsTracked >= 0.1 {
-                            recordRow(
+                            FriendRecordRow(
                                 icon: "star.fill",
                                 title: "Years Tracking",
-                                value: yearsTrackedString,
-                                tint: .yellow
+                                value: String(format: "%.1f", yearsTracked),
+                                tint: AppColors.gold
                             )
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, AppSpacing.xs)
                 }
 
             }
-            .padding(.horizontal, AppTheme.Spacing.md)
+            .padding(.horizontal, AppSpacing.md)
             .padding(.top, 10)
-            .padding(.bottom, 24)
+            .padding(.bottom, AppSpacing.xl)
         }
         .scrollContentBackground(.hidden)
-        .background(AppTheme.Colors.bg.ignoresSafeArea())
+        .background(AppColors.bg.ignoresSafeArea())
         .navigationTitle("Career")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -254,42 +236,36 @@ struct CareerView: View {
         }
     }
 
-    // MARK: - Hero
+    // MARK: - Hero (standard anatomy, no glow — Home owns the only hero glow)
 
     private var heroSummary: some View {
-        VStack(spacing: 12) {
-            Text("CAREER")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .tracking(1.6)
-                .foregroundStyle(AppTheme.Colors.subtext)
+        VStack(spacing: AppSpacing.sm) {
+            SectionEyebrow("Career")
 
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(hoursDisplay(totalHours))
-                    .font(AppDesignSystem.Typography.heroNumerals(size: 44, weight: .heavy))
-                    .foregroundStyle(AppTheme.Colors.text)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-            }
+            AnimatedMetricText(value: totalHours) { FriendProfileFormat.hoursDisplay($0) }
+                .font(AppTypography.heroNumber)
+                .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
 
             Text("Lifetime hours logged")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.faint)
+                .appText(.caption)
+                .foregroundStyle(AppColors.faint)
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-        .padding(20)
+        .padding(AppSpacing.lg)
         .background(
             ZStack {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(AppTheme.Colors.card2)
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
+                    .fill(AppColors.card2)
+                RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [
-                                AppTheme.Colors.accent.opacity(0.14),
+                                AppColors.accent.opacity(0.14),
                                 Color.clear,
-                                AppTheme.Colors.accent.opacity(0.05)
+                                AppColors.accent.opacity(0.05)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -298,12 +274,12 @@ struct CareerView: View {
             }
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
                 .stroke(
                     LinearGradient(
                         colors: [
-                            AppTheme.Colors.accent.opacity(0.4),
-                            AppTheme.Colors.accent.opacity(0.08),
+                            AppColors.accent.opacity(0.4),
+                            AppColors.accent.opacity(0.08),
                             Color.clear
                         ],
                         startPoint: .topLeading,
@@ -312,7 +288,6 @@ struct CareerView: View {
                     lineWidth: 1
                 )
         )
-        .shadow(color: AppTheme.Colors.accent.opacity(0.18), radius: 18, y: 8)
     }
 
     // MARK: - Company
@@ -333,37 +308,25 @@ struct CareerView: View {
             trailing: nil,
             centerHeader: true
         ) {
-            VStack(spacing: 14) {
+            VStack(spacing: AppSpacing.md) {
                 Image(systemName: "building.2.fill")
-                    .font(.system(size: 32, weight: .semibold))
-                    .foregroundStyle(AppTheme.Colors.accent.opacity(0.85))
+                    .font(.largeTitle.weight(.semibold))
+                    .foregroundStyle(AppColors.accent.opacity(0.85))
 
                 Text("Add your company to see start date, tenure, and work anniversaries here.")
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.subtext)
+                    .appText(.subheadline)
+                    .foregroundStyle(AppColors.subtext)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, AppSpacing.xs)
 
                 NavigationLink {
                     CompanyProfileView(store: store)
                 } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                        Text("Set up company profile")
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(AppTheme.Colors.accentGradient)
-                    )
+                    Label("Set up company profile", systemImage: "plus.circle.fill")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PrimaryButtonStyle())
             }
-            .padding(.vertical, 12)
+            .padding(.vertical, AppSpacing.sm)
         }
     }
 
@@ -376,75 +339,75 @@ struct CareerView: View {
         ) {
             VStack(spacing: 10) {
                 if let start = companyStartDate {
-                    recordRow(
+                    FriendRecordRow(
                         icon: "building.2.fill",
                         title: "Started",
-                        value: companyStartedString(from: start),
-                        tint: AppTheme.Colors.accent
+                        value: FriendProfileFormat.companyStartedString(from: start),
+                        tint: AppColors.accent
                     )
-                    recordRow(
+                    FriendRecordRow(
                         icon: "briefcase.fill",
                         title: "Time at company",
-                        value: tenureAtCompanyString(from: start),
-                        tint: .purple
+                        value: FriendProfileFormat.tenureAtCompanyString(from: start),
+                        tint: AppColors.accent2
                     )
                     if yearsAtCompany >= 0.1 {
-                        recordRow(
+                        FriendRecordRow(
                             icon: "star.circle.fill",
                             title: "Years worked",
                             value: String(format: "%.1f", yearsAtCompany),
-                            tint: .yellow
+                            tint: AppColors.gold
                         )
                     }
-                    if let anniversary = nextWorkAnniversary {
-                        recordRow(
+                    if let anniversary = FriendProfileFormat.nextWorkAnniversary(from: start) {
+                        FriendRecordRow(
                             icon: "gift.fill",
                             title: "Next anniversary",
-                            value: anniversaryCountdownString(to: anniversary),
-                            detail: anniversaryDateString(anniversary),
-                            tint: .pink
+                            value: FriendProfileFormat.anniversaryCountdownString(to: anniversary),
+                            detail: FriendProfileFormat.anniversaryDateString(anniversary),
+                            tint: AppColors.accentHighlight
                         )
                     }
                 }
-                recordRow(
+                FriendRecordRow(
                     icon: "clock.fill",
                     title: "Hours logged",
-                    value: hoursDisplay(companyHoursLogged),
+                    value: FriendProfileFormat.hoursDisplay(companyHoursLogged),
                     detail: companyStartDate == nil ? "All shifts in app" : "Since start date",
-                    tint: .orange
+                    tint: AppColors.streak
                 )
-                recordRow(
+                FriendRecordRow(
                     icon: "calendar",
                     title: "Days worked",
                     value: "\(companyDaysWorked)",
-                    tint: .blue
+                    tint: AppColors.accent
                 )
 
                 NavigationLink {
                     CompanyProfileView(store: store)
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: AppSpacing.xs) {
                         Image(systemName: "pencil.circle.fill")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.callout.weight(.semibold))
                         Text("Edit company profile")
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .appText(.headline)
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AppTheme.Colors.faint)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.faint)
                     }
-                    .foregroundStyle(AppTheme.Colors.accent)
+                    .foregroundStyle(AppColors.accent)
                     .padding(.vertical, 10)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, AppSpacing.sm)
                     .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(AppTheme.Colors.accent.opacity(0.1))
+                        RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                            .fill(AppColors.accent.opacity(0.1))
                     )
                 }
-                .buttonStyle(.plain)
-                .padding(.top, 4)
+                .buttonStyle(PremiumPressStyle())
+                .padding(.top, AppSpacing.xxs)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, AppSpacing.xs)
         }
     }
 
@@ -454,142 +417,10 @@ struct CareerView: View {
         return "Your workplace"
     }
 
-    // MARK: - Record row
-
-    private func recordRow(
-        icon: String,
-        title: String,
-        value: String,
-        detail: String? = nil,
-        tint: Color
-    ) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(tint.opacity(0.18))
-                    .frame(width: 36, height: 36)
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(tint)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                if let detail {
-                    Text(detail)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppTheme.Colors.faint)
-                }
-            }
-            Spacer()
-            Text(value)
-                .font(.system(size: 17, weight: .bold, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.text)
-                .monospacedDigit()
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-        )
-    }
-
-    // MARK: - Formatting helpers
-
-    private func hoursDisplay(_ value: Double) -> String {
-        if value >= 1000 {
-            return String(format: "%.0f", value) + "h"
-        }
-        return AppTheme.Format.hours(value)
-    }
-
-    private func streakValueString(_ days: Int) -> String {
-        days == 1 ? "1 day" : "\(days) days"
-    }
+    // MARK: - Formatting
 
     private var trackingSinceString: String {
         guard let first = firstEntryDate else { return "—" }
-        let df = DateFormatter()
-        df.dateFormat = "MMM yyyy"
-        return df.string(from: first)
-    }
-
-    private var yearsTrackedString: String {
-        if yearsTracked < 1 {
-            return String(format: "%.1f", yearsTracked)
-        }
-        return String(format: "%.1f", yearsTracked)
-    }
-
-    private func companyStartedString(from start: Date) -> String {
-        let df = DateFormatter()
-        df.dateFormat = "MMM yyyy"
-        return df.string(from: start)
-    }
-
-    private func tenureAtCompanyString(from start: Date) -> String {
-        let cal = Calendar.current
-        let comps = cal.dateComponents([.year, .month], from: start, to: Date())
-        let years = comps.year ?? 0
-        let months = comps.month ?? 0
-        if years == 0 && months == 0 { return "Less than a month" }
-        if years == 0 { return "\(months) mo" }
-        if months == 0 { return "\(years) yr" }
-        return "\(years) yr \(months) mo"
-    }
-
-    private func anniversaryDateString(_ date: Date) -> String {
-        let df = DateFormatter()
-        df.dateFormat = "MMM d, yyyy"
-        return df.string(from: date)
-    }
-
-    private func anniversaryCountdownString(to date: Date) -> String {
-        let cal = Calendar.current
-        let days = cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: date)).day ?? 0
-        if days == 0 { return "Today" }
-        if days == 1 { return "Tomorrow" }
-        return "In \(days) days"
-    }
-}
-
-// MARK: - Career stat tile
-
-private struct CareerStatTile: View {
-    let label: String
-    let value: String
-    let icon: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppTheme.Colors.accent)
-                Text(label)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
-            Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(AppTheme.Colors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AppTheme.Colors.stroke, lineWidth: 1)
-                )
-        )
+        return FriendProfileFormat.companyStartedString(from: first)
     }
 }

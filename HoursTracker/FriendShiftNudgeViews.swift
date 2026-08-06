@@ -1,32 +1,47 @@
 import SwiftUI
 
-// MARK: - Nudge button (beside friend name)
+// MARK: - Nudge button (friend profile)
 
+/// Quiet full-width "Nudge" entry point on a friend's profile. The sending /
+/// cooldown logic lives in `FriendShiftNudgeService`; this is presentation only.
 struct FriendShiftNudgeButton: View {
     let friendUid: String
     let isSending: Bool
     let didSend: Bool
+    var tint: Color = AppTheme.Colors.accent
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Group {
+            HStack(spacing: 8) {
                 if isSending {
                     ProgressView()
-                        .scaleEffect(0.75)
+                        .tint(tint)
                 } else if didSend {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .font(.system(size: 15, weight: .semibold))
                 } else {
-                    Image(systemName: "bell.badge")
-                        .foregroundStyle(AppTheme.Colors.accent)
+                    Image(systemName: "hand.wave")
+                        .font(.system(size: 15, weight: .semibold))
                 }
+                Text(didSend ? "Nudge sent" : "Nudge")
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
             }
-            .font(.system(size: 14, weight: .semibold))
-            .frame(width: 28, height: 28)
+            .foregroundStyle(didSend ? AppTheme.Colors.success : tint)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                    .fill(tint.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                            .stroke(tint.opacity(0.25), lineWidth: 1)
+                    )
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(isSending || didSend)
         .accessibilityLabel(didSend ? "Reminder sent" : "Remind to log shifts")
     }
 }

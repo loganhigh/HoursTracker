@@ -1,5 +1,10 @@
 import SwiftUI
 
+// ⚠️ KEEP IN SYNC with HoursTrackerWidget/WidgetPrestigeTheme.swift: the
+// widget extension cannot see this file (separate synchronized folders), so
+// it duplicates every tier's `gradient` (P0–P10) as raw hex. If you change a
+// tier gradient here, mirror it there. Verified matching 2026-08-05 (Phase 13).
+
 /// Central source of truth for prestige rank cosmetics:
 /// every rank P0–P10 has its own distinct color, gradient, name, and icon.
 /// The active rank drives the app-wide accent color through `AdaptiveThemeModifier`.

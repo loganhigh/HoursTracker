@@ -25,6 +25,12 @@ struct Provider: TimelineProvider {
 }
 
 // MARK: - Home Screen Widget View
+//
+// NOTE on hardcoded whites: the widget always renders on the prestige-tier
+// gradient + black scrim (see `containerBackground` below), which is identical
+// in light and dark appearance. Every `.white` here is therefore
+// "text on accent fill" (the app target's AppColors.textOnAccent) — do not
+// convert them to scheme-adaptive tokens.
 
 struct HoursTrackerWidgetEntryView: View {
     var entry: Provider.Entry

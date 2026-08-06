@@ -15,23 +15,6 @@ private struct MonthAchievementItem: Identifiable {
     var progress: Double? = nil
 }
 
-private struct MonthProgressRing: View {
-    let progress: Double
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(AppTheme.Colors.stroke.opacity(0.6), lineWidth: 6)
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(
-                    AppTheme.Colors.accentGradient,
-                    style: StrokeStyle(lineWidth: 6, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-        }
-    }
-}
-
 private let achievementTileHeight: CGFloat = 152
 
 private struct MonthAchievementTile: View {
@@ -41,7 +24,7 @@ private struct MonthAchievementTile: View {
         VStack(spacing: 10) {
             ZStack {
                 if let p = item.progress {
-                    MonthProgressRing(progress: p)
+                    AppProgressRing(progress: p)
                         .frame(width: 64, height: 64)
                 }
                 Circle()
@@ -50,7 +33,7 @@ private struct MonthAchievementTile: View {
                     .shadow(color: AppTheme.Colors.accent.opacity(0.4), radius: 8, y: 3)
                 Image(systemName: item.icon)
                     .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textOnAccent)
             }
             .frame(height: 64)
             VStack(spacing: 4) {
@@ -86,6 +69,7 @@ struct MonthDetailView: View {
     @State private var showingAddEntry = false
     @State private var didCopyAll = false
     @State private var copyAllBurst = 0
+    @State private var selectedCalendarDay: Date?
 
     init(store: HoursStore, monthDate: Date) {
         self.store = store
@@ -105,6 +89,28 @@ struct MonthDetailView: View {
         ZStack {
             AppTheme.Colors.bg.ignoresSafeArea()
             List {
+            Section {
+                MonthCalendarView(
+                    monthDate: monthDate,
+                    entries: entries,
+                    selectedDay: $selectedCalendarDay
+                )
+                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
+                if let day = selectedCalendarDay {
+                    MonthDayDetailStrip(
+                        store: store,
+                        day: day,
+                        entries: entries.filter { Calendar.current.isDate($0.date, inSameDayAs: day) }
+                    )
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 4, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
+            }
+
             Section {
                 VStack(alignment: .leading, spacing: 12) {
                     // Total hours

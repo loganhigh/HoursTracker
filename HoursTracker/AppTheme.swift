@@ -18,7 +18,9 @@ enum AppTheme {
         static var card: Color { c.card }
         static var card2: Color { c.cardSecondary }
         static var stroke: Color { c.border }
-        static var strokeStrong: Color { Color.white.opacity(0.16) }
+        static var strokeStrong: Color {
+            .schemeAdaptive(dark: Color.white.opacity(0.16), light: Color.black.opacity(0.16))
+        }
 
         // Text
         static var text: Color { c.textPrimary }
@@ -46,11 +48,19 @@ enum AppTheme {
                 endPoint: .trailing
             )
         }
-        static var cardGradient = LinearGradient(
-            colors: [Color.white.opacity(0.04), Color.white.opacity(0.01)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        /// Subtle card lift: a white sheen in dark mode, a faint darkening in
+        /// light mode. Built from scheme-dynamic colors so it re-resolves per
+        /// render (a stored white-lift gradient would wash out light cards).
+        static var cardGradient: LinearGradient {
+            LinearGradient(
+                colors: [
+                    .schemeAdaptive(dark: Color.white.opacity(0.04), light: Color.black.opacity(0.03)),
+                    .schemeAdaptive(dark: Color.white.opacity(0.01), light: Color.black.opacity(0.005))
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
         static var chartFillGradient: LinearGradient {
             let stops = c.accentGradientColors
             let top = stops.first ?? c.accent
@@ -70,6 +80,8 @@ enum AppTheme {
         }
     }
 
+    // DEPRECATED: use AppSpacing (DesignTokens.swift). This 6/10/14/18 scale was
+    // ignored by ~95% of call sites; do not use in new code. Kept until screens migrate.
     enum Spacing {
         static let xs: CGFloat = AppDesignSystem.Spacing.xs
         static let sm: CGFloat = AppDesignSystem.Spacing.sm
@@ -100,6 +112,9 @@ enum AppTheme {
         }
     }
 
+    // DEPRECATED: use AppTypography (DesignTokens.swift) — the ONE Dynamic Type-relative
+    // scale. This fixed-size scale conflicts with AppDesignSystem.Typography (e.g. callout
+    // 15 vs 14); do not use in new code. Kept until screens migrate.
     enum Typography {
         static let h1 = Font.system(size: 34, weight: .bold, design: .rounded)
         static let h2 = Font.system(size: 24, weight: .bold, design: .rounded)

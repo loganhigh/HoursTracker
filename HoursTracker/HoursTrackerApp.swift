@@ -22,6 +22,7 @@ struct HoursTrackerApp: App {
     @StateObject private var startupCoordinator: StartupCoordinator
     @StateObject private var sessionManager: AppSessionManager
     @StateObject private var localization: LocalizationManager
+    @AppStorage(AppAppearance.storageKey) private var appearanceMode = AppAppearance.system.rawValue
 
     init() {
         if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
@@ -71,12 +72,10 @@ struct HoursTrackerApp: App {
                 .environmentObject(localization)
                 .environmentObject(PremiumManager.shared)
                 .adaptiveTheme(prestige: store.gamificationProfile.prestige)
-                // App is dark-mode only. Several screens (RootView greeting/level card,
-                // CompanyProfileView, MonthlyWrappedView) use hardcoded .foregroundStyle(.white)
-                // that would become near-invisible over AppTheme.Colors.card/bg in light mode.
-                // Before removing this or adding a light-mode toggle, switch those to
-                // AppTheme.Colors.text (or an explicit onDarkSurface token).
-                .preferredColorScheme(.dark)
+                // Appearance: user-selectable (Settings → Appearance). `nil`
+                // follows the system scheme; tokens are scheme-dynamic so no
+                // restamping is needed on flips.
+                .preferredColorScheme((AppAppearance(rawValue: appearanceMode) ?? .system).colorScheme)
                 .background(AppTheme.Colors.bg.ignoresSafeArea())
                 .onChange(of: authService.user?.uid) { _, newUID in
                     PremiumManager.shared.identify(uid: newUID)
@@ -150,7 +149,7 @@ private struct AppRootView: View {
                 MainAppWithStartup()
                     .id(sessionManager.rootResetToken)
             } else {
-                AppTutorialView(isPresented: .constant(true), dismissesWhenComplete: false)
+                OnboardingView(isPresented: .constant(true), dismissesWhenComplete: false)
                     .environmentObject(authService)
             }
         }

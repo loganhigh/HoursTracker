@@ -161,11 +161,11 @@ struct AdminPanelView: View {
                 Task { await loadUsers() }
             } label: {
                 HStack {
-                    if isLoading { ProgressView().tint(.white) }
+                    if isLoading { ProgressView().tint(AppColors.textOnAccent) }
                     Text(isLoading ? "Unlocking…" : "Unlock")
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textOnAccent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
                 .background(
