@@ -23,8 +23,6 @@ struct ProfileXPCapsule: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var displayedProgress: Double = 0
     @State private var seeded = false
-    /// Sheen travel, expressed as a fraction of the filled width.
-    @State private var sheenOffset: Double = -0.4
 
     private var profile: GamificationProfile { store.displayedGamificationProfile() }
 
@@ -44,33 +42,17 @@ struct ProfileXPCapsule: View {
                 .fill(AppColors.stroke.opacity(0.5))
 
             // Fill + a slow sheen that travels across the filled portion only,
-            // so an empty bar stays completely still.
+            // so an empty bar stays completely still. The sweep is driven by a
+            // phase animator (not a repeatForever on state), which cannot get
+            // stranded mid-travel and leave a static bright band on the bar.
             GeometryReader { geo in
-                if displayedProgress > 0 {
-                    let fillWidth = max(30, geo.size.width * displayedProgress)
+                let fillWidth = max(0, geo.size.width * displayedProgress)
+                if fillWidth > 0 {
                     Capsule()
                         .fill(AppColors.accent.opacity(0.3))
-                        .frame(width: fillWidth)
-                        .overlay(alignment: .leading) {
-                            if !reduceMotion {
-                                Capsule()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [
-                                                AppColors.accent.opacity(0),
-                                                AppColors.accent.opacity(0.55),
-                                                AppColors.accent.opacity(0)
-                                            ],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                                    .frame(width: fillWidth * 0.4)
-                                    .offset(x: sheenOffset * fillWidth)
-                            }
-                        }
+                        .frame(width: fillWidth, height: geo.size.height)
+                        .overlay(alignment: .leading) { sheen(fillWidth: fillWidth) }
                         .clipShape(Capsule())
-                        .frame(maxHeight: .infinity, alignment: .center)
                 }
             }
 
@@ -86,17 +68,34 @@ struct ProfileXPCapsule: View {
         .accessibilityLabel(
             "\(profile.xpIntoCurrentLevel) of \(profile.xpForNextLevel) experience points"
         )
-        .onAppear { seedAndAnimate(); startSheen() }
+        .onAppear { seedAndAnimate() }
         .onChange(of: liveProgress) { _, _ in animateToLive() }
     }
 
-    /// Sweeps the sheen from just before the fill's leading edge to just past
-    /// its trailing edge, then restarts. Disabled entirely under Reduce Motion.
-    private func startSheen() {
-        guard !reduceMotion else { return }
-        sheenOffset = -0.4
-        withAnimation(.linear(duration: 2.6).repeatForever(autoreverses: false)) {
-            sheenOffset = 1.0
+    /// Sweeps a soft highlight from just before the fill's leading edge to just
+    /// past its trailing edge, then snaps back instantly (zero-duration return
+    /// phase) so the travel only ever reads one way. Off under Reduce Motion.
+    @ViewBuilder
+    private func sheen(fillWidth: CGFloat) -> some View {
+        if !reduceMotion {
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            AppColors.accent.opacity(0),
+                            AppColors.accent.opacity(0.5),
+                            AppColors.accent.opacity(0)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: max(24, fillWidth * 0.35))
+                .phaseAnimator([0, 1]) { view, phase in
+                    view.offset(x: phase == 0 ? -fillWidth * 0.4 : fillWidth)
+                } animation: { phase in
+                    phase == 0 ? .linear(duration: 0) : .linear(duration: 2.4)
+                }
         }
     }
 

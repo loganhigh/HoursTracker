@@ -102,6 +102,10 @@ struct AccountView: View {
         let profile = store.displayedGamificationProfile()
         let tier = PrestigeTheme.tier(for: profile.prestige)
         let ringColor = profile.prestige == 0 ? AppColors.accent : tier.primary
+        // Read the auth state here (main-actor context) rather than inside the
+        // PhotosPicker label, whose builder closure is treated as nonisolated.
+        let avatarUID = authService.user?.uid
+        let isSignedIn = authService.isSignedIn
 
         return VStack(spacing: AppSpacing.xs) {
             PhotosPicker(selection: $photoPickerItem, matching: .images) {
@@ -109,7 +113,7 @@ struct AccountView: View {
                     ProfileAvatarView(
                         name: displayName,
                         size: 96,
-                        uid: authService.user?.uid
+                        uid: avatarUID
                     )
                     // Thin prestige-tier ring (accent at P0).
                     .overlay(
@@ -118,13 +122,13 @@ struct AccountView: View {
                             .padding(-5)
                     )
 
-                    if authService.isSignedIn {
+                    if isSignedIn {
                         cameraBadge
                     }
                 }
             }
             .buttonStyle(.plain)
-            .disabled(!authService.isSignedIn || isUpdatingPhoto)
+            .disabled(!isSignedIn || isUpdatingPhoto)
             .onChange(of: photoPickerItem) { _, item in
                 guard let item else { return }
                 Task { await updateProfilePhoto(from: item) }
