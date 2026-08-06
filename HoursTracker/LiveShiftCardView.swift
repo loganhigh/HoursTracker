@@ -38,14 +38,7 @@ struct LiveShiftCardView: View {
         }
         .animation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion), value: liveShift.activeShift != nil)
         .sheet(isPresented: $showingPaywall) {
-            // NOTE: PremiumUpgradeView.swift does not currently compile — it
-            // calls `PremiumManager.purchase()` with the old (no-argument)
-            // RevenueCat-era signature while PremiumManager.swift has already
-            // moved to `purchase(_ product: Product)` (native StoreKit,
-            // in-flight elsewhere). Falling back to a minimal placeholder so
-            // this feature isn't blocked on that unrelated migration; swap
-            // back to `PremiumUpgradeView()` once it compiles again.
-            LiveShiftPaywallPlaceholder()
+            PremiumUpgradeView()
         }
         .alert("Discard this shift?", isPresented: $showingDiscardConfirm) {
             Button("Discard", role: .destructive) {
@@ -212,41 +205,3 @@ struct LiveShiftCardView: View {
     }
 }
 
-// MARK: - Paywall placeholder
-//
-// Temporary stand-in while `PremiumUpgradeView` is mid-migration elsewhere
-// and doesn't compile (see the comment above). Swap the `.sheet` content
-// back to `PremiumUpgradeView()` once that lands.
-
-private struct LiveShiftPaywallPlaceholder: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: AppSpacing.md) {
-                Spacer()
-                Image(systemName: "crown.fill")
-                    .font(.system(size: 40, weight: .bold))
-                    .foregroundStyle(AppColors.accent)
-                Text("Hour Tracker Pro")
-                    .appText(.title)
-                    .foregroundStyle(AppColors.text)
-                Text("Live clock in/out tracking is a Pro feature.")
-                    .appText(.body)
-                    .foregroundStyle(AppColors.subtext)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, AppSpacing.xl)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(AppColors.bg.ignoresSafeArea())
-            .navigationTitle("Hour Tracker Pro")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-    }
-}
