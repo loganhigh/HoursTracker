@@ -82,8 +82,7 @@ struct AccountView: View {
         }
         .scrollContentBackground(.hidden)
         .background(AppColors.bg.ignoresSafeArea())
-        .navigationTitle("You")
-        .navigationBarTitleDisplayMode(.large)
+        .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             // Same recovery hook as CareerView: guarantees the server-stats
             // listeners are attached whenever a level-displaying screen appears.

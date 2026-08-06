@@ -1,26 +1,38 @@
 import SwiftUI
 
-// MARK: - History tab (Phase 5)
+// MARK: - History tab
 //
-// One thing only: every cheque (pay period) as a compact, scannable preview
-// row, newest first. Tapping a row opens the existing PayCycleDetailView.
+// Every cheque (pay period) as a compact, scannable preview row, grouped by
+// year with the newest year first. Each row is labelled with its position in
+// that year ("1st Cheque"), counted across ALL pay periods in the year — so a
+// period with no logged shifts still consumes its number and the labels keep
+// matching real pay history. Tapping a row opens PayCycleDetailView.
 
 struct HistoryTabView: View {
     @EnvironmentObject private var store: HoursStore
 
-    /// How far back to walk when building the cheque list.
-    private static let maxPreviousCycles = 26
+    /// Hard stop on the backward walk (roughly two years of bi-weekly cheques).
+    private static let maxWalkedCycles = 60
 
-    /// One row of the list: a pay cycle plus whether it is the live one.
+    /// One row of the list: a pay cycle, its ordinal within its year, and
+    /// whether it is the live one.
     private struct ChequeRow: Identifiable {
         let cycle: PayCycle
+        let ordinal: Int
         let isCurrent: Bool
         var id: Date { cycle.start }
     }
 
+    /// A year's worth of rows, newest cheque first.
+    private struct YearGroup: Identifiable {
+        let year: Int
+        let rows: [ChequeRow]
+        var id: Int { year }
+    }
+
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: AppSpacing.sm) {
+            LazyVStack(spacing: AppSpacing.sm, pinnedViews: [.sectionHeaders]) {
                 if store.entries.isEmpty {
                     AppEmptyState(
                         icon: "calendar",
@@ -29,8 +41,14 @@ struct HistoryTabView: View {
                     )
                     .padding(.top, AppSpacing.xxl)
                 } else {
-                    ForEach(rows) { row in
-                        card(for: row)
+                    ForEach(yearGroups) { group in
+                        Section {
+                            ForEach(group.rows) { row in
+                                card(for: row)
+                            }
+                        } header: {
+                            yearHeader(group.year)
+                        }
                     }
                 }
             }
@@ -40,18 +58,24 @@ struct HistoryTabView: View {
         }
         .scrollContentBackground(.hidden)
         .background(AppColors.bg.ignoresSafeArea())
-        .navigationTitle("History")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     // MARK: - Rows
 
+    private func yearHeader(_ year: Int) -> some View {
+        SectionEyebrow(String(year))
+            .frame(maxWidth: .infinity)
+            .padding(.top, AppSpacing.sm)
+            .padding(.bottom, AppSpacing.xxs)
+            .background(AppColors.bg)
+    }
+
     private func card(for row: ChequeRow) -> some View {
         ChequePreviewCard(
             title: row.cycle.workRangeText(),
-            caption: row.isCurrent
-                ? "In progress"
-                : shiftsCaption(for: PayCycleEngine.entries(store.entries, in: row.cycle)),
+            caption: caption(for: row),
             hours: cycleHours(row.cycle),
             isCurrent: row.isCurrent
         ) {
@@ -64,30 +88,71 @@ struct HistoryTabView: View {
         }
     }
 
-    /// Current cheque first, then every previous cheque back to the earliest entry.
-    private var rows: [ChequeRow] {
-        let current = store.currentPayCycle()
-        return [ChequeRow(cycle: current, isCurrent: true)]
-            + previousCycles(before: current).map { ChequeRow(cycle: $0, isCurrent: false) }
+    private func caption(for row: ChequeRow) -> String {
+        let label = "\(Self.ordinalText(row.ordinal)) Cheque"
+        if row.isCurrent { return "\(label) · In progress" }
+        return "\(label) · \(shiftsCaption(for: PayCycleEngine.entries(store.entries, in: row.cycle)))"
     }
 
-    /// Previous cycles worth showing: walks back from the current cheque until
-    /// the earliest logged entry (capped), keeping the most recent cheque even
-    /// when empty plus every older cheque that has entries.
+    // MARK: - Grouping
+
+    /// Cheques grouped by year (newest year first, newest cheque first within
+    /// the year). Empty cheques are hidden, but they still count toward the
+    /// ordinals so "5th Cheque" always means the fifth pay period of that year.
+    private var yearGroups: [YearGroup] {
+        let calendar = Calendar.current
+        let current = store.currentPayCycle()
+        let walked = [current] + previousCycles(before: current)
+
+        // Ordinal = chronological position among every pay period sharing the
+        // cheque's year, so the numbering survives skipped/empty periods.
+        var byYear: [Int: [PayCycle]] = [:]
+        for cycle in walked {
+            let year = calendar.component(.year, from: cycle.cutoff)
+            byYear[year, default: []].append(cycle)
+        }
+
+        return byYear.keys.sorted(by: >).compactMap { year in
+            let ascending = (byYear[year] ?? []).sorted { $0.start < $1.start }
+            let rows: [ChequeRow] = ascending.enumerated().compactMap { index, cycle in
+                let isCurrent = cycle.start == current.start
+                let hasEntries = !PayCycleEngine.entries(store.entries, in: cycle).isEmpty
+                guard isCurrent || hasEntries else { return nil }
+                return ChequeRow(cycle: cycle, ordinal: index + 1, isCurrent: isCurrent)
+            }
+            guard !rows.isEmpty else { return nil }
+            return YearGroup(year: year, rows: rows.reversed())
+        }
+    }
+
+    /// Walks back from the current cheque far enough to cover every year that
+    /// has entries — including the periods before the first logged shift of the
+    /// earliest year, which the ordinals depend on.
     private func previousCycles(before current: PayCycle) -> [PayCycle] {
-        let earliest = store.entries.map(\.date).min()
+        guard let earliest = store.entries.map(\.date).min() else { return [] }
+        let calendar = Calendar.current
+        let earliestYear = calendar.component(.year, from: earliest)
         var walked: [PayCycle] = []
         var cursor = current
-        for _ in 0..<Self.maxPreviousCycles {
+        for _ in 0..<Self.maxWalkedCycles {
             cursor = PayCycleEngine.previousCycle(before: cursor, settings: store.paySettings)
+            // Stop once we drop below the earliest year that has any entries.
+            if calendar.component(.year, from: cursor.cutoff) < earliestYear { break }
             walked.append(cursor)
-            guard let earliest, cursor.start > earliest else { break }
         }
-        return walked.enumerated()
-            .filter { index, cycle in
-                index == 0 || !PayCycleEngine.entries(store.entries, in: cycle).isEmpty
-            }
-            .map(\.element)
+        return walked
+    }
+
+    // MARK: - Formatting
+
+    private static let ordinalFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .ordinal
+        return f
+    }()
+
+    private static func ordinalText(_ value: Int) -> String {
+        ordinalFormatter.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
     private func cycleHours(_ cycle: PayCycle) -> Double {

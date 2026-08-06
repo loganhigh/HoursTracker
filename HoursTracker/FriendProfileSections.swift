@@ -111,8 +111,18 @@ struct FriendBadgesCard: View {
     @Binding var showAllBadges: Bool
 
     var body: some View {
-        let earned = friend.unlockedBadgeSummaries.filter { !$0.isLegend }
-        let legend = friend.unlockedBadgeSummaries.filter(\.isLegend)
+        // Only the friend's best three of each kind — highest `order` wins,
+        // which is the rarest/latest badge they've unlocked.
+        let earned = friend.unlockedBadgeSummaries
+            .filter { !$0.isLegend }
+            .sorted { $0.order > $1.order }
+            .prefix(3)
+            .map { $0 }
+        let legend = friend.unlockedBadgeSummaries
+            .filter(\.isLegend)
+            .sorted { $0.order > $1.order }
+            .prefix(3)
+            .map { $0 }
         let displayCount = earned.isEmpty ? friend.badgeCount : earned.count
 
         return SectionCard(
@@ -131,26 +141,7 @@ struct FriendBadgesCard: View {
                         .padding(.vertical, 12)
                 } else {
                     if !earned.isEmpty {
-                        let visible = showAllBadges ? earned : Array(earned.prefix(9))
-                        badgesGrid(badges: visible)
-                        if earned.count > 9 && !showAllBadges {
-                            Button {
-                                withAnimation(AppMotion.Spring.smooth) {
-                                    showAllBadges = true
-                                }
-                            } label: {
-                                Text("See all \(earned.count) badges")
-                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(accent)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 10)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                                            .fill(accent.opacity(0.12))
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
+                        badgesGrid(badges: earned)
                     }
                     if !legend.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
