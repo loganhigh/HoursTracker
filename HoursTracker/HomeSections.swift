@@ -316,45 +316,20 @@ struct HomeStatTriplet: View {
 
     private var monthHours: Double { store.monthTotalHours(monthDate: Date()) }
 
-    /// Weekly reference line for the context bar: the weekly OT threshold when
-    /// weekly rules apply, else daily threshold × 5. Nil hides the bar.
-    private var weekTarget: Double? {
-        let s = store.paySettings
-        switch s.overtimeType {
-        case .weekly, .dailyAndWeekly:
-            return s.weeklyOvertimeThreshold > 0 ? s.weeklyOvertimeThreshold : nil
-        case .daily:
-            return s.weekdayOvertimeAfterHours > 0 ? s.weekdayOvertimeAfterHours * 5 : nil
-        }
-    }
-
     var body: some View {
         HStack(spacing: AppSpacing.xs + 2) {
-            HomeStatTile(
-                label: "This Week",
-                hours: weekHours,
-                progress: weekTarget.map { min(max(weekHours / $0, 0), 1) }
-            )
-            HomeStatTile(
-                label: "This Cheque",
-                hours: chequeHours,
-                progress: nil
-            )
-            HomeStatTile(
-                label: "This Month",
-                hours: monthHours,
-                progress: nil
-            )
+            HomeStatTile(label: "This Week", hours: weekHours)
+            HomeStatTile(label: "This Cheque", hours: chequeHours)
+            HomeStatTile(label: "This Month", hours: monthHours)
         }
     }
 }
 
-/// One quiet stat tile: eyebrow label, monospaced numeral, optional thin
-/// context bar. Two text lines max — nothing else.
+/// One quiet stat tile: eyebrow label, monospaced numeral. Two text lines
+/// max — nothing else.
 struct HomeStatTile: View {
     let label: String
     let hours: Double
-    let progress: Double?
 
     var body: some View {
         VStack(spacing: AppSpacing.xxs) {
@@ -369,22 +344,6 @@ struct HomeStatTile: View {
                 .foregroundStyle(AppColors.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-
-            // Context bar only when there is actual progress to show — an
-            // empty track with a floating dot under "0h" reads as broken.
-            if let progress, progress > 0 {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(AppColors.stroke.opacity(0.6))
-                        Capsule()
-                            .fill(AppColors.accentGradient)
-                            .frame(width: max(3, geo.size.width * progress))
-                    }
-                }
-                .frame(height: 3)
-                .padding(.horizontal, AppSpacing.xs)
-            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, AppSpacing.sm + 2)
