@@ -1,22 +1,29 @@
 import SwiftUI
 
-// MARK: - Live Shift Card (Hour Tracker Pro — clock in/out/break)
+// MARK: - Live Shift Tracking (Hour Tracker Pro — clock in/out/break)
 //
-// Sits above `TodayHeroCard` on Home. Three states:
-//   - idle: a "Clock In" button (Pro-gated on tap — non-Pro sees the paywall)
+// Fills the Add Shift sheet (`AddShiftEntryView`) whenever a live shift is
+// already running — reached either because Add Shift was opened mid-shift,
+// or because the chooser's "Clock In" just started one. No longer a Home
+// card (Home no longer offers clock-in at all); this view owns the timer
+// and its two states:
 //   - active: live elapsed timer + Take Break/Clock Out (or Resume/Clock Out
 //     while on break)
-//   - stale (>16h): a quiet inline warning row layered above the active card
+//   - stale (>16h): a quiet inline warning row layered above the timer
 //
-// No new glow here — the hero card below owns this screen's one glow.
+// Clocking out materializes the shift into a WorkEntry (via `store.add`,
+// the same path the entry editor uses) and dismisses the sheet back to
+// Home. Discarding drops the shift in place — the sheet then falls back to
+// the Add Shift chooser, since `AddShiftEntryView` re-renders once
+// `LiveShiftManager.activeShift` goes nil.
+//
+// No new glow here — the hero card on Home owns this screen's one glow.
 
-struct LiveShiftCardView: View {
+struct LiveShiftTrackingView: View {
     @ObservedObject var store: HoursStore
     @EnvironmentObject private var liveShift: LiveShiftManager
-    @EnvironmentObject private var premium: PremiumManager
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dismiss) private var dismiss
 
-    @State private var showingPaywall = false
     @State private var showingDiscardConfirm = false
     @State private var clockOutMessage: String?
 
@@ -27,19 +34,23 @@ struct LiveShiftCardView: View {
     }()
 
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
+            header
+                .padding(.horizontal, AppSpacing.lg)
+                .padding(.top, AppSpacing.lg)
+                .padding(.bottom, AppSpacing.md)
+
+            Spacer(minLength: AppSpacing.md)
+
             if let shift = liveShift.activeShift {
                 activeCard(shift)
-                    .transition(.opacity)
-            } else {
-                idleRow
-                    .transition(.opacity)
+                    .padding(.horizontal, AppSpacing.lg)
             }
+
+            Spacer(minLength: AppSpacing.md)
         }
-        .animation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion), value: liveShift.activeShift != nil)
-        .sheet(isPresented: $showingPaywall) {
-            PremiumUpgradeView()
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AppColors.bg.ignoresSafeArea())
         .alert("Discard this shift?", isPresented: $showingDiscardConfirm) {
             Button("Discard", role: .destructive) {
                 liveShift.discard()
@@ -50,30 +61,31 @@ struct LiveShiftCardView: View {
         }
     }
 
-    // MARK: Idle
+    private var header: some View {
+        HStack(spacing: AppSpacing.sm) {
+            Button {
+                Haptics.lightTap()
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(AppColors.subtext)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        Circle()
+                            .fill(AppColors.card)
+                            .overlay(Circle().stroke(AppColors.stroke, lineWidth: 1))
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close")
 
-    private var idleRow: some View {
-        Button {
-            Haptics.lightTap()
-            if premium.isPremium {
-                liveShift.clockIn()
-            } else {
-                showingPaywall = true
-            }
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "play.circle.fill")
-                    .font(.system(.callout, weight: .bold))
-                Text("Clock In")
-                    .font(.system(.callout, design: .rounded, weight: .bold))
-                if !premium.isPremium {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 11, weight: .bold))
-                        .opacity(0.85)
-                }
-            }
+            Text("Live Shift")
+                .appText(.title)
+                .foregroundStyle(AppColors.text)
+
+            Spacer()
         }
-        .buttonStyle(PrimaryButtonStyle())
     }
 
     // MARK: Active
@@ -192,6 +204,7 @@ struct LiveShiftCardView: View {
         _ = entry
         Haptics.success()
         clockOutMessage = nil
+        dismiss()
     }
 
     // MARK: Formatting
@@ -204,4 +217,3 @@ struct LiveShiftCardView: View {
         return String(format: "%d:%02d:%02d", h, m, s)
     }
 }
-

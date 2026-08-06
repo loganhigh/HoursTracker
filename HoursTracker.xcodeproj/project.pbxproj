@@ -59,8 +59,8 @@
 		39DC13662F210AA2000BC0FD /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		39EC39A52F20CA7D00130B56 /* HoursTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HoursTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A0001A02F30000100000001 /* OvertimeRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvertimeRulesTests.swift; sourceTree = "<group>"; };
-		7A0001A42F30000100000002 /* LiveShiftManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveShiftManagerTests.swift; sourceTree = "<group>"; };
 		7A0001A32F30000100000001 /* HoursTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HoursTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A0001A42F30000100000002 /* LiveShiftManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveShiftManagerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -74,8 +74,8 @@
 		39EC39A82F20CA7D00130B57 /* Exceptions for "HoursTracker" folder in "HoursTracker" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Info.plist,
 				HourTrackerPro.storekit,
+				Info.plist,
 			);
 			target = 39EC39A42F20CA7D00130B56 /* HoursTracker */;
 		};
