@@ -2,29 +2,9 @@ import SwiftUI
 
 // MARK: - Friends tab sections (Phase 6)
 //
-// Quiet-card building blocks for the Friends hub: the friend-code card,
-// request / friend rows, the segment model, and the leaderboard link cards.
+// Quiet-card building blocks for the Friends hub: the friend-code card and
+// the request / friend rows.
 // All colors come from tokens; hairline strokes, flat fills, no glows.
-
-// MARK: - Segments
-
-/// The three panes of the Friends hub. Raw value doubles as the persisted
-/// `@AppStorage` key value so the selection survives relaunches.
-enum FriendsSegment: String, CaseIterable, Identifiable {
-    case friends = "Friends"
-    case activity = "Activity"
-    case boards = "Leaderboards"
-
-    var id: String { rawValue }
-
-    var icon: String {
-        switch self {
-        case .friends: return "person.2"
-        case .activity: return "bolt"
-        case .boards: return "trophy"
-        }
-    }
-}
 
 // MARK: - Friend code card
 
@@ -318,56 +298,5 @@ struct FriendRequestRow: View {
                         .stroke(AppColors.stroke, lineWidth: 1)
                 )
         )
-    }
-}
-
-// MARK: - Leaderboard link cards
-
-/// Tappable card in the Leaderboards segment — pushes an existing
-/// leaderboard screen (interiors are Phase 7; only the entry point lives here).
-struct LeaderboardLinkCard<Destination: View>: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    @ViewBuilder let destination: () -> Destination
-
-    var body: some View {
-        NavigationLink {
-            destination()
-        } label: {
-            HStack(spacing: AppSpacing.sm) {
-                ZStack {
-                    Circle()
-                        .fill(AppColors.accent.opacity(0.15))
-                        .frame(width: 38, height: 38)
-                    Image(systemName: icon)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppColors.accent)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .appText(.headline)
-                        .foregroundStyle(AppColors.text)
-                    Text(subtitle)
-                        .appText(.caption)
-                        .foregroundStyle(AppColors.subtext)
-                }
-                Spacer(minLength: AppSpacing.xs)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(AppColors.faint)
-            }
-            .padding(AppSpacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                    .fill(AppColors.card.opacity(0.55))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                            .stroke(AppColors.stroke, lineWidth: 0.5)
-                    )
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(PremiumPressStyle())
     }
 }

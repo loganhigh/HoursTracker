@@ -308,7 +308,7 @@ struct HoursHomeView: View {
         // Level-up popup and sound removed — ratchet still advances silently.
     }
 
-    // MARK: - Friends + activity subscriptions
+    // MARK: - Friends subscriptions
 
     /// Returning from background is another common "opening the app" moment —
     /// re-pull friend stats fresh here too, since a backgrounded app's
@@ -326,7 +326,6 @@ struct HoursHomeView: View {
     /// no service internals are touched.
     private func stopSocialSubscriptions() {
         friendsService.stopListening()
-        ActivityFeedService.shared.stopListening()
         topTrackers.stopListening()
     }
 
@@ -337,31 +336,14 @@ struct HoursHomeView: View {
         }
         guard let uid = authService.user?.uid else {
             friendsService.stopListening()
-            ActivityFeedService.shared.stopListening()
             return
         }
         friendsService.startListening(uid: uid)
-        refreshActivitySubscription()
         // Force a server-fresh pull immediately, rather than waiting on the
         // listener's cache-then-server delivery — this is what actually
         // guarantees every friend's hours/level are current the instant the
         // app opens, not just "eventually" once a snapshot round-trips.
         Task { await friendsService.refreshFriendProfiles() }
-    }
-
-    private func refreshActivitySubscription() {
-        guard friendsEnabled else {
-            ActivityFeedService.shared.stopListening()
-            return
-        }
-        guard let uid = authService.user?.uid else {
-            ActivityFeedService.shared.stopListening()
-            return
-        }
-        ActivityFeedService.shared.startListening(
-            uid: uid,
-            friendUids: friendsService.friends.map(\.uid)
-        )
     }
 
     // MARK: - Pay period (via PayCycleEngine)
@@ -400,10 +382,6 @@ struct HoursHomeView: View {
     
     private var hasAnyShifts: Bool {
         !store.entries.isEmpty
-    }
-
-    private var friendUidFingerprint: String {
-        friendsService.friends.map(\.uid).sorted().joined(separator: ",")
     }
 
     private var authSubscriptionKey: String {
@@ -549,9 +527,6 @@ struct HoursHomeView: View {
         }
         .task(id: authSubscriptionKey) {
             refreshFriendsSubscription()
-        }
-        .onChange(of: friendUidFingerprint) { _, _ in
-            refreshActivitySubscription()
         }
         .onChange(of: friendsEnabled) { _, isEnabled in
             if isEnabled {

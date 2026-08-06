@@ -2,9 +2,8 @@ import SwiftUI
 
 // MARK: - Friends hub (Phase 6)
 //
-// Friend-code card, pending requests, then a Friends / Activity / Leaderboards
-// segmented hub. Rows and cards live in FriendsSections.swift; the inline
-// activity feed lives in ActivityFeedView.swift (ActivityFeedInlineSection).
+// Friend-code card, pending requests, then the friends list. Rows and cards
+// live in FriendsSections.swift.
 
 struct FriendsView: View {
     @ObservedObject var store: HoursStore
@@ -20,13 +19,6 @@ struct FriendsView: View {
     @State private var isSending = false
     @State private var sendTimeoutTask: Task<Void, Never>?
     @State private var profileFriendUid: String?
-
-    /// Persisted segment selection — restored across launches.
-    @AppStorage("friends_selected_segment") private var segmentRaw: String = FriendsSegment.friends.rawValue
-
-    private var segment: FriendsSegment {
-        FriendsSegment(rawValue: segmentRaw) ?? .friends
-    }
 
     private var myName: String {
         UserDefaults.standard.string(forKey: "profile_display_name") ?? "Worker"
@@ -141,10 +133,8 @@ struct FriendsView: View {
                     }
                 }
 
-                segmentPicker
+                friendsList
                     .padding(.top, AppSpacing.xxs)
-
-                segmentContent
             }
             .padding(.horizontal, AppSpacing.md)
             .padding(.vertical, AppSpacing.md)
@@ -157,47 +147,9 @@ struct FriendsView: View {
         }
     }
 
-    // MARK: - Segments
+    // MARK: - Friends list
 
-    private var segmentPicker: some View {
-        HStack(spacing: AppSpacing.xs) {
-            ForEach(FriendsSegment.allCases) { item in
-                MotionSegmentChip(
-                    title: item.rawValue,
-                    systemImage: nil,
-                    isSelected: segment == item
-                ) {
-                    segmentRaw = item.rawValue
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .center)
-    }
-
-    @ViewBuilder
-    private var segmentContent: some View {
-        Group {
-            switch segment {
-            case .friends:
-                friendsSegment
-            case .activity:
-                ActivityFeedInlineSection(
-                    feed: ActivityFeedService.shared,
-                    friendsService: friendsService
-                )
-            case .boards:
-                leaderboardsSegment
-            }
-        }
-        .id(segmentRaw)
-        .transition(.opacity)
-        .animation(
-            AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion),
-            value: segmentRaw
-        )
-    }
-
-    private var friendsSegment: some View {
+    private var friendsList: some View {
         let maxWeekly = friendsService.friends
             .filter { $0.privacy.shareHours }
             .map(\.weeklyHours)
@@ -223,28 +175,6 @@ struct FriendsView: View {
                     title: "No friends yet",
                     message: "Share your code or add someone else's to compare weeks."
                 )
-            }
-        }
-    }
-
-    private var leaderboardsSegment: some View {
-        VStack(spacing: AppSpacing.sm) {
-            LeaderboardLinkCard(
-                icon: "trophy",
-                title: "Friends Leaderboard",
-                subtitle: "Weekly podium across your friends"
-            ) {
-                FriendsLeaderboardView(
-                    store: store,
-                    friendsService: FriendsService.shared
-                )
-            }
-            LeaderboardLinkCard(
-                icon: "globe",
-                title: "Global Top Trackers",
-                subtitle: "The most-logged hours worldwide"
-            ) {
-                GlobalLeaderboardView()
             }
         }
     }

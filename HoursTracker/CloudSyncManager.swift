@@ -1254,11 +1254,10 @@ final class CloudSyncManager: ObservableObject {
             // before this deferred task ran, that new session's startListening
             // has already re-pointed these singletons at the new uid — tearing
             // them down here would silently wipe the new user's live listeners
-            // and kill Friends/Activity until something re-triggered them.
+            // and kill Friends until something re-triggered them.
             // handleSignedIn sets currentUID synchronously on this same actor,
             // so this guard reflects the latest sign-in state.
             if self?.currentUID == nil {
-                ActivityFeedService.shared.stopListening()
                 FriendsBoardService.shared.stopListening()
                 FriendShiftNudgeService.shared.stopListening()
                 FriendsService.shared.stopListening()
