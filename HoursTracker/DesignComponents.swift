@@ -53,7 +53,7 @@ struct MetricDisplay: View {
 
 // MARK: - AppProgressRing
 //
-// Consolidates ProgressRing (AchievementsView) + MonthProgressRing (MonthDetailView).
+// Consolidates the progress rings that were duplicated across screens.
 
 struct AppProgressRing: View {
     let progress: Double
