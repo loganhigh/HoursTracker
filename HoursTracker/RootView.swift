@@ -156,6 +156,9 @@ struct HoursHomeView: View {
     @State private var editingEntry: WorkEntry?
     @State private var showTrackingHint = false
     @AppStorage("tracking_hint_dismissed") private var trackingHintDismissed: Bool = false
+    /// Local Friends/social master switch (see `FriendsFeature`). Absent reads
+    /// as on, so existing users keep Friends after upgrading.
+    @AppStorage(FriendsFeature.storageKey) private var friendsEnabled = true
 
     @AppStorage("company_name") private var companyName: String = ""
     @AppStorage("company_occupation") private var occupation: String = ""
@@ -312,11 +315,26 @@ struct HoursHomeView: View {
     /// listeners can sit on a stale snapshot for however long it was suspended.
     private func handleScenePhaseChange(_ newPhase: ScenePhase) {
         guard newPhase == .active else { return }
+        guard friendsEnabled else { return }
         guard authService.user?.uid != nil else { return }
         Task { await friendsService.refreshFriendProfiles() }
     }
 
+    /// Detaches every social listener this screen is responsible for. Called
+    /// when the user turns Friends off, so listeners stop immediately rather
+    /// than at the next sign-out. Uses each service's own `stopListening()` —
+    /// no service internals are touched.
+    private func stopSocialSubscriptions() {
+        friendsService.stopListening()
+        ActivityFeedService.shared.stopListening()
+        topTrackers.stopListening()
+    }
+
     private func refreshFriendsSubscription() {
+        guard friendsEnabled else {
+            stopSocialSubscriptions()
+            return
+        }
         guard let uid = authService.user?.uid else {
             friendsService.stopListening()
             ActivityFeedService.shared.stopListening()
@@ -332,6 +350,10 @@ struct HoursHomeView: View {
     }
 
     private func refreshActivitySubscription() {
+        guard friendsEnabled else {
+            ActivityFeedService.shared.stopListening()
+            return
+        }
         guard let uid = authService.user?.uid else {
             ActivityFeedService.shared.stopListening()
             return
@@ -489,18 +511,21 @@ struct HoursHomeView: View {
                         .frame(maxWidth: .infinity)
                 }
 
-                HomeFriendsCard(
-                    friendsService: friendsService,
-                    store: store,
-                    authService: authService,
-                    onOpenFriends: {
-                        tabRouter.selection = .friends
-                    }
-                )
-                .cardAppear(index: 6)
+                if friendsEnabled {
+                    HomeFriendsCard(
+                        friendsService: friendsService,
+                        store: store,
+                        authService: authService,
+                        onOpenFriends: {
+                            tabRouter.selection = .friends
+                        }
+                    )
+                    .cardAppear(index: 6)
 
-                homeTopTrackersSection
-                    .cardAppear(index: 7)
+                    // Global leaderboard — social surface, hidden with Friends.
+                    homeTopTrackersSection
+                        .cardAppear(index: 7)
+                }
 
                 Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                     .font(.system(.caption, design: .rounded, weight: .bold))
@@ -518,13 +543,23 @@ struct HoursHomeView: View {
             store.advanceNextPaydayIfNeeded()
             checkPaydayConfetti()
             store.syncProfileSnapshotToCloud()
-            topTrackers.startListening()
+            if friendsEnabled {
+                topTrackers.startListening()
+            }
         }
         .task(id: authSubscriptionKey) {
             refreshFriendsSubscription()
         }
         .onChange(of: friendUidFingerprint) { _, _ in
             refreshActivitySubscription()
+        }
+        .onChange(of: friendsEnabled) { _, isEnabled in
+            if isEnabled {
+                topTrackers.startListening()
+                refreshFriendsSubscription()
+            } else {
+                stopSocialSubscriptions()
+            }
         }
         .background(ScenePhaseFriendsRefreshObserver(onBecomeActive: {
             handleScenePhaseChange(.active)

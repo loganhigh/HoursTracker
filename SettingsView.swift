@@ -18,6 +18,10 @@ struct SettingsView: View {
     @State private var showRestoreSuccessAlert = false
     @State private var backupErrorMessage: String?
     @AppStorage("auto_yearly_reset_enabled") private var autoYearlyResetEnabled = true
+    /// Master switch for the Friends/social experience on this device. Absence
+    /// of the stored value reads as `true`, so fresh installs and upgrading
+    /// users both get Friends without any migration write.
+    @AppStorage(FriendsFeature.storageKey) private var friendsEnabled = true
     @AppStorage(AppAppearance.storageKey) private var appearanceMode = AppAppearance.system.rawValue
 
     @ObservedObject private var smartNotifier = SmartNotifier.shared
@@ -166,17 +170,26 @@ struct SettingsView: View {
                 .listRowBackground(AppColors.card.opacity(0.55))
                 .listRowSeparatorTint(AppColors.stroke)
 
-                // MARK: - Friends Privacy
+                // MARK: - Friends
                 Section {
-                    NavigationLink {
-                        FriendsPrivacySettingsView(store: store)
-                    } label: {
-                        SettingsRowLabel(icon: "person.2.fill", title: "Friends privacy")
+                    Toggle(isOn: $friendsEnabled) {
+                        SettingsRowLabel(icon: "person.2.fill", title: "Friends")
+                    }
+                    .tint(AppColors.accent)
+
+                    if friendsEnabled {
+                        NavigationLink {
+                            FriendsPrivacySettingsView(store: store)
+                        } label: {
+                            SettingsRowLabel(icon: "hand.raised.fill", title: "Friends privacy")
+                        }
                     }
                 } header: {
                     SectionEyebrow("Friends")
                 } footer: {
-                    Text("Friends only see what you share. Toggle anything off to hide it instantly.")
+                    Text(friendsEnabled
+                         ? "Friends only see what you share. Toggle anything off to hide it instantly."
+                         : "Hides the Friends tab and social features on this device. Your friends and privacy settings are kept, and your stats stay on the leaderboards.")
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
                 }

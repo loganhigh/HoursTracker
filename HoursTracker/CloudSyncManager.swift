@@ -1206,7 +1206,12 @@ final class CloudSyncManager: ObservableObject {
             if FirebaseMigrationFlags.useServerStats {
                 StatsListenerService.shared.startListening(uid: uid)
             }
-            TopTrackersService.shared.startListening()
+            // Global leaderboard is a social surface: skip it when the user has
+            // turned Friends off on this device. Home re-attaches it if they
+            // turn it back on.
+            if FriendsFeature.isEnabled {
+                TopTrackersService.shared.startListening()
+            }
             // Friendship backfill is handled server-side by the reconcileFriendships
             // callable (Admin SDK), invoked on every FriendsService.startListening.
             // The former client-side backfill wrote friendship docs directly, which
