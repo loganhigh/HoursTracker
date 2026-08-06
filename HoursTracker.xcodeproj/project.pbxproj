@@ -14,7 +14,6 @@
 		399C69322F71C98000AE7851 /* HoursTrackerWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 399C691F2F71C97F00AE7851 /* HoursTrackerWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		39DC13672F210AA7000BC0FD /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39DC13662F210AA2000BC0FD /* SettingsView.swift */; };
 		7A0001A12F30000100000001 /* OvertimeRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001A02F30000100000001 /* OvertimeRulesTests.swift */; };
-		7A0001A52F30000100000002 /* LiveShiftManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001A42F30000100000002 /* LiveShiftManagerTests.swift */; };
 		FB004MSG2F90000100000004B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = FB004MSG2F90000100000004 /* FirebaseMessaging */; };
 		FB005STG2F90000100000005B /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = FB005STG2F90000100000005 /* FirebaseStorage */; };
 		FB006FUN2F90000100000006B /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = FB006FUN2F90000100000006 /* FirebaseFunctions */; };
@@ -60,7 +59,6 @@
 		39EC39A52F20CA7D00130B56 /* HoursTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HoursTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A0001A02F30000100000001 /* OvertimeRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvertimeRulesTests.swift; sourceTree = "<group>"; };
 		7A0001A32F30000100000001 /* HoursTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HoursTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		7A0001A42F30000100000002 /* LiveShiftManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveShiftManagerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -74,7 +72,6 @@
 		39EC39A82F20CA7D00130B57 /* Exceptions for "HoursTracker" folder in "HoursTracker" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				HourTrackerPro.storekit,
 				Info.plist,
 			);
 			target = 39EC39A42F20CA7D00130B56 /* HoursTracker */;
@@ -174,7 +171,6 @@
 			isa = PBXGroup;
 			children = (
 				7A0001A02F30000100000001 /* OvertimeRulesTests.swift */,
-				7A0001A42F30000100000002 /* LiveShiftManagerTests.swift */,
 			);
 			path = HoursTrackerTests;
 			sourceTree = "<group>";
@@ -345,7 +341,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				7A0001A12F30000100000001 /* OvertimeRulesTests.swift in Sources */,
-				7A0001A52F30000100000002 /* LiveShiftManagerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -372,7 +367,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = HoursTrackerWidget/HoursTrackerWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 20;
 				DEVELOPMENT_TEAM = 3649Y4UC9W;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = HoursTrackerWidget/Info.plist;
@@ -404,7 +399,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = HoursTrackerWidget/HoursTrackerWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 20;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 3649Y4UC9W;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -559,7 +554,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = HoursTracker/HoursTracker.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 20;
 				DEVELOPMENT_TEAM = 3649Y4UC9W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -601,7 +596,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = HoursTracker/HoursTrackerRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 20;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 3649Y4UC9W;
 				ENABLE_PREVIEWS = NO;
@@ -643,7 +638,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 20;
 				DEVELOPMENT_TEAM = 3649Y4UC9W;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
@@ -668,7 +663,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 20;
 				DEVELOPMENT_TEAM = 3649Y4UC9W;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;

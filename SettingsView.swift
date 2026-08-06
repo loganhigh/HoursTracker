@@ -13,13 +13,10 @@ struct SettingsView: View {
     @State private var showingCutoffPicker = false
     @State private var showingNotificationsSheet = false
     @State private var showingDataExportSheet = false
-    @State private var showingProfessionalReportsSheet = false
-    @State private var showingReportsUpgrade = false
     @State private var showingRestoreBackupConfirm = false
     @State private var showBackupSavedAlert = false
     @State private var showRestoreSuccessAlert = false
     @State private var backupErrorMessage: String?
-    @State private var showingPremiumSheet = false
     @State private var showingCreateCrewSheet = false
     @State private var showingJoinCrewSheet = false
     @State private var joinCrewInitialCode = ""
@@ -31,7 +28,6 @@ struct SettingsView: View {
 
     @ObservedObject private var smartNotifier = SmartNotifier.shared
     @ObservedObject private var weeklyNotifier = WeeklyMilestoneNotifier.shared
-    @ObservedObject private var premium = PremiumManager.shared
     @ObservedObject private var crewService = CrewService.shared
 
     private var paydayDate: Date {
@@ -286,30 +282,6 @@ struct SettingsView: View {
                 .listRowBackground(AppColors.card.opacity(0.55))
                 .listRowSeparatorTint(AppColors.stroke)
 
-                // MARK: - Hour Tracker Pro
-                Section {
-                    Button {
-                        Haptics.lightTap()
-                        showingPremiumSheet = true
-                    } label: {
-                        HStack(spacing: AppSpacing.sm) {
-                            SettingsRowLabel(
-                                icon: "crown.fill",
-                                title: "Hour Tracker Pro",
-                                subtitle: premium.isPremium
-                                    ? (premium.activeSubscription?.settingsStatusLine ?? "Active")
-                                    : "Live tracking, PDF reports, no ads"
-                            )
-                            Spacer(minLength: AppSpacing.xs)
-                            SettingsChevron()
-                        }
-                    }
-                } header: {
-                    SectionEyebrow("Hour Tracker Pro")
-                }
-                .listRowBackground(AppColors.card.opacity(0.55))
-                .listRowSeparatorTint(AppColors.stroke)
-
                 // MARK: - Data & Backup
                 Section {
                     Button {
@@ -318,26 +290,6 @@ struct SettingsView: View {
                         HStack(spacing: AppSpacing.sm) {
                             SettingsRowLabel(icon: "square.and.arrow.down", title: "Download My Data")
                             Spacer(minLength: AppSpacing.xs)
-                            SettingsChevron()
-                        }
-                    }
-
-                    Button {
-                        if premium.isPremium {
-                            showingProfessionalReportsSheet = true
-                        } else {
-                            Haptics.lightTap()
-                            showingReportsUpgrade = true
-                        }
-                    } label: {
-                        HStack(spacing: AppSpacing.sm) {
-                            SettingsRowLabel(icon: "chart.bar.doc.horizontal", title: "Professional Reports")
-                            Spacer(minLength: AppSpacing.xs)
-                            if !premium.isPremium {
-                                Image(systemName: "crown.fill")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(AppColors.accent)
-                            }
                             SettingsChevron()
                         }
                     }
@@ -456,15 +408,6 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingDataExportSheet) {
                 DataExportSheet(store: store)
-            }
-            .sheet(isPresented: $showingProfessionalReportsSheet) {
-                ProfessionalReportsSheet(store: store)
-            }
-            .sheet(isPresented: $showingReportsUpgrade) {
-                PremiumUpgradeView()
-            }
-            .sheet(isPresented: $showingPremiumSheet) {
-                PremiumUpgradeView()
             }
             .sheet(isPresented: $showingCreateCrewSheet) {
                 CreateCrewSheet()
