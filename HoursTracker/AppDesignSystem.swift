@@ -178,35 +178,6 @@ extension SemanticColors {
     )
 }
 
-// MARK: - Appearance preference (System / Light / Dark)
-
-/// User-facing appearance setting, stored in `@AppStorage(AppAppearance.storageKey)`
-/// and applied via `.preferredColorScheme` at the app root.
-enum AppAppearance: String, CaseIterable, Identifiable {
-    case system, light, dark
-
-    static let storageKey = "appearance_mode"
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .system: return "System"
-        case .light: return "Light"
-        case .dark: return "Dark"
-        }
-    }
-
-    /// `nil` follows the system appearance.
-    var colorScheme: ColorScheme? {
-        switch self {
-        case .system: return nil
-        case .light: return .light
-        case .dark: return .dark
-        }
-    }
-}
-
 // MARK: - Environment Key
 
 private struct SemanticColorsKey: EnvironmentKey {

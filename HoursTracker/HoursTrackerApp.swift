@@ -22,7 +22,6 @@ struct HoursTrackerApp: App {
     @StateObject private var startupCoordinator: StartupCoordinator
     @StateObject private var sessionManager: AppSessionManager
     @StateObject private var localization: LocalizationManager
-    @AppStorage(AppAppearance.storageKey) private var appearanceMode = AppAppearance.system.rawValue
 
     init() {
         if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
@@ -75,7 +74,7 @@ struct HoursTrackerApp: App {
                 // Appearance: user-selectable (Settings → Appearance). `nil`
                 // follows the system scheme; tokens are scheme-dynamic so no
                 // restamping is needed on flips.
-                .preferredColorScheme((AppAppearance(rawValue: appearanceMode) ?? .system).colorScheme)
+                .preferredColorScheme(.dark)
                 .background(AppTheme.Colors.bg.ignoresSafeArea())
                 .onChange(of: authService.user?.uid) { _, newUID in
                     PremiumManager.shared.identify(uid: newUID)
