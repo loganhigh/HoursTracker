@@ -13,6 +13,8 @@ struct SettingsView: View {
     @State private var showingCutoffPicker = false
     @State private var showingNotificationsSheet = false
     @State private var showingDataExportSheet = false
+    @State private var showingProfessionalReportsSheet = false
+    @State private var showingReportsUpgrade = false
     @State private var showingRestoreBackupConfirm = false
     @State private var showBackupSavedAlert = false
     @State private var showRestoreSuccessAlert = false
@@ -25,6 +27,7 @@ struct SettingsView: View {
 
     @ObservedObject private var smartNotifier = SmartNotifier.shared
     @ObservedObject private var weeklyNotifier = WeeklyMilestoneNotifier.shared
+    @ObservedObject private var premium = PremiumManager.shared
 
     private var paydayDate: Date {
         let span = PayCycleEngine.spanDays(for: settings.payPeriodType)
@@ -252,6 +255,26 @@ struct SettingsView: View {
                             SettingsChevron()
                         }
                     }
+
+                    Button {
+                        if premium.isPremium {
+                            showingProfessionalReportsSheet = true
+                        } else {
+                            Haptics.lightTap()
+                            showingReportsUpgrade = true
+                        }
+                    } label: {
+                        HStack(spacing: AppSpacing.sm) {
+                            SettingsRowLabel(icon: "chart.bar.doc.horizontal", title: "Professional Reports")
+                            Spacer(minLength: AppSpacing.xs)
+                            if !premium.isPremium {
+                                Image(systemName: "crown.fill")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(AppColors.accent)
+                            }
+                            SettingsChevron()
+                        }
+                    }
                 } header: {
                     SectionEyebrow("Data & Backup")
                 } footer: {
@@ -367,6 +390,12 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingDataExportSheet) {
                 DataExportSheet(store: store)
+            }
+            .sheet(isPresented: $showingProfessionalReportsSheet) {
+                ProfessionalReportsSheet(store: store)
+            }
+            .sheet(isPresented: $showingReportsUpgrade) {
+                PremiumUpgradeView()
             }
             .alert("Delete All Data", isPresented: $showingDeleteConfirm) {
                 Button("Cancel", role: .cancel) { }
