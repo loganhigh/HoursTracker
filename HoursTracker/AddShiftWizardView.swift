@@ -1,14 +1,15 @@
 import SwiftUI
 
-// MARK: - Add Shift wizard (three steps)
+// MARK: - Add Shift wizard (two screens)
 //
 // The ADD path only. Editing an existing shift keeps the single-screen
 // `EntryEditorView` — edit is meant to feel different from add.
 //
-// Step 1 "When & Where" — date / start / end / location rows, break, shift
-//   type, and a live Total Time panel.
-// Step 2 "Location / Job" — search + the user's saved `JobSite` list.
-// Step 3 "Review" — read-only summary, notes, and Save Shift.
+// Screen 1 "When & Where" — date / start / end / location rows, break, shift
+//   type, and a live Total Time panel. Tapping the Location / Job row opens
+//   the saved-locations picker as a sheet (search + Recent + All + add new)
+//   rather than as a separate wizard step.
+// Screen 2 "Review" — read-only summary, notes, and Save Shift.
 //
 // Everything load-bearing is carried over from `EntryEditorView` unchanged:
 // the same validation (paid hours > 0 and <= 48, overnight +24h, break longer
@@ -17,15 +18,7 @@ import SwiftUI
 
 struct AddShiftWizardView: View {
     enum Step: Int, CaseIterable {
-        case when = 0, location = 1, review = 2
-
-        var caption: String {
-            switch self {
-            case .when: return "Step 1 of 3 • When & Where"
-            case .location: return "Step 2 of 3 • Location / Job"
-            case .review: return "Step 3 of 3 • Review"
-            }
-        }
+        case when = 0, review = 1
     }
 
     private enum ExpandableField: Hashable {
@@ -45,11 +38,14 @@ struct AddShiftWizardView: View {
     @State private var breakMinutes: Int
     @State private var showCustomBreak: Bool = false
 
-    /// The saved `JobSite` picked on step 2, if any.
+    /// The saved `JobSite` picked from the location sheet, if any.
     @State private var selectedSiteID: String?
     /// The label written to `WorkEntry.locationName` (the chosen site's name).
     @State private var locationLabel: String = ""
     @State private var notes: String = ""
+
+    /// Presents the saved-locations picker as a sheet from screen 1's Location row.
+    @State private var showLocationPicker = false
 
     @State private var shiftKind: EntryEditorView.ShiftKind = .work
     @State private var offDayReason: String = EntryEditorView.offDayReasons[0]
@@ -95,10 +91,6 @@ struct AddShiftWizardView: View {
                 header
                     .padding(.horizontal, AppSpacing.lg)
                     .padding(.top, AppSpacing.lg)
-
-                AddShiftStepIndicator(currentIndex: step.rawValue, caption: step.caption)
-                    .padding(.horizontal, AppSpacing.lg)
-                    .padding(.top, AppSpacing.md)
                     .padding(.bottom, AppSpacing.md)
 
                 ScrollView {
@@ -123,6 +115,13 @@ struct AddShiftWizardView: View {
             start = merge(day: newDate, with: start)
             end = merge(day: newDate, with: end)
         }
+        .sheet(isPresented: $showLocationPicker) {
+            AddShiftLocationPickerSheet(
+                store: store,
+                selectedSiteID: $selectedSiteID,
+                locationLabel: $locationLabel
+            )
+        }
     }
 
     @ViewBuilder
@@ -130,7 +129,6 @@ struct AddShiftWizardView: View {
         Group {
             switch step {
             case .when: whenStep
-            case .location: locationStep
             case .review: reviewStep
             }
         }
@@ -187,9 +185,6 @@ struct AddShiftWizardView: View {
                     .disabled(!canSave)
                     .opacity(canSave ? 1 : 0.55)
             }
-        case .location:
-            Button("Continue") { advance() }
-                .buttonStyle(PrimaryButtonStyle())
         case .review:
             Button("Save Shift") { save() }
                 .buttonStyle(PrimaryButtonStyle())
@@ -198,7 +193,7 @@ struct AddShiftWizardView: View {
         }
     }
 
-    // MARK: - Step 1 · When & Where
+    // MARK: - Screen 1 · When & Where
 
     @ViewBuilder
     private var whenStep: some View {
@@ -249,7 +244,10 @@ struct AddShiftWizardView: View {
                 value: locationValueText,
                 isPlaceholder: locationLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 accessory: .chevron
-            ) { advance() }
+            ) {
+                Haptics.lightTap()
+                showLocationPicker = true
+            }
         }
 
         if shiftKind == .work {
@@ -277,17 +275,7 @@ struct AddShiftWizardView: View {
             .clipped()
     }
 
-    // MARK: - Step 2 · Location / Job
-
-    private var locationStep: some View {
-        AddShiftLocationStepView(
-            store: store,
-            selectedSiteID: $selectedSiteID,
-            locationLabel: $locationLabel
-        )
-    }
-
-    // MARK: - Step 3 · Review
+    // MARK: - Screen 2 · Review
 
     @ViewBuilder
     private var reviewStep: some View {

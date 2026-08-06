@@ -2,9 +2,9 @@ import SwiftUI
 
 // MARK: - Add Shift wizard building blocks
 //
-// Token-pure pieces for `AddShiftWizardView`: the three-dot step indicator,
-// the icon-square field rows, the quiet panels (total time / confirmation),
-// and the whole Location / Job step. Dark theme only — flat fills, hairline
+// Token-pure pieces for `AddShiftWizardView`: the icon-square field rows,
+// the quiet panels (total time / confirmation), and the location row used by
+// the saved-locations picker sheet. Dark theme only — flat fills, hairline
 // strokes, `tint.opacity(0.14)` icon squares, no glows.
 
 // MARK: - Formatting
@@ -36,69 +36,6 @@ struct AddShiftPanel<Content: View>: View {
                 .fill(tint.map { $0.opacity(0.12) } ?? AppColors.card)
                 .overlay(shape.stroke(tint.map { $0.opacity(0.25) } ?? AppColors.stroke, lineWidth: 1))
         )
-    }
-}
-
-// MARK: - Step indicator
-
-/// Three numbered circles joined by a line. Completed steps show a checkmark,
-/// the current step is accent-filled, future steps stay muted.
-struct AddShiftStepIndicator: View {
-    /// Zero-based index of the current step.
-    let currentIndex: Int
-    let caption: String
-
-    private static let count = 3
-
-    var body: some View {
-        VStack(spacing: AppSpacing.xs) {
-            HStack(spacing: 0) {
-                ForEach(0..<Self.count, id: \.self) { index in
-                    if index > 0 {
-                        Rectangle()
-                            .fill(index <= currentIndex ? AppColors.accent.opacity(0.55) : AppColors.stroke)
-                            .frame(height: 2)
-                            .frame(maxWidth: .infinity)
-                    }
-                    circle(index)
-                }
-            }
-            .padding(.horizontal, AppSpacing.xl)
-
-            Text(caption)
-                .appText(.caption)
-                .foregroundStyle(AppColors.subtext)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(caption.replacingOccurrences(of: "•", with: ","))
-    }
-
-    @ViewBuilder
-    private func circle(_ index: Int) -> some View {
-        let isDone = index < currentIndex
-        let isCurrent = index == currentIndex
-        ZStack {
-            Circle()
-                .fill(isCurrent ? AppColors.accent : (isDone ? AppColors.accent.opacity(0.14) : AppColors.card))
-                .overlay(
-                    Circle().stroke(
-                        isCurrent ? Color.clear : (isDone ? AppColors.accent.opacity(0.35) : AppColors.stroke),
-                        lineWidth: 1
-                    )
-                )
-            if isDone {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.accent)
-            } else {
-                Text("\(index + 1)")
-                    .font(.system(.footnote, design: .rounded, weight: .bold).monospacedDigit())
-                    .foregroundStyle(isCurrent ? AppColors.textOnAccent : AppColors.faint)
-            }
-        }
-        .frame(width: 28, height: 28)
     }
 }
 
@@ -218,21 +155,23 @@ struct AddShiftConfirmationPanel: View {
 
     var body: some View {
         AddShiftPanel(tint: isValid ? AppColors.positive : AppColors.warning) {
-            HStack(spacing: AppSpacing.sm) {
+            VStack(spacing: AppSpacing.xs) {
                 Image(systemName: isValid ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(isValid ? AppColors.positive : AppColors.warning)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(spacing: 2) {
                     Text(title)
                         .appText(.headline)
                         .foregroundStyle(AppColors.text)
+                        .multilineTextAlignment(.center)
                     Text(message)
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
+                        .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity)
         }
         .accessibilityElement(children: .combine)
     }

@@ -1,26 +1,31 @@
 import SwiftUI
 
-// MARK: - Add Shift wizard · Step 2 (Location / Job)
+// MARK: - Add Shift · Location / Job picker sheet
 //
+// Presented from screen 1's "Location / Job" row (not a wizard step).
 // Backed by real saved job sites (`JobSite`, persisted by `HoursStore`).
 // Selecting a site writes its NAME into the shift's `locationName` — the
 // entry model is unchanged and stores no site id, so renaming or deleting a
 // site never rewrites shift history.
 //
-// Location stays optional: the user can continue with nothing selected.
+// Location stays optional: the user can dismiss with nothing selected.
+// Picking a site (or saving a new one) fills the row and dismisses back to
+// screen 1 automatically.
 
-struct AddShiftLocationStepView: View {
+struct AddShiftLocationPickerSheet: View {
     @ObservedObject var store: HoursStore
     /// The chosen site's id, or nil when no site is selected.
     @Binding var selectedSiteID: String?
     /// The label that will be written to `WorkEntry.locationName`.
     @Binding var locationLabel: String
 
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var query: String = ""
     @State private var isAddingNew: Bool = false
     @State private var draft = JobSiteDraft()
     @FocusState private var nameFocused: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var ordered: [JobSite] { store.jobSitesByRecency }
     private var filtered: [JobSite] { ordered.filter { $0.matches(query) } }
@@ -28,25 +33,45 @@ struct AddShiftLocationStepView: View {
     private var rest: [JobSite] { Array(filtered.dropFirst(3)) }
 
     var body: some View {
-        VStack(spacing: AppSpacing.md) {
-            if !ordered.isEmpty {
-                searchField
-            }
+        NavigationStack {
+            ZStack {
+                AppColors.bg.ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: AppSpacing.md) {
+                        if !ordered.isEmpty {
+                            searchField
+                        }
 
-            if ordered.isEmpty {
-                emptyStateNote
-            } else if filtered.isEmpty {
-                noMatchesNote
-            } else {
-                if !recent.isEmpty {
-                    section(title: "Recent", sites: recent)
+                        if ordered.isEmpty {
+                            emptyStateNote
+                        } else if filtered.isEmpty {
+                            noMatchesNote
+                        } else {
+                            if !recent.isEmpty {
+                                section(title: "Recent", sites: recent)
+                            }
+                            if !rest.isEmpty {
+                                section(title: "All Locations / Jobs", sites: rest)
+                            }
+                        }
+
+                        addNewSection
+                    }
+                    .padding(.horizontal, AppSpacing.lg)
+                    .padding(.top, AppSpacing.md)
+                    .padding(.bottom, AppSpacing.xl)
                 }
-                if !rest.isEmpty {
-                    section(title: "All Locations / Jobs", sites: rest)
+                .scrollDismissesKeyboard(.interactively)
+            }
+            .navigationTitle("Location / Job")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(AppColors.bg, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
                 }
             }
-
-            addNewSection
         }
         .onAppear {
             if ordered.isEmpty && selectedSiteID == nil { isAddingNew = true }
@@ -218,10 +243,9 @@ struct AddShiftLocationStepView: View {
     private func apply(_ site: JobSite) {
         Haptics.lightTap()
         store.markJobSiteUsed(id: site.id)
-        withAnimation(AppMotion.animation(AppMotion.Spring.snappy, reduceMotion: reduceMotion)) {
-            selectedSiteID = site.id
-            locationLabel = site.name
-        }
+        selectedSiteID = site.id
+        locationLabel = site.name
+        dismiss()
     }
 }
 
