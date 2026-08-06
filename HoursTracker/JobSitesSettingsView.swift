@@ -105,7 +105,15 @@ struct JobSiteEditorSheet: View {
     init(store: HoursStore, existing: JobSite?) {
         self.store = store
         self.existing = existing
-        _draft = State(initialValue: existing.map(JobSiteDraft.init(site:)) ?? JobSiteDraft())
+        // Direct call rather than `.map(JobSiteDraft.init)`: passing the
+        // main-actor-isolated initializer as a function value into `map`
+        // evaluates it in a nonisolated context and trips the concurrency
+        // checker.
+        if let existing {
+            _draft = State(initialValue: JobSiteDraft(site: existing))
+        } else {
+            _draft = State(initialValue: JobSiteDraft())
+        }
     }
 
     var body: some View {
