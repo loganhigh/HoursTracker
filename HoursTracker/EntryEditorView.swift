@@ -55,8 +55,9 @@ struct EntryEditorView: View {
     private let yesterdayPreset: EntryShiftPreset?
     private let usualPreset: EntryShiftPreset?
 
-    private static let offDayReasons = ["Sick", "Appointment", "Vacation", "Personal", "Other"]
-    private static let holidayReason = "Holiday"
+    /// Shared with `AddShiftWizardView` so both editors offer the same reasons.
+    static let offDayReasons = ["Sick", "Appointment", "Vacation", "Personal", "Other"]
+    static let holidayReason = "Holiday"
 
     // MARK: - Init (same signature as before — all call sites unchanged)
 

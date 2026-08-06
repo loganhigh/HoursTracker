@@ -195,6 +195,29 @@ struct SettingsView: View {
                 .listRowBackground(AppColors.card.opacity(0.55))
                 .listRowSeparatorTint(AppColors.stroke)
 
+                // MARK: - Job Sites
+                Section {
+                    NavigationLink {
+                        JobSitesSettingsView(store: store)
+                    } label: {
+                        SettingsRowLabel(
+                            icon: "mappin.and.ellipse",
+                            title: "Job Sites",
+                            subtitle: store.jobSites.isEmpty
+                                ? "Save the places you work"
+                                : "\(store.jobSites.count) saved"
+                        )
+                    }
+                } header: {
+                    SectionEyebrow("Locations")
+                } footer: {
+                    Text("Saved locations and jobs appear when you add a shift. Stored on this device.")
+                        .appText(.caption)
+                        .foregroundStyle(AppColors.subtext)
+                }
+                .listRowBackground(AppColors.card.opacity(0.55))
+                .listRowSeparatorTint(AppColors.stroke)
+
                 // Certificates removed from Settings for now — revisit later.
 
                 // MARK: - Notifications
