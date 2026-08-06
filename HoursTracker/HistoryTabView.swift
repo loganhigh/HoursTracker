@@ -97,8 +97,10 @@ struct HistoryTabView: View {
     // MARK: - Grouping
 
     /// Cheques grouped by year (newest year first, newest cheque first within
-    /// the year). Empty cheques are hidden, but they still count toward the
-    /// ordinals so "5th Cheque" always means the fifth pay period of that year.
+    /// the year). Ordinals count from the pay period containing the user's
+    /// first-ever entry (never earlier), so the earliest real cheque is always
+    /// "1st Cheque" — a later empty period between two logged cheques still
+    /// consumes its number, since that's genuine (if quiet) pay history.
     private var yearGroups: [YearGroup] {
         let calendar = Calendar.current
         let current = store.currentPayCycle()
@@ -125,20 +127,24 @@ struct HistoryTabView: View {
         }
     }
 
-    /// Walks back from the current cheque far enough to cover every year that
-    /// has entries — including the periods before the first logged shift of the
-    /// earliest year, which the ordinals depend on.
+    /// Walks back from the current cheque to the pay period that contains the
+    /// user's very first logged entry — never further. Stopping at the
+    /// calendar year boundary instead (Jan 1) would silently count every
+    /// empty pay period back to New Year's as real history, inflating the
+    /// ordinal of the user's actual first cheque (e.g. "12th Cheque" for
+    /// what is really their first).
     private func previousCycles(before current: PayCycle) -> [PayCycle] {
         guard let earliest = store.entries.map(\.date).min() else { return [] }
-        let calendar = Calendar.current
-        let earliestYear = calendar.component(.year, from: earliest)
         var walked: [PayCycle] = []
         var cursor = current
         for _ in 0..<Self.maxWalkedCycles {
             cursor = PayCycleEngine.previousCycle(before: cursor, settings: store.paySettings)
-            // Stop once we drop below the earliest year that has any entries.
-            if calendar.component(.year, from: cursor.cutoff) < earliestYear { break }
             walked.append(cursor)
+            // This cycle's start is on/before the earliest entry, so — since
+            // cycles are contiguous and non-overlapping — it necessarily
+            // contains that entry. Stop here; anything further back is
+            // pre-history the user never logged.
+            if cursor.start <= earliest { break }
         }
         return walked
     }
