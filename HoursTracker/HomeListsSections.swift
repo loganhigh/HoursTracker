@@ -343,18 +343,6 @@ struct HomeFriendsCardContent: View {
                 }
             }
 
-            Divider().opacity(0.2)
-
-            HStack(spacing: 6) {
-                Text("Open Friends")
-                    .appText(.headline)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-            }
-            .foregroundStyle(AppColors.accent)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, AppSpacing.sm)
-            .accessibilityHint("Opens the Friends tab")
         }
         .animation(nil, value: ranked.map { "\($0.id)-\($0.hours)" })
         .frame(maxWidth: .infinity, alignment: .top)
