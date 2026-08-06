@@ -23,6 +23,8 @@ struct ProfileXPCapsule: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var displayedProgress: Double = 0
     @State private var seeded = false
+    /// Sheen travel, expressed as a fraction of the filled width.
+    @State private var sheenOffset: Double = -0.4
 
     private var profile: GamificationProfile { store.displayedGamificationProfile() }
 
@@ -37,48 +39,65 @@ struct ProfileXPCapsule: View {
     }
 
     var body: some View {
-        ZStack(alignment: .leading) {
+        ZStack {
             Capsule()
                 .fill(AppColors.stroke.opacity(0.5))
 
-            // Flat accent tint (not the full gradient) so the in-track chip
-            // and caption stay readable at any fill level.
+            // Fill + a slow sheen that travels across the filled portion only,
+            // so an empty bar stays completely still.
             GeometryReader { geo in
                 if displayedProgress > 0 {
+                    let fillWidth = max(30, geo.size.width * displayedProgress)
                     Capsule()
                         .fill(AppColors.accent.opacity(0.3))
-                        .frame(width: max(30, geo.size.width * displayedProgress))
+                        .frame(width: fillWidth)
+                        .overlay(alignment: .leading) {
+                            if !reduceMotion {
+                                Capsule()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                AppColors.accent.opacity(0),
+                                                AppColors.accent.opacity(0.55),
+                                                AppColors.accent.opacity(0)
+                                            ],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(width: fillWidth * 0.4)
+                                    .offset(x: sheenOffset * fillWidth)
+                            }
+                        }
+                        .clipShape(Capsule())
+                        .frame(maxHeight: .infinity, alignment: .center)
                 }
             }
 
-            HStack(spacing: AppSpacing.xs) {
-                Text("LVL \(profile.level)")
-                    .appText(.eyebrow)
-                    .monospacedDigit()
-                    .foregroundStyle(AppColors.textOnAccent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(AppColors.accent))
-
-                Spacer(minLength: AppSpacing.xs)
-
-                Text(xpCaption)
-                    .appText(.caption)
-                    .monospacedDigit()
-                    .foregroundStyle(AppColors.subtext)
-                    .padding(.trailing, AppSpacing.xs)
-            }
-            .padding(4)
+            Text(xpCaption)
+                .appText(.caption)
+                .monospacedDigit()
+                .foregroundStyle(AppColors.text)
         }
-        .frame(height: 30)
+        .frame(height: 34)
         .clipShape(Capsule())
         .overlay(Capsule().stroke(AppColors.stroke, lineWidth: 0.5))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "Level \(profile.level), \(profile.xpIntoCurrentLevel) of \(profile.xpForNextLevel) experience points"
+            "\(profile.xpIntoCurrentLevel) of \(profile.xpForNextLevel) experience points"
         )
-        .onAppear { seedAndAnimate() }
+        .onAppear { seedAndAnimate(); startSheen() }
         .onChange(of: liveProgress) { _, _ in animateToLive() }
+    }
+
+    /// Sweeps the sheen from just before the fill's leading edge to just past
+    /// its trailing edge, then restarts. Disabled entirely under Reduce Motion.
+    private func startSheen() {
+        guard !reduceMotion else { return }
+        sheenOffset = -0.4
+        withAnimation(.linear(duration: 2.6).repeatForever(autoreverses: false)) {
+            sheenOffset = 1.0
+        }
     }
 
     private func seedAndAnimate() {
