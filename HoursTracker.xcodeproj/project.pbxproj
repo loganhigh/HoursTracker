@@ -75,6 +75,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				HourTrackerPro.storekit,
 			);
 			target = 39EC39A42F20CA7D00130B56 /* HoursTracker */;
 		};

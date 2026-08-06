@@ -19,6 +19,7 @@ struct SettingsView: View {
     @State private var showBackupSavedAlert = false
     @State private var showRestoreSuccessAlert = false
     @State private var backupErrorMessage: String?
+    @State private var showingPremiumSheet = false
     @AppStorage("auto_yearly_reset_enabled") private var autoYearlyResetEnabled = true
     /// Master switch for the Friends/social experience on this device. Absence
     /// of the stored value reads as `true`, so fresh installs and upgrading
@@ -244,6 +245,30 @@ struct SettingsView: View {
                 .listRowBackground(AppColors.card.opacity(0.55))
                 .listRowSeparatorTint(AppColors.stroke)
 
+                // MARK: - Hour Tracker Pro
+                Section {
+                    Button {
+                        Haptics.lightTap()
+                        showingPremiumSheet = true
+                    } label: {
+                        HStack(spacing: AppSpacing.sm) {
+                            SettingsRowLabel(
+                                icon: "crown.fill",
+                                title: "Hour Tracker Pro",
+                                subtitle: premium.isPremium
+                                    ? (premium.activeSubscription?.settingsStatusLine ?? "Active")
+                                    : "Live tracking, PDF reports, no ads"
+                            )
+                            Spacer(minLength: AppSpacing.xs)
+                            SettingsChevron()
+                        }
+                    }
+                } header: {
+                    SectionEyebrow("Hour Tracker Pro")
+                }
+                .listRowBackground(AppColors.card.opacity(0.55))
+                .listRowSeparatorTint(AppColors.stroke)
+
                 // MARK: - Data & Backup
                 Section {
                     Button {
@@ -395,6 +420,9 @@ struct SettingsView: View {
                 ProfessionalReportsSheet(store: store)
             }
             .sheet(isPresented: $showingReportsUpgrade) {
+                PremiumUpgradeView()
+            }
+            .sheet(isPresented: $showingPremiumSheet) {
                 PremiumUpgradeView()
             }
             .alert("Delete All Data", isPresented: $showingDeleteConfirm) {

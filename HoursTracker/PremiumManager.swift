@@ -1,35 +1,69 @@
 import Foundation
 import Combine
-#if canImport(RevenueCat)
-import RevenueCat
-#endif
+import StoreKit
+
+/// A currently-active "Hour Tracker Pro" subscription, resolved from
+/// `Transaction.currentEntitlements` + `Product.SubscriptionInfo.Status`.
+struct ActiveSubscriptionInfo {
+    let productID: String
+    /// Renewal (or expiration, if not renewing) date of the current period.
+    let expirationDate: Date?
+    /// True if the subscription is set to auto-renew at `expirationDate`.
+    let willAutoRenew: Bool
+
+    /// "You're on Hour Tracker Pro — renews Aug 15, 2026" when a renewal
+    /// date is known; the bare fallback "Active" otherwise.
+    var settingsStatusLine: String {
+        guard let expirationDate else { return "Active" }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        let dateString = formatter.string(from: expirationDate)
+        return willAutoRenew
+            ? "You're on Hour Tracker Pro — renews \(dateString)"
+            : "You're on Hour Tracker Pro — active until \(dateString)"
+    }
+}
 
 /// App-wide source of truth for the "Hour Tracker Pro" entitlement.
 ///
-/// Wraps RevenueCat when the SDK is present. Until the `RevenueCat` Swift
-/// package is added in Xcode, this still compiles and behaves as "not Pro"
-/// (with a DEBUG-only manual unlock so the ad gating can be tested early).
+/// Backed by native StoreKit 2 (`Product` / `Transaction` / `AppStore`).
+/// Two auto-renewable subscriptions — monthly and yearly — live in one
+/// subscription group; owning either grants Pro.
 ///
 /// `isPremium` is cached in `UserDefaults` so a cold launch never flashes a
-/// banner ad at a Pro user before RevenueCat finishes loading.
+/// banner ad at a Pro user before StoreKit finishes its first entitlement
+/// check.
 @MainActor
 final class PremiumManager: ObservableObject {
     static let shared = PremiumManager()
 
+    /// Product identifiers, in the "hourtracker_pro" subscription group.
+    static let monthlyProductID = "com.loganh.HourTracker.pro.monthly"
+    static let yearlyProductID = "com.loganh.HourTracker.pro.yearly"
+    static let allProductIDs: Set<String> = [monthlyProductID, yearlyProductID]
+
     @Published private(set) var isPremium: Bool
+    /// Convenience price string for the cheapest available plan (monthly if
+    /// loaded, else the first product). Paywall UI should prefer reading
+    /// `displayPrice` directly off each `Product` in `products` instead.
     @Published private(set) var priceString: String?
     @Published private(set) var isPurchasing = false
+    /// Loaded storefront products, in monthly-then-yearly order.
+    @Published private(set) var products: [Product] = []
+    /// Details of the active subscription, when Pro is active and the
+    /// renewal date could be resolved.
+    @Published private(set) var activeSubscription: ActiveSubscriptionInfo?
 
-    /// True when the RevenueCat SDK is linked into the build.
+    /// True while StoreKit is reachable for purchases (false under parental
+    /// controls / "Ask to Buy" restrictions).
     var purchasesAvailable: Bool {
-        #if canImport(RevenueCat)
-        return true
-        #else
-        return false
-        #endif
+        AppStore.canMakePayments
     }
 
     private let cacheKey = "is_premium_cached"
+    private var updatesTask: Task<Void, Never>?
+    private var didConfigure = false
 
     private init() {
         isPremium = UserDefaults.standard.bool(forKey: cacheKey)
@@ -37,91 +71,143 @@ final class PremiumManager: ObservableObject {
 
     /// Call once at app launch.
     func configure() {
-        #if canImport(RevenueCat)
-        Purchases.logLevel = .warn
-        Purchases.configure(withAPIKey: MonetizationConfig.revenueCatAPIKey)
-        observeCustomerInfo()
+        guard !didConfigure else { return }
+        didConfigure = true
+
+        startTransactionListener()
         Task {
+            await loadProducts()
             await refresh()
-            await loadOffering()
         }
-        #endif
     }
 
-    /// Tie purchases to the signed-in user so Pro follows them across devices.
+    /// StoreKit 2 entitlements follow the signed-in Apple ID / device, not
+    /// an app-level user id — there's no RevenueCat-style "log in" call.
+    /// Kept for call-site compatibility; just re-checks entitlements so Pro
+    /// status is fresh right after sign-in.
     func identify(uid: String?) {
-        #if canImport(RevenueCat)
-        guard let uid, !uid.isEmpty else { return }
-        Task {
-            _ = try? await Purchases.shared.logIn(uid)
-            await refresh()
-            await loadOffering()
+        Task { await refresh() }
+    }
+
+    /// Loads the monthly + yearly products from the storefront (or the
+    /// local `.storekit` configuration in DEBUG/Simulator runs).
+    func loadProducts() async {
+        guard let loaded = try? await Product.products(for: Self.allProductIDs) else { return }
+        let ordered = [Self.monthlyProductID, Self.yearlyProductID].compactMap { id in
+            loaded.first { $0.id == id }
         }
-        #endif
+        products = ordered
+        priceString = ordered.first?.displayPrice
     }
 
+    /// Re-derives `isPremium` / `activeSubscription` from current entitlements.
     func refresh() async {
-        #if canImport(RevenueCat)
-        guard let info = try? await Purchases.shared.customerInfo() else { return }
-        apply(info)
-        #endif
+        await applyCurrentEntitlements()
     }
 
-    /// Buy the lifetime Pro unlock. Returns true if Pro is active afterward.
-    func purchase() async -> Bool {
-        #if canImport(RevenueCat)
-        guard let pkg = cachedPackage else { return false }
+    /// Buy a plan. Returns true if Pro is active afterward.
+    func purchase(_ product: Product) async -> Bool {
         isPurchasing = true
         defer { isPurchasing = false }
         do {
-            let result = try await Purchases.shared.purchase(package: pkg)
-            apply(result.customerInfo)
-            return isPremium
+            let result = try await product.purchase()
+            switch result {
+            case .success(let verification):
+                let transaction = try checkVerified(verification)
+                await transaction.finish()
+                await refresh()
+                return isPremium
+            case .userCancelled, .pending:
+                return false
+            @unknown default:
+                return false
+            }
         } catch {
             return false
         }
-        #else
-        return false
-        #endif
     }
 
     /// Restore a previous purchase (e.g. on a new device).
     func restore() async -> Bool {
-        #if canImport(RevenueCat)
         isPurchasing = true
         defer { isPurchasing = false }
-        guard let info = try? await Purchases.shared.restorePurchases() else { return false }
-        apply(info)
+        do {
+            try await AppStore.sync()
+        } catch {
+            return false
+        }
+        await refresh()
         return isPremium
-        #else
-        return false
-        #endif
     }
 
-    // MARK: - RevenueCat internals
+    // MARK: - Entitlement resolution
 
-    #if canImport(RevenueCat)
-    private var cachedPackage: Package?
+    private func applyCurrentEntitlements() async {
+        var activeProductID: String?
+        for await result in Transaction.currentEntitlements {
+            guard let transaction = try? checkVerified(result) else { continue }
+            if Self.allProductIDs.contains(transaction.productID), transaction.revocationDate == nil {
+                activeProductID = transaction.productID
+                break
+            }
+        }
 
-    private func loadOffering() async {
-        guard let offerings = try? await Purchases.shared.offerings() else { return }
-        let pkg = offerings.current?.availablePackages.first
-        cachedPackage = pkg
-        priceString = pkg?.storeProduct.localizedPriceString
+        setPremium(activeProductID != nil)
+        activeSubscription = await resolveActiveSubscription(productID: activeProductID)
     }
 
-    private func observeCustomerInfo() {
-        Task {
-            for await info in Purchases.shared.customerInfoStream {
-                apply(info)
+    private func resolveActiveSubscription(productID: String?) async -> ActiveSubscriptionInfo? {
+        guard let productID else { return nil }
+        let fallback = ActiveSubscriptionInfo(productID: productID, expirationDate: nil, willAutoRenew: false)
+
+        var resolvedProduct = products.first { $0.id == productID }
+        if resolvedProduct == nil {
+            resolvedProduct = (try? await Product.products(for: [productID]))?.first
+        }
+        guard let subscription = resolvedProduct?.subscription,
+              let statuses = try? await subscription.status else {
+            return fallback
+        }
+
+        var matchedStatus: Product.SubscriptionInfo.Status?
+        for status in statuses {
+            if let transaction = try? checkVerified(status.transaction), transaction.productID == productID {
+                matchedStatus = status
+                break
+            }
+        }
+        guard let status = matchedStatus ?? statuses.first,
+              let transaction = try? checkVerified(status.transaction) else {
+            return fallback
+        }
+
+        let renewalInfo = try? checkVerified(status.renewalInfo)
+        return ActiveSubscriptionInfo(
+            productID: productID,
+            expirationDate: transaction.expirationDate,
+            willAutoRenew: renewalInfo?.willAutoRenew ?? false
+        )
+    }
+
+    private func startTransactionListener() {
+        updatesTask?.cancel()
+        updatesTask = Task { [weak self] in
+            for await update in Transaction.updates {
+                guard let self, let transaction = try? self.checkVerified(update) else { continue }
+                await transaction.finish()
+                await self.refresh()
             }
         }
     }
 
-    private func apply(_ info: CustomerInfo) {
-        setPremium(info.entitlements[MonetizationConfig.proEntitlementID]?.isActive == true)
+    nonisolated private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
+        switch result {
+        case .unverified:
+            throw StoreKitVerificationError.failedVerification
+        case .verified(let safe):
+            return safe
+        }
     }
-    #endif
 
     private func setPremium(_ value: Bool) {
         if isPremium != value { isPremium = value }
@@ -129,7 +215,12 @@ final class PremiumManager: ObservableObject {
     }
 
     #if DEBUG
-    /// Debug-only manual override to test ad gating before RevenueCat is wired.
+    /// Debug-only manual override to test ad gating / paywall UI without a
+    /// real purchase (e.g. in Simulator runs without the StoreKit config).
     func debugSetPremium(_ value: Bool) { setPremium(value) }
     #endif
+}
+
+private enum StoreKitVerificationError: Error {
+    case failedVerification
 }
