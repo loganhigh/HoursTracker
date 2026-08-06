@@ -209,7 +209,7 @@ struct MonthlyOverviewChart: View {
     }
 }
 
-// MARK: - Friends standings card (top 3 this cheque)
+// MARK: - Friends standings card (every friend, this cheque)
 
 struct HomeFriendsCard: View {
     @ObservedObject var friendsService: FriendsService
@@ -257,8 +257,15 @@ struct HomeFriendsCardContent: View {
         let levelLine: String
         let profilePhotoURL: String?
         let isMe: Bool
+        /// True for friends whose `privacy.shareHours` is off. They are still
+        /// listed (so every friend is visible) but their hours stay hidden and
+        /// they are never ranked against the sharing standings.
+        var hoursHidden: Bool = false
     }
 
+    /// Ranked standings: me plus every friend who shares hours. Sorted by
+    /// cheque hours descending, then name — unchanged from the previous
+    /// top-3 card, just uncapped.
     private var standings: [StandingsRow] {
         let myName = UserDefaults.standard.string(forKey: "profile_display_name") ?? "You"
         let profile = store.gamificationProfile
@@ -298,16 +305,58 @@ struct HomeFriendsCardContent: View {
             }
     }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(standings.prefix(3).enumerated()), id: \.element.id) { index, row in
-                if index > 0 {
-                    Divider().opacity(0.2)
-                }
-                standingsRow(row, rank: index + 1)
+    /// Friends who keep their hours private. Listed after the ranked rows with
+    /// the same "Hours hidden" treatment the Friends tab uses (`FriendStatsRow`).
+    private var hiddenRows: [StandingsRow] {
+        friendsService.friends
+            .filter { !$0.privacy.shareHours }
+            .map {
+                StandingsRow(
+                    id: $0.uid,
+                    name: $0.displayName,
+                    hours: 0,
+                    levelLine: $0.levelDisplayLine,
+                    profilePhotoURL: $0.profilePhotoURL,
+                    isMe: false,
+                    hoursHidden: true
+                )
             }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    var body: some View {
+        let ranked = standings
+        let hidden = hiddenRows
+
+        return VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
+                ForEach(Array(ranked.enumerated()), id: \.element.id) { index, row in
+                    if index > 0 {
+                        Divider().opacity(0.2)
+                    }
+                    standingsRow(row, rank: index + 1)
+                }
+
+                ForEach(hidden) { row in
+                    Divider().opacity(0.2)
+                    standingsRow(row, rank: nil)
+                }
+            }
+
+            Divider().opacity(0.2)
+
+            HStack(spacing: 6) {
+                Text("Open Friends")
+                    .appText(.headline)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(AppColors.accent)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, AppSpacing.sm)
+            .accessibilityHint("Opens the Friends tab")
         }
-        .animation(nil, value: standings.map { "\($0.id)-\($0.hours)" })
+        .animation(nil, value: ranked.map { "\($0.id)-\($0.hours)" })
         .frame(maxWidth: .infinity, alignment: .top)
         .animation(nil, value: friendsService.friends.map { "\($0.uid):\($0.weeklyHours):\($0.totalHours):\($0.level)" })
         .onAppear {
@@ -325,15 +374,23 @@ struct HomeFriendsCardContent: View {
         }
     }
 
-    private func standingsRow(_ row: StandingsRow, rank: Int) -> some View {
+    /// `rank` is nil for private friends — they get a lock pip instead of a
+    /// number because they are not ranked against the sharing standings.
+    private func standingsRow(_ row: StandingsRow, rank: Int?) -> some View {
         HStack(spacing: AppSpacing.xs + 2) {
             ZStack {
                 Circle()
-                    .fill(rankColor(rank).opacity(0.18))
+                    .fill((rank.map(rankColor) ?? AppColors.subtext).opacity(0.18))
                     .frame(width: 24, height: 24)
-                Text("\(rank)")
-                    .font(AppTypography.eyebrow.monospacedDigit())
-                    .foregroundStyle(rankColor(rank))
+                if let rank {
+                    Text("\(rank)")
+                        .font(AppTypography.eyebrow.monospacedDigit())
+                        .foregroundStyle(rankColor(rank))
+                } else {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(AppColors.subtext)
+                }
             }
 
             ProfileAvatarView(
@@ -367,9 +424,15 @@ struct HomeFriendsCardContent: View {
 
             Spacer(minLength: AppSpacing.xs)
 
-            Text(AppTheme.Format.hours(row.hours))
-                .font(AppTypography.metricValue)
-                .foregroundStyle(rank == 1 ? AppColors.accent : AppColors.text)
+            if row.hoursHidden {
+                Text("Hours hidden")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppColors.subtext)
+            } else {
+                Text(AppTheme.Format.hours(row.hours))
+                    .font(AppTypography.metricValue)
+                    .foregroundStyle(rank == 1 ? AppColors.accent : AppColors.text)
+            }
         }
         .padding(.vertical, AppSpacing.xs)
     }
