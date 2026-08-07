@@ -51,7 +51,11 @@ enum GamificationLevelCalculator {
         let xpForNext = xpRequiredForLevel(level)
         let isMaxed = level == maxLevel && remaining >= xpForNext
         let xpIntoLevel = isMaxed ? xpForNext : remaining
-        let canPrestige = level >= maxLevel && prestige < 10
+        // Prestige requires FINISHING the max level, not merely reaching it —
+        // `isMaxed`, not `level >= maxLevel`. The level loop stops incrementing
+        // at maxLevel, so a user one XP into level 25 has `level == 25` with an
+        // unfilled bar; gating on level alone offered Prestige to them.
+        let canPrestige = isMaxed && prestige < 10
         return (level, xpIntoLevel, xpForNext, canPrestige)
     }
 
