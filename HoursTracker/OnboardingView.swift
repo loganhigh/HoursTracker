@@ -18,12 +18,11 @@ enum AppTutorialStorage {
     }
 }
 
-// MARK: - OnboardingView (Phase 11)
+// MARK: - OnboardingView
 //
-// Four paged screens: Track → Progress → Friends → Sign in. Sign-in is the
-// CTA on the last screen; after Firebase confirms the session we advance
-// automatically — into a one-time company-profile step when those fields have
-// never been filled, otherwise straight into the app.
+// Three paged screens: Welcome → Features → Sign in. The moment Firebase
+// confirms the session the user lands on Home — there is no post-auth setup
+// step (company details live in Settings → Company Profile).
 //
 // Auto-advance is LEVEL-triggered, not edge-triggered. The old
 // AppTutorialView only listened for the isSignedIn false→true edge and
@@ -45,22 +44,14 @@ struct OnboardingView: View {
     @State private var page = 0
     /// Single-fire guard for the post-auth advance (set on the main actor).
     @State private var hasAdvanced = false
-    /// The company step only exists in the pager after auth confirms, so it
-    /// can never be swiped into manually.
-    @State private var showsCompanyStep = false
 
-    // Company profile (same keys as the old page-6 form / Settings screen).
-    @AppStorage("company_name") private var companyName: String = ""
-    @AppStorage("company_occupation") private var occupation: String = ""
-    @AppStorage("company_start_date_ts") private var companyStartDateTS: Double = 0
-    @State private var companyStartDate: Date = Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date()
-
-    private let signInPageIndex = 3
-    private let companyPageIndex = 4
+    private let pageCount = 3
+    private let signInPageIndex = 2
 
     var body: some View {
         ZStack {
             AppColors.bg.ignoresSafeArea()
+            topWash
 
             VStack(spacing: 0) {
                 topBar
@@ -83,41 +74,45 @@ struct OnboardingView: View {
         .onAppear { advanceIfReady() }
     }
 
+    /// Accent bloom behind the hero, fading out well before the copy starts.
+    private var topWash: some View {
+        LinearGradient(
+            colors: [
+                AppColors.accent.opacity(0.30),
+                AppColors.accent.opacity(0.07),
+                Color.clear
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 460)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+
     // MARK: - Pager
 
     private var pager: some View {
         TabView(selection: $page) {
             OnboardingHeroPage(
-                headline: "Track your hours",
-                subline: "Log a shift in seconds. Your history organizes itself."
+                headline: "Welcome to Hour Tracker",
+                subline: "Every shift you work, tracked and organized in one place."
             ) {
-                OnboardingShiftStackHero()
+                OnboardingLogoHero()
             }
             .tag(0)
 
             OnboardingHeroPage(
-                headline: "Every shift builds progress",
-                subline: "Earn XP, keep streaks alive, and climb toward Prestige."
+                headline: "Built for the way you work",
+                subline: "Everything you need to log hours and stay on top of them."
             ) {
-                OnboardingProgressHero()
+                OnboardingFeatureCards()
             }
             .tag(1)
 
-            OnboardingHeroPage(
-                headline: "Compete with friends",
-                subline: "Weekly standings and milestones keep you accountable."
-            ) {
-                OnboardingLeaderboardHero()
-            }
-            .tag(2)
-
             signInPage
                 .tag(signInPageIndex)
-
-            if showsCompanyStep {
-                companyPage
-                    .tag(companyPageIndex)
-            }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .animation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion), value: page)
@@ -146,12 +141,10 @@ struct OnboardingView: View {
 
     private var bottomArea: some View {
         VStack(spacing: AppSpacing.md) {
-            if page < companyPageIndex {
-                OnboardingPageIndicator(count: 4, current: min(page, signInPageIndex))
-            }
+            OnboardingPageIndicator(count: pageCount, current: page)
 
             if page < signInPageIndex {
-                Button("Continue") {
+                Button(page == 0 ? "Get Started" : "Continue") {
                     Haptics.lightTap()
                     withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
                         page += 1
@@ -162,7 +155,7 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Screen 4 — sign in
+    // MARK: - Screen 3 — sign in
 
     private var signInPage: some View {
         ScrollView {
@@ -212,104 +205,7 @@ struct OnboardingView: View {
         .scrollDismissesKeyboard(.interactively)
     }
 
-    // MARK: - Post-auth company step
-
-    private var companyPage: some View {
-        ScrollView {
-            VStack(spacing: AppSpacing.lg) {
-                Image(systemName: "building.2.fill")
-                    .font(.system(size: 36, weight: .medium))
-                    .foregroundStyle(AppColors.accent)
-                    .padding(.top, AppSpacing.xs)
-
-                VStack(spacing: AppSpacing.sm) {
-                    Text("Your company")
-                        .appText(.title)
-                        .foregroundStyle(AppColors.text)
-                        .multilineTextAlignment(.center)
-
-                    Text("Add your company details to track tenure and unlock company stats.")
-                        .appText(.subheadline)
-                        .foregroundStyle(AppColors.subtext)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                VStack(spacing: AppSpacing.md) {
-                    companyField(title: "Company Name", text: $companyName, placeholder: "e.g. ABC Construction")
-                    companyField(title: "Occupation", text: $occupation, placeholder: "e.g. Asphalt / Concrete / Foreman")
-
-                    VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                        Text("Start Date")
-                            .appText(.metricLabel)
-                            .foregroundStyle(AppColors.subtext)
-                        DatePicker("", selection: $companyStartDate, in: ...Date(), displayedComponents: .date)
-                            .datePickerStyle(.compact)
-                            .labelsHidden()
-                            .tint(AppColors.accent)
-                            .onChange(of: companyStartDate) { _, newDate in
-                                companyStartDateTS = newDate.timeIntervalSince1970
-                            }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Text("You can update these later in Settings → Company Profile.")
-                        .appText(.caption)
-                        .foregroundStyle(AppColors.faint)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(AppSpacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                        .fill(AppColors.card2)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                                .stroke(AppColors.stroke, lineWidth: 1)
-                        )
-                )
-
-                Button("Continue") {
-                    Haptics.lightTap()
-                    finishOnboarding()
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .padding(.bottom, AppSpacing.sm)
-            }
-            .padding(.horizontal, AppSpacing.xl)
-        }
-        .scrollDismissesKeyboard(.interactively)
-    }
-
-    private func companyField(title: String, text: Binding<String>, placeholder: String) -> some View {
-        VStack(alignment: .leading, spacing: AppSpacing.xs) {
-            Text(title)
-                .appText(.metricLabel)
-                .foregroundStyle(AppColors.subtext)
-            TextField(placeholder, text: text)
-                .appText(.body)
-                .foregroundStyle(AppColors.text)
-                .padding(AppSpacing.sm)
-                .background(
-                    RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                        .fill(AppColors.bg)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                                .stroke(AppColors.stroke, lineWidth: 1)
-                        )
-                )
-                .tint(AppColors.accent)
-        }
-    }
-
     // MARK: - Auth auto-advance
-
-    /// True until the user has ever filled any company-profile field (local
-    /// check — the cheap signal that this is a brand-new profile).
-    private var needsCompanySetup: Bool {
-        companyName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && occupation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && companyStartDateTS <= 0
-    }
 
     /// Level-triggered completion check. Runs on every relevant event; fires
     /// at most once (`hasAdvanced`), never while auth is in-flight, and never
@@ -322,18 +218,7 @@ struct OnboardingView: View {
         guard authService.isSignedIn, !authService.isSigningIn else { return }
         hasAdvanced = true
         Haptics.success()
-
-        if needsCompanySetup {
-            showsCompanyStep = true
-            // Let the pager register the new page before selecting it.
-            DispatchQueue.main.async {
-                withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
-                    page = companyPageIndex
-                }
-            }
-        } else {
-            finishOnboarding()
-        }
+        finishOnboarding()
     }
 
     // MARK: - Completion (same semantics as the old finishTutorial)
@@ -348,7 +233,7 @@ struct OnboardingView: View {
     }
 }
 
-// MARK: - Shared hero page layout (screens 1–3)
+// MARK: - Shared hero page layout (screens 1–2)
 
 private struct OnboardingHeroPage<Hero: View>: View {
     let headline: String

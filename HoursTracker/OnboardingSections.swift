@@ -1,14 +1,14 @@
 import SwiftUI
 
-// MARK: - Onboarding sections (Phase 11)
+// MARK: - Onboarding sections
 //
-// Native SwiftUI hero illustrations for the four onboarding screens plus the
-// shared page indicator. Tokens + DesignComponents only — semantic colors,
-// zero glows, Reduce Motion honored on every animation.
+// Hero illustrations for the three onboarding screens plus the shared page
+// indicator. Tokens + DesignComponents only — semantic colors, Reduce Motion
+// honored on every animation.
 
 // MARK: - Page indicator
 
-/// Four quiet dots; the active dot elongates into a capsule.
+/// Quiet dots; the active dot elongates into a capsule.
 struct OnboardingPageIndicator: View {
     let count: Int
     let current: Int
@@ -27,314 +27,132 @@ struct OnboardingPageIndicator: View {
     }
 }
 
-// MARK: - Screen 1 hero — floating weekday shift stack
+// MARK: - Screen 1 hero — the app logo
 
-/// A floating stack of seven weekday shift-block rows with soft depth
-/// (offset opacity layers, no glow) and a gentle idle float loop.
-struct OnboardingShiftStackHero: View {
+/// The Hour Tracker mark on a light tile so the chrome lettering keeps its
+/// contrast against the dark app background, with soft depth layers behind
+/// and a gentle idle float.
+struct OnboardingLogoHero: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var floating = false
 
-    private struct DayRow: Identifiable {
-        let id: String
-        let time: String
-        var blockWidth: CGFloat = 132
-        var hasOvertime = false
-        var isEmpty = false
-    }
-
-    private let rows: [DayRow] = [
-        DayRow(id: "MON", time: "7:00 – 3:30", blockWidth: 128),
-        DayRow(id: "TUE", time: "7:00 – 3:30", blockWidth: 128),
-        DayRow(id: "WED", time: "8:00 – 4:30", blockWidth: 136),
-        DayRow(id: "THU", time: "7:00 – 5:30", blockWidth: 128, hasOvertime: true),
-        DayRow(id: "FRI", time: "7:00 – 3:30", blockWidth: 128),
-        DayRow(id: "SAT", time: "9:00 – 1:00", blockWidth: 104),
-        DayRow(id: "SUN", time: "", isEmpty: true)
-    ]
-
     var body: some View {
-        VStack(spacing: 9) {
-            ForEach(rows) { row in
-                shiftRow(row)
+        Image("AppLogo")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 168, height: 168)
+            .padding(AppSpacing.lg)
+            .background(
+                ZStack {
+                    depthLayer(offset: 26, scale: 0.88, opacity: 0.16)
+                    depthLayer(offset: 13, scale: 0.94, opacity: 0.34)
+                    RoundedRectangle(cornerRadius: 44, style: .continuous)
+                        .fill(Color.white)
+                }
+            )
+            .offset(y: floating ? -5 : 5)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 3.5).repeatForever(autoreverses: true)) {
+                    floating = true
+                }
             }
-        }
-        .padding(AppSpacing.md)
-        .background(
-            ZStack {
-                depthLayer(offset: 22, scale: 0.90, opacity: 0.18)
-                depthLayer(offset: 11, scale: 0.95, opacity: 0.38)
-                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                    .fill(AppColors.card)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                            .stroke(AppColors.stroke, lineWidth: 1)
-                    )
-            }
-        )
-        .offset(y: floating ? -4 : 4)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 3.5).repeatForever(autoreverses: true)) {
-                floating = true
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Illustration of a week of logged shifts")
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Hour Tracker")
     }
 
     private func depthLayer(offset: CGFloat, scale: CGFloat, opacity: Double) -> some View {
-        RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+        RoundedRectangle(cornerRadius: 44, style: .continuous)
             .fill(AppColors.card2)
             .opacity(opacity)
             .scaleEffect(scale)
             .offset(y: offset)
     }
-
-    private func shiftRow(_ row: DayRow) -> some View {
-        HStack(spacing: AppSpacing.sm) {
-            Text(row.id)
-                .appText(.eyebrow)
-                .foregroundStyle(row.isEmpty ? AppColors.faint : AppColors.subtext)
-                .frame(width: 42, alignment: .leading)
-
-            if row.isEmpty {
-                Text("—")
-                    .appText(.caption)
-                    .foregroundStyle(AppColors.faint)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                HStack(spacing: 5) {
-                    Text(row.time)
-                        .appText(.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(AppColors.accent)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .padding(.horizontal, AppSpacing.xs)
-                        .frame(width: row.blockWidth, height: 26)
-                        .background(
-                            RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
-                                .fill(AppColors.accent.opacity(0.14))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
-                                        .stroke(AppColors.accent.opacity(0.28), lineWidth: 1)
-                                )
-                        )
-
-                    if row.hasOvertime {
-                        Text("OT")
-                            .appText(.eyebrow)
-                            .foregroundStyle(AppColors.accent2)
-                            .frame(width: 34, height: 26)
-                            .background(
-                                RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
-                                    .fill(AppColors.accent2.opacity(0.14))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
-                                            .stroke(AppColors.accent2.opacity(0.28), lineWidth: 1)
-                                    )
-                            )
-                    }
-
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
 }
 
-// MARK: - Screen 2 hero — level ring + XP capsule + streak / badge cluster
+// MARK: - Screen 2 hero — feature cards
 
-struct OnboardingProgressHero: View {
+/// Stacked feature cards, each revealing in sequence.
+struct OnboardingFeatureCards: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var ringProgress: Double = 0
-    @State private var xpFill: CGFloat = 0
+    @State private var revealed = false
 
-    var body: some View {
-        VStack(spacing: AppSpacing.lg) {
-            ZStack {
-                AppProgressRing(progress: ringProgress, lineWidth: 10)
-                    .frame(width: 150, height: 150)
-                VStack(spacing: 2) {
-                    Text("LVL")
-                        .appText(.eyebrow)
-                        .foregroundStyle(AppColors.subtext)
-                    Text("12")
-                        .font(.system(.largeTitle, design: .rounded, weight: .heavy))
-                        .monospacedDigit()
-                        .foregroundStyle(AppColors.text)
-                }
-            }
-
-            xpCapsule
-                .frame(width: 230, height: 30)
-
-            HStack(spacing: AppSpacing.sm) {
-                streakChip
-                badgeCircle
-            }
-        }
-        .onAppear {
-            if reduceMotion {
-                ringProgress = 0.65
-                xpFill = 0.62
-            } else {
-                withAnimation(AppMotion.Spring.smooth.delay(0.15)) {
-                    ringProgress = 0.65
-                    xpFill = 0.62
-                }
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Illustration of level progress, experience points, a streak, and a badge")
+    private struct Feature: Identifiable {
+        let id = UUID()
+        let icon: String
+        let title: String
+        let subtitle: String
     }
 
-    /// Static illustration twin of the You tab's ProfileXPCapsule.
-    private var xpCapsule: some View {
-        ZStack(alignment: .leading) {
-            Capsule()
-                .fill(AppColors.stroke.opacity(0.5))
-
-            GeometryReader { geo in
-                if xpFill > 0 {
-                    Capsule()
-                        .fill(AppColors.accent.opacity(0.3))
-                        .frame(width: max(30, geo.size.width * xpFill))
-                }
-            }
-
-            HStack(spacing: AppSpacing.xs) {
-                Text("XP")
-                    .appText(.eyebrow)
-                    .foregroundStyle(AppColors.textOnAccent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(AppColors.accent))
-
-                Spacer(minLength: AppSpacing.xs)
-
-                Text("620 / 1,000")
-                    .appText(.caption)
-                    .monospacedDigit()
-                    .foregroundStyle(AppColors.subtext)
-                    .padding(.trailing, AppSpacing.xs)
-            }
-            .padding(4)
-        }
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(AppColors.stroke, lineWidth: 0.5))
-    }
-
-    private var streakChip: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "flame.fill")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(AppColors.streak)
-            Text("6")
-                .appText(.headline)
-                .monospacedDigit()
-                .foregroundStyle(AppColors.text)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(
-            Capsule()
-                .fill(AppColors.card2)
-                .overlay(Capsule().stroke(AppColors.stroke, lineWidth: 1))
+    private let features: [Feature] = [
+        Feature(
+            icon: "clock.fill",
+            title: "Log shifts in seconds",
+            subtitle: "Enter times by hand or track live."
+        ),
+        Feature(
+            icon: "calendar",
+            title: "Every cheque, organized",
+            subtitle: "Pay periods and overtime, handled for you."
+        ),
+        Feature(
+            icon: "rosette",
+            title: "Earn XP and badges",
+            subtitle: "Level up and climb toward Prestige."
+        ),
+        Feature(
+            icon: "person.2.fill",
+            title: "Compete with friends",
+            subtitle: "Weekly standings keep you accountable."
         )
-    }
-
-    private var badgeCircle: some View {
-        Circle()
-            .fill(AppColors.card2)
-            .frame(width: 38, height: 38)
-            .overlay(Circle().stroke(AppColors.accent.opacity(0.45), lineWidth: 1.5))
-            .overlay(
-                Image(systemName: "mountain.2.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(AppColors.accent)
-            )
-    }
-}
-
-// MARK: - Screen 3 hero — quiet leaderboard card
-
-struct OnboardingLeaderboardHero: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var arrowRisen = false
+    ]
 
     var body: some View {
-        VStack(spacing: 0) {
-            leaderboardRow(rank: 1, nameWidth: 96, hours: "28.7h", highlighted: false)
-            leaderboardRow(rank: 2, nameWidth: 78, hours: "24.3h", highlighted: true)
-            leaderboardRow(rank: 3, nameWidth: 88, hours: "21.5h", highlighted: false)
+        VStack(spacing: AppSpacing.sm) {
+            ForEach(Array(features.enumerated()), id: \.element.id) { index, feature in
+                card(feature)
+                    .opacity(revealed ? 1 : 0)
+                    .offset(y: revealed ? 0 : 14)
+                    .animation(
+                        reduceMotion ? nil : AppMotion.Spring.smooth.delay(Double(index) * 0.08),
+                        value: revealed
+                    )
+            }
         }
-        .padding(AppSpacing.xs)
+        .onAppear { revealed = true }
+    }
+
+    private func card(_ feature: Feature) -> some View {
+        HStack(spacing: AppSpacing.sm) {
+            Image(systemName: feature.icon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(AppColors.accent)
+                .frame(width: 44, height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                        .fill(AppColors.accent.opacity(0.14))
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(feature.title)
+                    .appText(.headline)
+                    .foregroundStyle(AppColors.text)
+                Text(feature.subtitle)
+                    .appText(.caption)
+                    .foregroundStyle(AppColors.subtext)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(AppSpacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
                 .fill(AppColors.card)
                 .overlay(
-                    RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
                         .stroke(AppColors.stroke, lineWidth: 1)
                 )
-        )
-        .onAppear {
-            if reduceMotion {
-                arrowRisen = true
-            } else {
-                withAnimation(AppMotion.Spring.smooth.delay(0.35)) {
-                    arrowRisen = true
-                }
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Illustration of a weekly friends leaderboard")
-    }
-
-    private func leaderboardRow(rank: Int, nameWidth: CGFloat, hours: String, highlighted: Bool) -> some View {
-        HStack(spacing: AppSpacing.sm) {
-            Text("\(rank)")
-                .appText(.headline)
-                .monospacedDigit()
-                .foregroundStyle(highlighted ? AppColors.accent : AppColors.subtext)
-                .frame(width: 18)
-
-            Circle()
-                .fill(AppColors.card2)
-                .frame(width: 34, height: 34)
-                .overlay(Circle().stroke(AppColors.stroke, lineWidth: 1))
-                .overlay(
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(highlighted ? AppColors.accent : AppColors.subtext)
-                )
-
-            Capsule()
-                .fill(AppColors.stroke.opacity(0.6))
-                .frame(width: nameWidth, height: 10)
-
-            Spacer(minLength: AppSpacing.xs)
-
-            if highlighted {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.accent)
-                    .opacity(arrowRisen ? 1 : 0)
-                    .offset(y: arrowRisen ? 0 : 4)
-            }
-
-            Text(hours)
-                .appText(.headline)
-                .monospacedDigit()
-                .foregroundStyle(AppColors.text)
-        }
-        .padding(.horizontal, AppSpacing.sm)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                .fill(highlighted ? AppColors.accent.opacity(0.12) : Color.clear)
         )
     }
 }
