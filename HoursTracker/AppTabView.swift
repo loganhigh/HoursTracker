@@ -25,12 +25,12 @@ enum FriendsFeature {
 // MARK: - Tabs
 
 /// The root destinations of the app. Replaces the old side-drawer navigation
-/// (SideMenu) with a native tab bar. `.settings` is a pseudo-tab: selecting it
-/// never switches screens — it presents the Settings sheet instead.
+/// (SideMenu) with a native tab bar. `.add` is a pseudo-tab: selecting it
+/// never switches screens — it presents the add-shift sheet instead.
 enum AppTab: Hashable {
     case home
     case history
-    case settings
+    case add
     case friends
     case you
 }
@@ -43,23 +43,24 @@ final class TabRouter: ObservableObject {
 
 // MARK: - App tab view
 
-/// Root tab structure: Home · History · Settings · Friends · You.
+/// Root tab structure: Home · History · + · Friends · You.
 /// Each real tab owns its own `NavigationStack` so pushes stay scoped per tab.
-/// The middle gear item is intercepted: choosing it keeps the current tab
-/// selected and presents `SettingsView` as a sheet. Shifts are still added from
-/// the Home screen's primary "Add Shift" button.
+/// The middle "+" item is intercepted: choosing it keeps the current tab
+/// selected and presents the same `AddShiftEntryView` sheet Home uses.
+/// Settings lives as a row in the You tab.
 ///
 /// Friends is conditional on `FriendsFeature`: with the toggle off the bar is
-/// Home · History · Settings · You.
+/// Home · History · + · You.
 struct AppTabView: View {
     @EnvironmentObject private var store: HoursStore
     @EnvironmentObject private var authService: AuthService
     @StateObject private var tabRouter = TabRouter()
+    @State private var showingAddShift = false
     @State private var showingSettings = false
     @AppStorage(FriendsFeature.storageKey) private var friendsEnabled = true
     @ObservedObject private var crewService = CrewService.shared
 
-    /// Intercepting selection binding: the gear item opens the Settings sheet
+    /// Intercepting selection binding: the "+" item opens the add-shift sheet
     /// instead of becoming the selected tab, and a request for a tab that isn't
     /// currently in the bar falls back to Home.
     private var selection: Binding<AppTab> {
@@ -67,9 +68,9 @@ struct AppTabView: View {
             get: { tabRouter.selection },
             set: { newValue in
                 switch newValue {
-                case .settings:
+                case .add:
                     Haptics.lightTap()
-                    showingSettings = true
+                    showingAddShift = true
                 case .friends where !friendsEnabled:
                     tabRouter.selection = .home
                 default:
@@ -96,8 +97,8 @@ struct AppTabView: View {
 
             // Never actually selected — the binding intercepts this tag.
             Color.clear
-                .tabItem { Label("Settings", systemImage: "gearshape.fill") }
-                .tag(AppTab.settings)
+                .tabItem { Label("Add", systemImage: "plus.circle.fill") }
+                .tag(AppTab.add)
 
             if friendsEnabled {
                 NavigationStack {
@@ -124,6 +125,11 @@ struct AppTabView: View {
                 tabRouter.selection = .home
             }
         }
+        .sheet(isPresented: $showingAddShift) {
+            AddShiftEntryView(store: store)
+        }
+        // Presented only by an incoming `join-crew` deep link (below) —
+        // Settings is otherwise reached from its row in the You tab.
         .sheet(isPresented: $showingSettings) {
             SettingsView(store: store, settings: $store.paySettings)
                 .environmentObject(authService)

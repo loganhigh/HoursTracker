@@ -14,7 +14,7 @@ struct PremiumUpgradeView: View {
     private let benefits: [(icon: String, title: String, subtitle: String)] = [
         ("clock.badge.checkmark.fill", "Live Shift Tracking", "Clock in and out with a running timer."),
         ("dynamicisland.fill", "Live Activities & Dynamic Island", "See your running shift on the Lock Screen and Dynamic Island."),
-        ("mic.fill", "Siri & Shortcuts", "Clock in, clock out, and check your hours by voice."),
+        ("mic.fill", "Siri & Shortcuts", "Log a shift or check your hours just by asking."),
         ("doc.richtext.fill", "Professional PDF Reports", "Export polished reports with your company branding.")
     ]
 

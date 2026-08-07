@@ -20,6 +20,7 @@ struct AccountView: View {
 
     @AppStorage("profile_display_name") private var storedDisplayName: String = ""
 
+    @State private var showingSettings = false
     @State private var showingDeleteAccountConfirm = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError: String?
@@ -83,6 +84,10 @@ struct AccountView: View {
         .scrollContentBackground(.hidden)
         .background(AppColors.bg.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showingSettings) {
+            SettingsView(store: store, settings: $store.paySettings)
+                .environmentObject(authService)
+        }
         .onAppear {
             // Same recovery hook as CareerView: guarantees the server-stats
             // listeners are attached whenever a level-displaying screen appears.
@@ -239,7 +244,15 @@ struct AccountView: View {
 
             AccountRowHairline()
 
-            // Settings moved to the tab bar's center gear — no duplicate row.
+            Button {
+                Haptics.lightTap()
+                showingSettings = true
+            } label: {
+                AccountNavRow(icon: "gearshape.fill", title: "Settings")
+            }
+            .buttonStyle(PremiumPressStyle())
+
+            AccountRowHairline()
 
             Button {
                 openURL(AppLegalURLs.website)
