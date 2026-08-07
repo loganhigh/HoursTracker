@@ -37,25 +37,29 @@ struct RootView: View {
         .sheet(isPresented: $showingDisplayNamePrompt) {
             DisplayNamePromptSheet()
         }
-        .alert("Hey! Add a country flag", isPresented: $showingCountryFlagPrompt) {
-            Button("Choose country") {
-                showingCountryFlagPicker = true
+        // Custom rather than `.alert` because a system alert left-aligns its
+        // title and message on iOS 26 with no way to center them.
+        .overlay {
+            if showingCountryFlagPrompt {
+                CountryFlagPromptOverlay {
+                    showingCountryFlagPrompt = false
+                    showingCountryFlagPicker = true
+                }
             }
-            Button("Not now", role: .cancel) {
-                CountryFlag.markPromptSkipped()
-            }
-        } message: {
-            Text("Pick your country so your flag shows beside your name on the global leaderboard.")
         }
+        // Choosing a country is required — no Cancel, no swipe-to-dismiss.
+        // The picker sets `storedCode` and dismisses itself on selection.
         .sheet(isPresented: $showingCountryFlagPicker) {
             NavigationStack {
                 CountryFlagPickerView(store: store)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Cancel") { showingCountryFlagPicker = false }
-                        }
-                    }
             }
+            .interactiveDismissDisabled()
+        }
+        .onChange(of: showingCountryFlagPicker) { _, isShowing in
+            // Re-present the prompt if the picker closed without a pick
+            // (e.g. the sheet was torn down by a state change upstream).
+            guard !isShowing, CountryFlag.needsCountryPrompt else { return }
+            showingCountryFlagPrompt = true
         }
         .onAppear { scheduleCountryFlagPromptIfNeeded() }
         .onChange(of: authService.user?.uid) { _, _ in
@@ -70,6 +74,57 @@ struct RootView: View {
             guard authService.user != nil, CountryFlag.needsCountryPrompt else { return }
             showingCountryFlagPrompt = true
         }
+    }
+}
+
+// MARK: - Country flag prompt
+//
+// Replaces a system `.alert`, which left-aligns its title/message on iOS 26.
+// Picking a country is required, so there is one button and no way to
+// dismiss around it.
+
+private struct CountryFlagPromptOverlay: View {
+    let onChoose: () -> Void
+
+    var body: some View {
+        ZStack {
+            AppColors.overlay
+                .ignoresSafeArea()
+
+            VStack(spacing: AppSpacing.md) {
+                Text("🌍")
+                    .font(.system(size: 40))
+
+                Text("Add a country flag")
+                    .appText(.title)
+                    .foregroundStyle(AppColors.text)
+                    .multilineTextAlignment(.center)
+
+                Text("Pick your country so your flag shows beside your name on the global leaderboard.")
+                    .appText(.subheadline)
+                    .foregroundStyle(AppColors.subtext)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button("Choose country") {
+                    Haptics.lightTap()
+                    onChoose()
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .padding(.top, AppSpacing.xxs)
+            }
+            .padding(AppSpacing.lg)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                    .fill(AppColors.card)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                            .stroke(AppColors.stroke, lineWidth: 1)
+                    )
+            )
+            .padding(.horizontal, AppSpacing.xxl)
+        }
+        .transition(.opacity)
     }
 }
 

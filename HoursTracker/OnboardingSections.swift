@@ -29,9 +29,7 @@ struct OnboardingPageIndicator: View {
 
 // MARK: - Screen 1 hero — the app logo
 
-/// The Hour Tracker mark on a light tile so the chrome lettering keeps its
-/// contrast against the dark app background, with soft depth layers behind
-/// and a gentle idle float.
+/// The Hour Tracker mark on its own, with a gentle idle float.
 struct OnboardingLogoHero: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var floating = false
@@ -40,16 +38,7 @@ struct OnboardingLogoHero: View {
         Image("AppLogo")
             .resizable()
             .scaledToFit()
-            .frame(width: 168, height: 168)
-            .padding(AppSpacing.lg)
-            .background(
-                ZStack {
-                    depthLayer(offset: 26, scale: 0.88, opacity: 0.16)
-                    depthLayer(offset: 13, scale: 0.94, opacity: 0.34)
-                    RoundedRectangle(cornerRadius: 44, style: .continuous)
-                        .fill(Color.white)
-                }
-            )
+            .frame(width: 230, height: 230)
             .offset(y: floating ? -5 : 5)
             .onAppear {
                 guard !reduceMotion else { return }
@@ -60,99 +49,143 @@ struct OnboardingLogoHero: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Hour Tracker")
     }
-
-    private func depthLayer(offset: CGFloat, scale: CGFloat, opacity: Double) -> some View {
-        RoundedRectangle(cornerRadius: 44, style: .continuous)
-            .fill(AppColors.card2)
-            .opacity(opacity)
-            .scaleEffect(scale)
-            .offset(y: offset)
-    }
 }
 
-// MARK: - Screen 2 hero — feature cards
+// MARK: - Screen 2 hero — climbing the leaderboard
 
-/// Stacked feature cards, each revealing in sequence.
-struct OnboardingFeatureCards: View {
+/// A four-row leaderboard where "You" climbs from 4th to 2nd, on a loop.
+///
+/// Rows are absolutely positioned by rank and animate their offset, rather
+/// than being reordered inside a stack — a ForEach reorder animates
+/// inconsistently, while an explicit offset per rank always slides cleanly.
+struct OnboardingLeaderboardHero: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var revealed = false
+    @State private var climbed = false
 
-    private struct Feature: Identifiable {
-        let id = UUID()
-        let icon: String
-        let title: String
-        let subtitle: String
+    private struct Racer: Identifiable {
+        let id: String
+        let name: String
+        let hours: String
+        let isYou: Bool
+        /// Rank before and after the climb (0-indexed).
+        let startRank: Int
+        let endRank: Int
     }
 
-    private let features: [Feature] = [
-        Feature(
-            icon: "clock.fill",
-            title: "Log shifts in seconds",
-            subtitle: "Enter times by hand or track live."
-        ),
-        Feature(
-            icon: "calendar",
-            title: "Every cheque, organized",
-            subtitle: "Pay periods and overtime, handled for you."
-        ),
-        Feature(
-            icon: "rosette",
-            title: "Earn XP and badges",
-            subtitle: "Level up and climb toward Prestige."
-        ),
-        Feature(
-            icon: "person.2.fill",
-            title: "Compete with friends",
-            subtitle: "Weekly standings keep you accountable."
-        )
+    /// Distance between row origins; `rowVisibleHeight` is the row's own
+    /// height, so the gap between rows is the difference.
+    private let rowHeight: CGFloat = 58
+    private let rowVisibleHeight: CGFloat = 50
+
+    private let racers: [Racer] = [
+        Racer(id: "marcus", name: "Marcus", hours: "41.5h", isYou: false, startRank: 0, endRank: 0),
+        Racer(id: "you", name: "You", hours: "38.0h", isYou: true, startRank: 3, endRank: 1),
+        Racer(id: "dana", name: "Dana", hours: "36.2h", isYou: false, startRank: 1, endRank: 2),
+        Racer(id: "priya", name: "Priya", hours: "32.8h", isYou: false, startRank: 2, endRank: 3)
     ]
 
     var body: some View {
-        VStack(spacing: AppSpacing.sm) {
-            ForEach(Array(features.enumerated()), id: \.element.id) { index, feature in
-                card(feature)
-                    .opacity(revealed ? 1 : 0)
-                    .offset(y: revealed ? 0 : 14)
-                    .animation(
-                        reduceMotion ? nil : AppMotion.Spring.smooth.delay(Double(index) * 0.08),
-                        value: revealed
-                    )
+        ZStack(alignment: .top) {
+            ForEach(racers) { racer in
+                let rank = climbed ? racer.endRank : racer.startRank
+                row(racer, rank: rank)
+                    .offset(y: CGFloat(rank) * rowHeight)
             }
         }
-        .onAppear { revealed = true }
+        // Offsets don't contribute to intrinsic height, so the stack would
+        // otherwise measure one row tall and center — pushing the lower rows
+        // out over the copy below. Reserve the full span and pin to the top.
+        .frame(height: rowHeight * CGFloat(racers.count - 1) + rowVisibleHeight, alignment: .top)
+        .frame(maxWidth: .infinity)
+        .animation(
+            reduceMotion ? nil : .spring(response: 0.8, dampingFraction: 0.72),
+            value: climbed
+        )
+        .onAppear {
+            guard !reduceMotion else {
+                climbed = true
+                return
+            }
+            climb()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Illustration of climbing a friends leaderboard")
     }
 
-    private func card(_ feature: Feature) -> some View {
+    /// Settle into the climbed state, hold, drop back, and repeat — so the
+    /// climb still plays for anyone who lands on this screen mid-loop.
+    private func climb() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            climbed = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) {
+                climbed = false
+                climb()
+            }
+        }
+    }
+
+    private func row(_ racer: Racer, rank: Int) -> some View {
         HStack(spacing: AppSpacing.sm) {
-            Image(systemName: feature.icon)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(AppColors.accent)
-                .frame(width: 44, height: 44)
-                .background(
-                    RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                        .fill(AppColors.accent.opacity(0.14))
+            Text("\(rank + 1)")
+                .appText(.headline)
+                .monospacedDigit()
+                .foregroundStyle(rankColor(rank))
+                .frame(width: 20)
+
+            Circle()
+                .fill(racer.isYou ? AppColors.accent.opacity(0.22) : AppColors.card2)
+                .frame(width: 34, height: 34)
+                .overlay(
+                    Circle().stroke(
+                        racer.isYou ? AppColors.accent.opacity(0.55) : AppColors.stroke,
+                        lineWidth: 1
+                    )
+                )
+                .overlay(
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(racer.isYou ? AppColors.accent : AppColors.subtext)
                 )
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(feature.title)
-                    .appText(.headline)
-                    .foregroundStyle(AppColors.text)
-                Text(feature.subtitle)
-                    .appText(.caption)
-                    .foregroundStyle(AppColors.subtext)
-                    .fixedSize(horizontal: false, vertical: true)
+            Text(racer.name)
+                .appText(.headline)
+                .foregroundStyle(racer.isYou ? AppColors.text : AppColors.subtext)
+
+            Spacer(minLength: AppSpacing.xs)
+
+            if racer.isYou && climbed {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.positive)
+                    .transition(.opacity)
             }
 
-            Spacer(minLength: 0)
+            Text(racer.hours)
+                .appText(.headline)
+                .monospacedDigit()
+                .foregroundStyle(racer.isYou ? AppColors.text : AppColors.subtext)
         }
-        .padding(AppSpacing.sm)
+        .padding(.horizontal, AppSpacing.sm)
+        .frame(height: rowVisibleHeight)
         .background(
             RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                .fill(AppColors.card)
+                .fill(racer.isYou ? AppColors.accent.opacity(0.14) : AppColors.card)
                 .overlay(
                     RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                        .stroke(AppColors.stroke, lineWidth: 1)
+                        .stroke(
+                            racer.isYou ? AppColors.accent.opacity(0.45) : AppColors.stroke,
+                            lineWidth: 1
+                        )
                 )
         )
+    }
+
+    private func rankColor(_ rank: Int) -> Color {
+        switch rank {
+        case 0: return AppColors.rankGold
+        case 1: return AppColors.rankSilver
+        case 2: return AppColors.rankBronze
+        default: return AppColors.faint
+        }
     }
 }

@@ -20,16 +20,10 @@ struct TopTracker: Identifiable, Equatable {
 /// and reads the device's own region for sharing in the user's own profile.
 enum CountryFlag {
     static let storageKey = "profile_country_code"
-    static let skippedPromptKey = "country_flag_prompt_skipped"
 
     static var storedCode: String {
         get { UserDefaults.standard.string(forKey: storageKey) ?? "" }
         set { UserDefaults.standard.set(newValue.uppercased(), forKey: storageKey) }
-    }
-
-    static var skippedPrompt: Bool {
-        get { UserDefaults.standard.bool(forKey: skippedPromptKey) }
-        set { UserDefaults.standard.set(newValue, forKey: skippedPromptKey) }
     }
 
     /// True when the user has never picked a country in the flag picker.
@@ -37,13 +31,12 @@ enum CountryFlag {
         !storedCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// Show the home-screen nudge until they pick a country or tap Not now.
+    /// Picking a country is required — the prompt shows until they do.
+    /// (Previously it could also be dismissed with "Not now", which set
+    /// `country_flag_prompt_skipped`; that key is no longer read, so users
+    /// who skipped back then are prompted once more.)
     static var needsCountryPrompt: Bool {
-        !hasChosenCountry && !skippedPrompt
-    }
-
-    static func markPromptSkipped() {
-        skippedPrompt = true
+        !hasChosenCountry
     }
 
     /// Country code used for cloud sync and the public leaderboard.

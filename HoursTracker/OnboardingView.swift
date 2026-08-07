@@ -104,10 +104,10 @@ struct OnboardingView: View {
             .tag(0)
 
             OnboardingHeroPage(
-                headline: "Built for the way you work",
-                subline: "Everything you need to log hours and stay on top of them."
+                headline: "Climb the leaderboard",
+                subline: "Every shift moves you up. See how you stack up against your friends."
             ) {
-                OnboardingFeatureCards()
+                OnboardingLeaderboardHero()
             }
             .tag(1)
 
@@ -234,6 +234,10 @@ struct OnboardingView: View {
 }
 
 // MARK: - Shared hero page layout (screens 1–2)
+//
+// Hero and copy sit together as one vertically-centered group — the copy
+// reads as a caption on the illustration rather than as a separate block
+// stranded above the button.
 
 private struct OnboardingHeroPage<Hero: View>: View {
     let headline: String
@@ -241,13 +245,11 @@ private struct OnboardingHeroPage<Hero: View>: View {
     @ViewBuilder let hero: () -> Hero
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: AppSpacing.xl) {
             Spacer(minLength: 0)
 
             hero()
                 .padding(.horizontal, AppSpacing.xl)
-
-            Spacer(minLength: 0)
 
             VStack(spacing: AppSpacing.sm) {
                 Text(headline)
@@ -262,7 +264,8 @@ private struct OnboardingHeroPage<Hero: View>: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, AppSpacing.xxl)
-            .padding(.bottom, AppSpacing.lg)
+
+            Spacer(minLength: 0)
         }
     }
 }
