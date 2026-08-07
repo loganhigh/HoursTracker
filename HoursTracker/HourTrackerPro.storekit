@@ -78,7 +78,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.loganh.HourTracker.pro.monthly",
+          "productID" : "com.loganh.HourTracker.pro.monthly.v2",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "Hour Tracker Pro — Monthly",
           "subscriptionGroupID" : "774642EA-63DE-49D4-838B-05E212B2AB10",
@@ -88,7 +88,7 @@
         {
           "adHocOffers" : [],
           "codeOffers" : [],
-          "displayPrice" : "10.99",
+          "displayPrice" : "6.99",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "6F1A0C13-2B4E-4B7E-9C5A-2E7F3D8A9B10",

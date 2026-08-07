@@ -39,7 +39,13 @@ final class PremiumManager: ObservableObject {
     static let shared = PremiumManager()
 
     /// Product identifiers, in the "hourtracker_pro" subscription group.
-    static let monthlyProductID = "com.loganh.HourTracker.pro.monthly"
+    ///
+    /// The monthly id carries a `.v2` suffix because the original
+    /// `…pro.monthly` product was deleted in App Store Connect, and Apple
+    /// reserves product ids permanently — a deleted id can never be
+    /// recreated. Do NOT "clean this up" back to the original; it will fail
+    /// to create with ENTITY_ERROR.ATTRIBUTE.INVALID.DUPLICATE.
+    static let monthlyProductID = "com.loganh.HourTracker.pro.monthly.v2"
     static let yearlyProductID = "com.loganh.HourTracker.pro.yearly"
     static let allProductIDs: Set<String> = [monthlyProductID, yearlyProductID]
 
