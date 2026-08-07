@@ -53,7 +53,7 @@ struct OnboardingLogoHero: View {
 
 // MARK: - Screen 2 hero — climbing the leaderboard
 
-/// A four-row leaderboard where "You" climbs from 4th to 2nd, on a loop.
+/// A four-row leaderboard where "You" climbs from 4th to 2nd. Plays once.
 ///
 /// Rows are absolutely positioned by rank and animate their offset, rather
 /// than being reordered inside a stack — a ForEach reorder animates
@@ -65,11 +65,14 @@ struct OnboardingLeaderboardHero: View {
     private struct Racer: Identifiable {
         let id: String
         let name: String
-        let hours: String
         let isYou: Bool
         /// Rank before and after the climb (0-indexed).
         let startRank: Int
         let endRank: Int
+        /// Hours before and after. Only "You" changes — the climb has to be
+        /// earned by the number going up, not just the row sliding.
+        let startHours: String
+        let endHours: String
     }
 
     /// Distance between row origins; `rowVisibleHeight` is the row's own
@@ -78,10 +81,14 @@ struct OnboardingLeaderboardHero: View {
     private let rowVisibleHeight: CGFloat = 50
 
     private let racers: [Racer] = [
-        Racer(id: "marcus", name: "Marcus", hours: "41.5h", isYou: false, startRank: 0, endRank: 0),
-        Racer(id: "you", name: "You", hours: "38.0h", isYou: true, startRank: 3, endRank: 1),
-        Racer(id: "dana", name: "Dana", hours: "36.2h", isYou: false, startRank: 1, endRank: 2),
-        Racer(id: "priya", name: "Priya", hours: "32.8h", isYou: false, startRank: 2, endRank: 3)
+        Racer(id: "marcus", name: "Marcus", isYou: false,
+              startRank: 0, endRank: 0, startHours: "41.5h", endHours: "41.5h"),
+        Racer(id: "you", name: "You", isYou: true,
+              startRank: 3, endRank: 1, startHours: "30.0h", endHours: "38.0h"),
+        Racer(id: "dana", name: "Dana", isYou: false,
+              startRank: 1, endRank: 2, startHours: "36.2h", endHours: "36.2h"),
+        Racer(id: "priya", name: "Priya", isYou: false,
+              startRank: 2, endRank: 3, startHours: "32.8h", endHours: "32.8h")
     ]
 
     var body: some View {
@@ -106,22 +113,14 @@ struct OnboardingLeaderboardHero: View {
                 climbed = true
                 return
             }
-            climb()
+            // Plays once. The short delay lets the screen settle first so the
+            // climb reads as a change rather than the initial state.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                climbed = true
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Illustration of climbing a friends leaderboard")
-    }
-
-    /// Settle into the climbed state, hold, drop back, and repeat — so the
-    /// climb still plays for anyone who lands on this screen mid-loop.
-    private func climb() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            climbed = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) {
-                climbed = false
-                climb()
-            }
-        }
     }
 
     private func row(_ racer: Racer, rank: Int) -> some View {
@@ -160,9 +159,10 @@ struct OnboardingLeaderboardHero: View {
                     .transition(.opacity)
             }
 
-            Text(racer.hours)
+            Text(climbed ? racer.endHours : racer.startHours)
                 .appText(.headline)
                 .monospacedDigit()
+                .contentTransition(.numericText())
                 .foregroundStyle(racer.isYou ? AppColors.text : AppColors.subtext)
         }
         .padding(.horizontal, AppSpacing.sm)
