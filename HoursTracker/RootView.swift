@@ -636,7 +636,9 @@ struct HoursHomeView: View {
         }
         .animation(.spring(response: 0.5, dampingFraction: 0.75), value: showPersonalBestBanner)
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showingAdd) {
+        // Full screen, not a sheet: adding a shift is a task of its own, not
+        // a panel over Home.
+        .fullScreenCover(isPresented: $showingAdd) {
             AddShiftEntryView(store: store)
         }
         .sheet(item: $editingEntry) { entry in

@@ -51,6 +51,13 @@ final class PremiumManager: ObservableObject {
     @Published private(set) var isPurchasing = false
     /// Loaded storefront products, in monthly-then-yearly order.
     @Published private(set) var products: [Product] = []
+    /// True while the storefront request is in flight. The paywall needs to
+    /// tell "still loading" apart from "came back with nothing" — otherwise
+    /// an empty result spins forever, which is what happens whenever the
+    /// products aren't live in App Store Connect yet.
+    @Published private(set) var isLoadingProducts = false
+    /// True once a load finished without returning any product.
+    @Published private(set) var productsUnavailable = false
     /// Details of the active subscription, when Pro is active and the
     /// renewal date could be resolved.
     @Published private(set) var activeSubscription: ActiveSubscriptionInfo?
@@ -92,12 +99,19 @@ final class PremiumManager: ObservableObject {
     /// Loads the monthly + yearly products from the storefront (or the
     /// local `.storekit` configuration in DEBUG/Simulator runs).
     func loadProducts() async {
-        guard let loaded = try? await Product.products(for: Self.allProductIDs) else { return }
-        let ordered = [Self.monthlyProductID, Self.yearlyProductID].compactMap { id in
-            loaded.first { $0.id == id }
+        isLoadingProducts = true
+        defer { isLoadingProducts = false }
+        do {
+            let loaded = try await Product.products(for: Self.allProductIDs)
+            let ordered = [Self.monthlyProductID, Self.yearlyProductID].compactMap { id in
+                loaded.first { $0.id == id }
+            }
+            products = ordered
+            priceString = ordered.first?.displayPrice
+            productsUnavailable = ordered.isEmpty
+        } catch {
+            productsUnavailable = true
         }
-        products = ordered
-        priceString = ordered.first?.displayPrice
     }
 
     /// Re-derives `isPremium` / `activeSubscription` from current entitlements.

@@ -32,7 +32,10 @@ struct HistoryTabView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: AppSpacing.sm, pinnedViews: [.sectionHeaders]) {
+            // No `pinnedViews`: the year should sit with its own cheques and
+            // scroll away with them, not stick to the top and trail the user
+            // down through later years.
+            LazyVStack(spacing: AppSpacing.md) {
                 if store.entries.isEmpty {
                     AppEmptyState(
                         icon: "calendar",
@@ -41,13 +44,17 @@ struct HistoryTabView: View {
                     )
                     .padding(.top, AppSpacing.xxl)
                 } else {
+                    // Each year is its own card titled with the year, so the
+                    // year label travels with its cheques instead of pinning
+                    // to the top and trailing the user into later years.
                     ForEach(yearGroups) { group in
-                        Section {
-                            ForEach(group.rows) { row in
-                                card(for: row)
+                        ChequeYearCard(year: group.year) {
+                            ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
+                                if index > 0 {
+                                    Divider().overlay(AppColors.stroke)
+                                }
+                                tableRow(for: row, index: index)
                             }
-                        } header: {
-                            yearHeader(group.year)
                         }
                     }
                 }
@@ -64,20 +71,13 @@ struct HistoryTabView: View {
 
     // MARK: - Rows
 
-    private func yearHeader(_ year: Int) -> some View {
-        SectionEyebrow(String(year))
-            .frame(maxWidth: .infinity)
-            .padding(.top, AppSpacing.sm)
-            .padding(.bottom, AppSpacing.xxs)
-            .background(AppColors.bg)
-    }
-
-    private func card(for row: ChequeRow) -> some View {
-        ChequePreviewCard(
+    private func tableRow(for row: ChequeRow, index: Int) -> some View {
+        ChequeTableRow(
+            number: row.ordinal,
             title: row.cycle.workRangeText(),
-            caption: caption(for: row),
-            hours: cycleHours(row.cycle),
-            isCurrent: row.isCurrent
+            subtitle: subtitle(for: row),
+            status: status(for: row),
+            index: index
         ) {
             PayCycleDetailView(
                 store: store,
@@ -88,10 +88,18 @@ struct HistoryTabView: View {
         }
     }
 
-    private func caption(for row: ChequeRow) -> String {
-        let label = "\(Self.ordinalText(row.ordinal)) Cheque"
-        if row.isCurrent { return "\(label) · In progress" }
-        return "\(label) · \(shiftsCaption(for: PayCycleEngine.entries(store.entries, in: row.cycle)))"
+    /// Shift count and hours — the detail the table's removed columns used
+    /// to carry, folded under the cheque's date range.
+    private func subtitle(for row: ChequeRow) -> String {
+        let entries = PayCycleEngine.entries(store.entries, in: row.cycle)
+        return "\(shiftsCaption(for: entries)) · \(AppTheme.Format.hours(cycleHours(row.cycle)))"
+    }
+
+    /// The live cheque is In Progress; a closed one is Pending until its
+    /// payday passes, then Paid.
+    private func status(for row: ChequeRow) -> ChequeStatus {
+        if row.isCurrent { return .inProgress }
+        return row.cycle.payday <= Date() ? .paid : .pending
     }
 
     // MARK: - Grouping

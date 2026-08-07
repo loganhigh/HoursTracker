@@ -127,10 +127,12 @@ struct PremiumUpgradeView: View {
 
     private var planPicker: some View {
         VStack(spacing: AppSpacing.xs) {
-            if premium.products.isEmpty {
+            if premium.isLoadingProducts {
                 ProgressView()
                     .tint(AppColors.accent)
                     .padding(.vertical, AppSpacing.md)
+            } else if premium.products.isEmpty {
+                plansUnavailableNote
             } else {
                 ForEach(premium.products, id: \.id) { product in
                     PremiumPlanCard(
@@ -146,6 +148,44 @@ struct PremiumUpgradeView: View {
                 }
             }
         }
+    }
+
+    /// Shown when the storefront returned no products — App Store Connect
+    /// hasn't approved them yet, the device is offline, or purchases are
+    /// restricted. Previously this state rendered an endless spinner.
+    private var plansUnavailableNote: some View {
+        VStack(spacing: AppSpacing.sm) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+
+            Text("Plans aren't available right now")
+                .appText(.headline)
+                .foregroundStyle(AppColors.text)
+                .multilineTextAlignment(.center)
+
+            Text("Check your connection and try again. If you already subscribed, tap Restore Purchases below.")
+                .appText(.caption)
+                .foregroundStyle(AppColors.subtext)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button("Try Again") {
+                Haptics.lightTap()
+                Task { await premium.loadProducts() }
+            }
+            .buttonStyle(SecondaryButtonStyle())
+        }
+        .frame(maxWidth: .infinity)
+        .padding(AppSpacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                .fill(AppColors.card)
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                        .stroke(AppColors.stroke, lineWidth: 1)
+                )
+        )
     }
 
     /// Computed (never hardcoded) savings badge for the yearly plan, derived

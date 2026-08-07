@@ -125,7 +125,8 @@ struct AppTabView: View {
                 tabRouter.selection = .home
             }
         }
-        .sheet(isPresented: $showingAddShift) {
+        // Full screen, not a sheet — matches Home's Add Shift button.
+        .fullScreenCover(isPresented: $showingAddShift) {
             AddShiftEntryView(store: store)
         }
         // Presented only by an incoming `join-crew` deep link (below) —
