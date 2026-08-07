@@ -6,5 +6,6 @@ struct HoursTrackerWidgetBundle: WidgetBundle {
     var body: some Widget {
         HoursTrackerWidget()
         HoursTrackerLockScreenWidget()
+        HoursTrackerWidgetLiveActivity()
     }
 }

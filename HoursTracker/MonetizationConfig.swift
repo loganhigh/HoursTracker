@@ -1,24 +1,18 @@
 import Foundation
 
-/// Central config for monetization (RevenueCat + AdMob).
+/// Central config for monetization (StoreKit 2 "Hour Tracker Pro" + AdMob).
 ///
-/// IMPORTANT — replace the placeholder values before shipping a release build:
-///  1. `revenueCatAPIKey` — your RevenueCat **public** SDK key.
-///  2. `bannerUnitID` (release) — your real AdMob banner unit ID.
-///  3. AdMob **App ID** goes in `Info.plist` under `GADApplicationIdentifier`.
+/// IMPORTANT — replace the placeholder value before shipping a release build:
+///  1. `bannerUnitID` (release) — your real AdMob banner unit ID.
+///  2. AdMob **App ID** goes in `Info.plist` under `GADApplicationIdentifier`.
 ///
 /// The DEBUG values use Google's official **test** IDs, which are safe to ship
 /// in development builds and always return a test ad.
+///
+/// Subscription product IDs (`com.loganh.HourTracker.pro.monthly` /
+/// `.yearly`) live on `PremiumManager` alongside the StoreKit 2 code that
+/// uses them — see `PremiumManager.monthlyProductID` / `.yearlyProductID`.
 enum MonetizationConfig {
-
-    // MARK: RevenueCat
-    /// Public SDK API key from the RevenueCat dashboard (Project → API keys).
-    /// Leave as-is until you create the project; the app still builds/runs and
-    /// simply treats everyone as non-Pro until a real key + product exist.
-    static let revenueCatAPIKey = "REVENUECAT_PUBLIC_API_KEY"
-
-    /// Entitlement identifier configured in RevenueCat that represents Pro.
-    static let proEntitlementID = "pro"
 
     // MARK: AdMob
     /// Banner ad unit ID. DEBUG uses Google's official test unit (always fills

@@ -44,6 +44,13 @@ struct RemoteGamificationAnchors {
 /// - Persistence: All data (entries, settings) is saved to UserDefaults and persists indefinitely
 ///   until the app is uninstalled. No automatic expiration or deletion.
 final class HoursStore: ObservableObject {
+    /// Weak reference to the process's single live instance — constructed
+    /// exactly once in `HoursTrackerApp.init()`. Lets code outside the view
+    /// hierarchy (App Intents, run via `openAppWhenRun`) reach the same
+    /// store instead of standing up a second instance with its own sync
+    /// listeners.
+    static weak var current: HoursStore?
+
     @Published var entries: [WorkEntry] = [] {
         didSet {
             weekEntriesCache = nil
@@ -98,6 +105,7 @@ final class HoursStore: ObservableObject {
     private let networkMonitor = NetworkMonitor.shared
 
     init() {
+        Self.current = self
         AppLogger.lifecycle.info("HoursStore init (main thread: \(Thread.isMainThread))")
         initializeYearlyResetDefaultIfNeeded()
 

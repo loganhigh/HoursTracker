@@ -22,6 +22,7 @@ struct HoursTrackerApp: App {
     @StateObject private var startupCoordinator: StartupCoordinator
     @StateObject private var sessionManager: AppSessionManager
     @StateObject private var localization: LocalizationManager
+    @StateObject private var liveShiftManager: LiveShiftManager
 
     init() {
         if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
@@ -41,6 +42,7 @@ struct HoursTrackerApp: App {
         _startupCoordinator = StateObject(wrappedValue: coordinator)
         _sessionManager = StateObject(wrappedValue: AppSessionManager(store: store, startupCoordinator: coordinator))
         _localization = StateObject(wrappedValue: LocalizationManager.shared)
+        _liveShiftManager = StateObject(wrappedValue: LiveShiftManager.shared)
 
         store.configureCloudSync(authService: AuthService.shared)
         PushNotificationService.shared.configureIfNeeded()
@@ -70,6 +72,7 @@ struct HoursTrackerApp: App {
                 .environmentObject(sessionManager)
                 .environmentObject(localization)
                 .environmentObject(PremiumManager.shared)
+                .environmentObject(liveShiftManager)
                 .adaptiveTheme(prestige: store.gamificationProfile.prestige)
                 // Appearance: user-selectable (Settings → Appearance). `nil`
                 // follows the system scheme; tokens are scheme-dynamic so no

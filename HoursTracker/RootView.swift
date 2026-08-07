@@ -582,7 +582,7 @@ struct HoursHomeView: View {
         .animation(.spring(response: 0.5, dampingFraction: 0.75), value: showPersonalBestBanner)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingAdd) {
-            AddShiftWizardView(store: store)
+            AddShiftEntryView(store: store)
         }
         .sheet(item: $editingEntry) { entry in
             EntryEditorView(store: store, mode: .edit(entry))
