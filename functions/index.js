@@ -614,13 +614,45 @@ async function refreshAllUsersStats(db) {
   }
 }
 
-function buildAdminUserRow(uid, userData, profileData) {
+/**
+ * Every Auth user, paging past the 1000-per-call cap. The admin list joins
+ * against this for email and signup/last-seen timestamps, so a single
+ * un-paged call would silently blank those fields for everyone past the
+ * first page once the user base outgrows it.
+ */
+async function listAllAuthUsers() {
+  const all = [];
+  let pageToken;
+  // Safety stop so a malformed page token can never spin forever; 50 pages is
+  // 50k accounts, far beyond where this screen stays usable anyway.
+  for (let page = 0; page < 50; page += 1) {
+    const result = await auth.listUsers(1000, pageToken);
+    all.push(...result.users);
+    pageToken = result.pageToken;
+    if (!pageToken) break;
+  }
+  return all;
+}
+
+function buildAdminUserRow(uid, userData, profileData, authData) {
   const u = userData || {};
   const p = profileData || {};
+  const a = authData || {};
   const hasPublicProfile = Object.keys(p).length > 0;
+  const createdAt = Date.parse(a.metadata?.creationTime || "");
+  const lastSignInAt = Date.parse(a.metadata?.lastSignInTime || "");
   return {
     uid,
     displayName: p.displayName || u.displayName || "",
+    // Support/identification fields. friendCode is mirrored onto publicProfiles
+    // by the recompute, but fall back to the users doc for anyone who hasn't
+    // had a recompute since their code was stamped.
+    friendCode: String(p.friendCode || u.friendCode || "").toUpperCase(),
+    email: a.email || "",
+    // Auth timestamps are RFC-1123 strings; ship epoch millis so the client
+    // formats in the viewer's locale. NaN (missing/unparseable) becomes null.
+    createdAt: Number.isFinite(createdAt) ? createdAt : null,
+    lastSignInAt: Number.isFinite(lastSignInAt) ? lastSignInAt : null,
     level: Number(p.level) || Number(u.level) || 1,
     prestige: Number(p.prestige) || Number(u.prestige) || 0,
     totalHours:
@@ -1443,29 +1475,35 @@ exports.adminListUsers = onCall(
   async (request) => {
     assertAdmin(request);
 
-    const [usersSnap, profilesSnap, authResult] = await Promise.all([
+    const [usersSnap, profilesSnap, authUsers] = await Promise.all([
       db.collection("users").get(),
       db.collection("publicProfiles").get(),
-      auth.listUsers(1000),
+      listAllAuthUsers(),
     ]);
 
     const profileByUid = new Map(
       profilesSnap.docs.map((doc) => [doc.id, doc.data() || {}])
     );
+    const authByUid = new Map(authUsers.map((user) => [user.uid, user]));
     const firestoreUids = new Set(usersSnap.docs.map((doc) => doc.id));
 
     const rows = usersSnap.docs.map((doc) =>
-      buildAdminUserRow(doc.id, doc.data(), profileByUid.get(doc.id))
+      buildAdminUserRow(
+        doc.id,
+        doc.data(),
+        profileByUid.get(doc.id),
+        authByUid.get(doc.id)
+      )
     );
 
-    for (const authUser of authResult.users) {
+    for (const authUser of authUsers) {
       if (firestoreUids.has(authUser.uid)) continue;
       const email = authUser.email || "";
       const fallbackName = email.includes("@") ? email.split("@")[0] : "Worker";
       rows.push(
         buildAdminUserRow(authUser.uid, {
           displayName: authUser.displayName || fallbackName,
-        }, null)
+        }, null, authUser)
       );
     }
 
@@ -1475,7 +1513,7 @@ exports.adminListUsers = onCall(
       ok: true,
       users: rows,
       firestoreCount: usersSnap.size,
-      authCount: authResult.users.length,
+      authCount: authUsers.length,
       publicProfileCount: profilesSnap.size,
     };
   }

@@ -5,6 +5,10 @@ import FirebaseFunctions
 private struct AdminUser: Identifiable, Equatable {
     let uid: String
     let displayName: String
+    var friendCode: String
+    var email: String
+    var createdAt: Date?
+    var lastSignInAt: Date?
     var level: Int
     var prestige: Int
     let totalHours: Double
@@ -20,6 +24,10 @@ private struct AdminUser: Identifiable, Equatable {
     var hasFloor: Bool { (adminFloorLevel ?? 0) > 0 || (adminFloorPrestige ?? 0) > 0 }
     var hasAdminTitle: Bool { !adminEquippedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var hasCountryFlag: Bool { CountryFlag.emoji(for: countryCode) != nil }
+
+    /// A code is only stamped on the user's first authenticated app launch, so
+    /// accounts that signed up but never opened Friends legitimately have none.
+    var friendCodeDisplay: String { friendCode.isEmpty ? "—" : friendCode }
 }
 
 /// Admin-only console: list every user and set a floor on their level /
@@ -65,7 +73,15 @@ struct AdminPanelView: View {
     private var filteredUsers: [AdminUser] {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !q.isEmpty else { return users }
-        return users.filter { $0.displayName.lowercased().contains(q) || $0.uid.lowercased().contains(q) }
+        // Friend codes get written down and read back with separators ("TH-4829",
+        // "th 4829"), so match them against a stripped form of the query.
+        let codeQuery = q.filter { $0.isLetter || $0.isNumber }
+        return users.filter { user in
+            user.displayName.lowercased().contains(q)
+                || user.uid.lowercased().contains(q)
+                || user.email.lowercased().contains(q)
+                || (!codeQuery.isEmpty && user.friendCode.lowercased().contains(codeQuery))
+        }
     }
 
     var body: some View {
@@ -248,7 +264,7 @@ struct AdminPanelView: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
-                .searchable(text: $search, prompt: "Search name or UID")
+                .searchable(text: $search, prompt: "Search name, friend code, email, or UID")
                 .refreshable { await loadUsers() }
             }
         }
@@ -274,9 +290,15 @@ struct AdminPanelView: View {
                     Text("Prestige \(user.prestige)")
                     Text("•")
                     Text(String(format: "%.0fh", user.totalHours))
+                    if !user.friendCode.isEmpty {
+                        Text("•")
+                        Text(user.friendCode)
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    }
                 }
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppTheme.Colors.subtext)
+                .lineLimit(1)
                 if !user.equippedTitle.isEmpty {
                     Text(user.equippedTitle)
                         .font(.system(size: 11, weight: .semibold))
@@ -465,9 +487,19 @@ private extension AdminUser {
             if let v = dict[key] as? NSNumber { return v.doubleValue }
             return 0
         }
+        // Epoch millis from the callable; absent/null for accounts Auth has no
+        // metadata for, which renders as "—" rather than a bogus 1970 date.
+        func date(_ key: String) -> Date? {
+            guard let ms = dict[key] as? NSNumber, ms.doubleValue > 0 else { return nil }
+            return Date(timeIntervalSince1970: ms.doubleValue / 1000)
+        }
         return AdminUser(
             uid: dict["uid"] as? String ?? "",
             displayName: dict["displayName"] as? String ?? "",
+            friendCode: (dict["friendCode"] as? String ?? "").uppercased(),
+            email: dict["email"] as? String ?? "",
+            createdAt: date("createdAt"),
+            lastSignInAt: date("lastSignInAt"),
             level: int("level") ?? 1,
             prestige: int("prestige") ?? 0,
             totalHours: double("totalHours"),
@@ -507,6 +539,7 @@ private struct AdminEditUserSheet: View {
     @State private var isRefreshing = false
     @State private var errorMessage: String?
     @State private var refreshedMessage: String?
+    @State private var copiedField: String?
 
     private let functions = Functions.functions(region: "us-central1")
 
@@ -564,6 +597,29 @@ private struct AdminEditUserSheet: View {
                     }
                 } header: {
                     Text(user.displayName.isEmpty ? user.uid : user.displayName)
+                }
+
+                Section {
+                    copyRow("Friend code", user.friendCodeDisplay, copyable: !user.friendCode.isEmpty)
+                    copyRow("Email", user.email.isEmpty ? "—" : user.email, copyable: !user.email.isEmpty)
+                    copyRow("UID", user.uid, copyable: !user.uid.isEmpty)
+                    HStack {
+                        Text("Signed up")
+                        Spacer()
+                        Text(Self.absoluteDate(user.createdAt))
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Text("Last signed in")
+                        Spacer()
+                        Text(Self.absoluteDate(user.lastSignInAt))
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Account")
+                } footer: {
+                    Text(accountFooterText)
+                        .foregroundStyle(copiedField != nil ? AppTheme.Colors.success : AppTheme.Colors.faint)
                 }
 
                 Section {
@@ -787,6 +843,53 @@ private struct AdminEditUserSheet: View {
         let upper = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !upper.isEmpty else { return "Not set" }
         return Locale.current.localizedString(forRegionCode: upper) ?? upper
+    }
+
+    private var accountFooterText: String {
+        if let copiedField {
+            return "Copied \(copiedField.lowercased())."
+        }
+        return "Tap a row to copy it. A blank friend code means the account signed up but hasn't opened the app while signed in yet — the code is stamped on first authenticated launch."
+    }
+
+    /// A read-only detail row that copies its value on tap. Values that aren't
+    /// present render as plain text so there's nothing to tap and copy "—".
+    @ViewBuilder
+    private func copyRow(_ label: String, _ value: String, copyable: Bool) -> some View {
+        if copyable {
+            Button {
+                UIPasteboard.general.string = value
+                Haptics.lightTap()
+                withAnimation { copiedField = label }
+            } label: {
+                HStack {
+                    Text(label)
+                        .foregroundStyle(AppTheme.Colors.text)
+                    Spacer()
+                    Text(value)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Image(systemName: copiedField == label ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(copiedField == label ? AppTheme.Colors.success : AppTheme.Colors.faint)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            HStack {
+                Text(label)
+                Spacer()
+                Text(value).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private static func absoluteDate(_ date: Date?) -> String {
+        guard let date else { return "—" }
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 
