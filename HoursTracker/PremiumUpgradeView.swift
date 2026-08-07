@@ -99,20 +99,26 @@ struct PremiumUpgradeView: View {
         .padding(.top, AppSpacing.xs)
     }
 
+    /// Stacked and centered rather than icon-left: with the icon in the same
+    /// row the copy is pushed off-center, and long subtitles would collide
+    /// with it if the text were centered against the card instead.
     private func benefitRow(_ benefit: (icon: String, title: String, subtitle: String)) -> some View {
-        HStack(spacing: AppSpacing.sm) {
+        VStack(spacing: AppSpacing.xs) {
             SettingsIconSquare(icon: benefit.icon)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(spacing: 2) {
                 Text(benefit.title)
                     .appText(.headline)
                     .foregroundStyle(AppColors.text)
+                    .multilineTextAlignment(.center)
                 Text(benefit.subtitle)
                     .appText(.caption)
                     .foregroundStyle(AppColors.subtext)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
         }
-        .padding(AppSpacing.sm)
+        .frame(maxWidth: .infinity)
+        .padding(AppSpacing.md)
         .background(
             RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
                 .fill(AppColors.card)
