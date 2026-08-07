@@ -78,3 +78,6 @@ firepit-log.txt
 
 # XP shadow-migration health report history (local monitoring artifact)
 scripts/shadow-health/
+
+# UID-merge Firestore backups (contain user PII — never commit)
+functions/scripts/merge-backups/
