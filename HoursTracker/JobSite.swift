@@ -33,6 +33,9 @@ struct JobSite: Identifiable, Codable, Equatable, Hashable {
     static let nameLimit = 120
     static let detailLimit = 200
 
+    /// Saved sites allowed without Hour Tracker Pro. Pro is unlimited.
+    static let freeLimit = 2
+
     init(
         id: String = UUID().uuidString,
         name: String,

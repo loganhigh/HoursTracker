@@ -65,6 +65,9 @@ final class HoursStore: ObservableObject {
     /// Saved locations / jobs offered by the Add Shift wizard. Local-only
     /// (never pushed to Firestore) — see `saveJobSites()`.
     @Published var jobSites: [JobSite] = []
+    /// Saved shift patterns offered by the Add Shift wizard. Local-only, and
+    /// Pro-gated at the UI layer — see `ShiftTemplatesSettingsView`.
+    @Published var shiftTemplates: [ShiftTemplate] = []
     @Published var gamificationProfile: GamificationProfile = .defaultProfile
     @Published var gamificationEventMessage: String?
     /// Fires only when a *user action* (logging/editing a shift) earned XP —
@@ -96,6 +99,7 @@ final class HoursStore: ObservableObject {
     private let certificatesKey = "certificate_entries_v2"
     private let awardsKey = "award_entries_v1"
     private let jobSitesKey = "job_sites_v1"
+    private let shiftTemplatesKey = "shift_templates_v1"
     private let yearArchivesKey = "year_archives_v1"
     private let gamificationKey = "gamification_profile_v1"
     private let autoYearlyResetKey = "auto_yearly_reset_enabled"
@@ -135,6 +139,7 @@ final class HoursStore: ObservableObject {
         // Saved job sites are small and local-only, so read them here rather
         // than threading them through loadAsync's remote-merge path.
         loadJobSites()
+        loadShiftTemplates()
         // NOTE: the legacy admin-level/prestige floor is deliberately NOT
         // restored from UserDefaults anymore. Nothing reads those overrides for
         // display or publishing — the server-computed level is the single
@@ -974,6 +979,14 @@ final class HoursStore: ObservableObject {
         }
     }
 
+    /// False when another saved site would exceed the free allowance.
+    /// Users already over the limit (from before it existed, or after
+    /// letting Pro lapse) keep every site they have — this only blocks
+    /// adding more.
+    func canAddJobSite(isPro: Bool) -> Bool {
+        isPro || jobSites.count < JobSite.freeLimit
+    }
+
     /// Adds a site, reusing an existing one when the name already exists
     /// (case-insensitive) so the list can't fill up with duplicates.
     @discardableResult
@@ -1022,6 +1035,73 @@ final class HoursStore: ObservableObject {
         dec.dateDecodingStrategy = .iso8601
         if let sites = try? dec.decode([JobSite].self, from: data) {
             jobSites = sites
+        }
+    }
+
+    // MARK: - Shift templates (Hour Tracker Pro)
+    //
+    // Local-only, same as job sites: a template is a convenience for filling
+    // the Add Shift wizard, never part of an entry, so nothing here reaches
+    // Firestore or rewrites logged shifts.
+
+    /// Templates ordered for pickers: most recently used first, never-used last.
+    var shiftTemplatesByRecency: [ShiftTemplate] {
+        shiftTemplates.sorted { lhs, rhs in
+            switch (lhs.lastUsedAt, rhs.lastUsedAt) {
+            case let (l?, r?): return l > r
+            case (nil, _?): return false
+            case (_?, nil): return true
+            case (nil, nil): return lhs.createdAt > rhs.createdAt
+            }
+        }
+    }
+
+    /// Adds a template, reusing an existing one when the name already exists
+    /// (case-insensitive) so the list can't fill up with duplicates.
+    @discardableResult
+    func addShiftTemplate(_ template: ShiftTemplate) -> ShiftTemplate {
+        let trimmed = template.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return template }
+        if let existing = shiftTemplates.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+            return existing
+        }
+        shiftTemplates.append(template)
+        saveShiftTemplates()
+        return template
+    }
+
+    func updateShiftTemplate(_ template: ShiftTemplate) {
+        guard let idx = shiftTemplates.firstIndex(where: { $0.id == template.id }) else { return }
+        guard !template.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        shiftTemplates[idx] = template
+        saveShiftTemplates()
+    }
+
+    func deleteShiftTemplate(_ template: ShiftTemplate) {
+        shiftTemplates.removeAll { $0.id == template.id }
+        saveShiftTemplates()
+    }
+
+    /// Stamps a template as just-used so it floats to the top of the picker.
+    func markShiftTemplateUsed(id: String, at date: Date = Date()) {
+        guard let idx = shiftTemplates.firstIndex(where: { $0.id == id }) else { return }
+        shiftTemplates[idx].lastUsedAt = date
+        saveShiftTemplates()
+    }
+
+    private func saveShiftTemplates() {
+        let enc = JSONEncoder()
+        enc.dateEncodingStrategy = .iso8601
+        guard let data = try? enc.encode(shiftTemplates) else { return }
+        UserDefaults.standard.set(data, forKey: shiftTemplatesKey)
+    }
+
+    private func loadShiftTemplates() {
+        guard let data = UserDefaults.standard.data(forKey: shiftTemplatesKey) else { return }
+        let dec = JSONDecoder()
+        dec.dateDecodingStrategy = .iso8601
+        if let templates = try? dec.decode([ShiftTemplate].self, from: data) {
+            shiftTemplates = templates
         }
     }
 

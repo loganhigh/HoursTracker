@@ -73,7 +73,7 @@
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "Live shift tracking, Live Activities, Siri Shortcuts, and professional PDF reports — billed monthly.",
+              "description" : "Live shift tracking, Live Activities, shift templates, unlimited locations, and professional PDF reports — billed monthly.",
               "displayName" : "Hour Tracker Pro — Monthly",
               "locale" : "en_US"
             }
@@ -95,7 +95,7 @@
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "Live shift tracking, Live Activities, Siri Shortcuts, and professional PDF reports — billed yearly, best value.",
+              "description" : "Live shift tracking, Live Activities, shift templates, unlimited locations, and professional PDF reports — billed yearly, best value.",
               "displayName" : "Hour Tracker Pro — Yearly",
               "locale" : "en_US"
             }

@@ -253,10 +253,30 @@ struct SettingsView: View {
                                 : "\(store.jobSites.count) saved"
                         )
                     }
+
+                    NavigationLink {
+                        ShiftTemplatesSettingsView(store: store)
+                    } label: {
+                        HStack(spacing: AppSpacing.sm) {
+                            SettingsRowLabel(
+                                icon: "square.on.square",
+                                title: "Shift Templates",
+                                subtitle: store.shiftTemplates.isEmpty
+                                    ? "Log your usual shift in one tap"
+                                    : "\(store.shiftTemplates.count) saved"
+                            )
+                            Spacer(minLength: AppSpacing.xs)
+                            if !premium.isPremium {
+                                Image(systemName: "crown.fill")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(AppColors.accent)
+                            }
+                        }
+                    }
                 } header: {
-                    SectionEyebrow("Locations")
+                    SectionEyebrow("Locations & Templates")
                 } footer: {
-                    Text("Saved locations and jobs appear when you add a shift. Stored on this device.")
+                    Text("Saved locations and templates appear when you add a shift. Stored on this device.")
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
                 }
@@ -298,7 +318,7 @@ struct SettingsView: View {
                                 title: "Hour Tracker Pro",
                                 subtitle: premium.isPremium
                                     ? (premium.activeSubscription?.settingsStatusLine ?? "Active")
-                                    : "Live tracking, Dynamic Island, Siri, PDF reports"
+                                    : "Live tracking, Dynamic Island, templates, reports"
                             )
                             Spacer(minLength: AppSpacing.xs)
                             SettingsChevron()

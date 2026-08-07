@@ -22,10 +22,15 @@ struct AddShiftLocationPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    @ObservedObject private var premium = PremiumManager.shared
+
     @State private var query: String = ""
     @State private var isAddingNew: Bool = false
     @State private var draft = JobSiteDraft()
+    @State private var showingPaywall = false
     @FocusState private var nameFocused: Bool
+
+    private var canAddMore: Bool { store.canAddJobSite(isPro: premium.isPremium) }
 
     private var ordered: [JobSite] { store.jobSitesByRecency }
     private var filtered: [JobSite] { ordered.filter { $0.matches(query) } }
@@ -74,7 +79,10 @@ struct AddShiftLocationPickerSheet: View {
             }
         }
         .onAppear {
-            if ordered.isEmpty && selectedSiteID == nil { isAddingNew = true }
+            if ordered.isEmpty && selectedSiteID == nil && canAddMore { isAddingNew = true }
+        }
+        .sheet(isPresented: $showingPaywall) {
+            PremiumUpgradeView()
         }
     }
 
@@ -159,6 +167,10 @@ struct AddShiftLocationPickerSheet: View {
             AddShiftPanel {
                 Button {
                     Haptics.lightTap()
+                    guard canAddMore else {
+                        showingPaywall = true
+                        return
+                    }
                     withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
                         isAddingNew.toggle()
                     }

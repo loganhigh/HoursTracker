@@ -11,11 +11,15 @@ struct PremiumUpgradeView: View {
     @State private var message: String?
     @State private var isError = false
 
+    // Siri & Shortcuts is deliberately absent: the feature ships and works,
+    // it just doesn't sell a subscription — people buy outcomes, not input
+    // methods. Every row here is a job the free tier can't finish.
     private let benefits: [(icon: String, title: String, subtitle: String)] = [
         ("clock.badge.checkmark.fill", "Live Shift Tracking", "Clock in and out with a running timer."),
-        ("dynamicisland.fill", "Live Activities & Dynamic Island", "See your running shift on the Lock Screen and Dynamic Island."),
-        ("mic.fill", "Siri & Shortcuts", "Log a shift or check your hours just by asking."),
-        ("doc.richtext.fill", "Professional PDF Reports", "Export polished reports with your company branding.")
+        ("lock.iphone", "Live Activities & Dynamic Island", "Watch your shift run on the Lock Screen — no need to open the app."),
+        ("square.on.square", "Shift Templates", "Save the shift you always work and log it in one tap."),
+        ("doc.richtext.fill", "Professional PDF Reports", "Send polished, branded hours straight to payroll or your foreman."),
+        ("mappin.and.ellipse", "Unlimited Locations", "Free saves \(JobSite.freeLimit) job sites. Pro saves every yard, plant, and site.")
     ]
 
     var body: some View {

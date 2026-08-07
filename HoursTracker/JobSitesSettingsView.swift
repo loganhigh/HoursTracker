@@ -8,10 +8,14 @@ import SwiftUI
 
 struct JobSitesSettingsView: View {
     @ObservedObject var store: HoursStore
+    @ObservedObject private var premium = PremiumManager.shared
 
     @State private var editingSite: JobSite?
     @State private var isAddingNew = false
     @State private var pendingDelete: JobSite?
+    @State private var showingPaywall = false
+
+    private var canAddMore: Bool { store.canAddJobSite(isPro: premium.isPremium) }
 
     var body: some View {
         ZStack {
@@ -48,14 +52,29 @@ struct JobSitesSettingsView: View {
                     }
 
                     Button {
+                        guard canAddMore else {
+                            Haptics.lightTap()
+                            showingPaywall = true
+                            return
+                        }
                         isAddingNew = true
                     } label: {
-                        SettingsRowLabel(icon: "plus", title: "Add Location / Job", titleTint: AppColors.accent)
+                        HStack(spacing: AppSpacing.sm) {
+                            SettingsRowLabel(icon: "plus", title: "Add Location / Job", titleTint: AppColors.accent)
+                            Spacer(minLength: AppSpacing.xs)
+                            if !canAddMore {
+                                Image(systemName: "crown.fill")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(AppColors.accent)
+                            }
+                        }
                     }
                 } header: {
                     SectionEyebrow("Job Sites")
                 } footer: {
-                    Text("Saved on this device. Picking one when you add a shift fills in its name — deleting a site never changes shifts you've already logged.")
+                    Text(canAddMore
+                         ? "Saved on this device. Picking one when you add a shift fills in its name — deleting a site never changes shifts you've already logged."
+                         : "Free saves \(JobSite.freeLimit) locations. Hour Tracker Pro saves as many as you work.")
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
                 }
@@ -73,6 +92,9 @@ struct JobSitesSettingsView: View {
         }
         .sheet(isPresented: $isAddingNew) {
             JobSiteEditorSheet(store: store, existing: nil)
+        }
+        .sheet(isPresented: $showingPaywall) {
+            PremiumUpgradeView()
         }
         .alert("Delete this location?", isPresented: Binding(
             get: { pendingDelete != nil },

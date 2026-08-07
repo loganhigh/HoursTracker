@@ -205,6 +205,10 @@ struct AddShiftWizardView: View {
     private var whenStep: some View {
         entryModeToggle
 
+        if shiftKind == .work, !store.shiftTemplates.isEmpty {
+            templateStrip
+        }
+
         AddShiftPanel {
             AddShiftFieldRow(
                 icon: "calendar",
@@ -315,6 +319,86 @@ struct AddShiftWizardView: View {
                 .fill(AppColors.card)
                 .overlay(Capsule().stroke(AppColors.stroke, lineWidth: 1))
         )
+    }
+
+    /// Saved templates as one-tap chips. Applying one fills times, break, and
+    /// location — the whole point of the feature is that the usual shift takes
+    /// a single tap instead of four pickers.
+    private var templateStrip: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.xs) {
+            EntrySectionLabel("Templates")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: AppSpacing.xs) {
+                    ForEach(store.shiftTemplatesByRecency) { template in
+                        Button {
+                            apply(template)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(template.name)
+                                    .appText(.headline)
+                                    .foregroundStyle(AppColors.text)
+                                    .lineLimit(1)
+                                Text(template.timeRangeText)
+                                    .appText(.caption)
+                                    .monospacedDigit()
+                                    .foregroundStyle(AppColors.subtext)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, AppSpacing.sm)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                                    .fill(matchingTemplateID == template.id
+                                          ? AppColors.accent.opacity(0.16)
+                                          : AppColors.card)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                                            .stroke(
+                                                matchingTemplateID == template.id
+                                                    ? AppColors.accent.opacity(0.5)
+                                                    : AppColors.stroke,
+                                                lineWidth: 1
+                                            )
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+        }
+    }
+
+    /// Fills the form from a template. The date is left alone — a template
+    /// describes a shift's shape, not which day it happened.
+    private func apply(_ template: ShiftTemplate) {
+        Haptics.lightTap()
+        withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
+            start = template.date(template.startMinutes, on: date)
+            end = template.date(template.endMinutes, on: date)
+            breakMinutes = template.breakMinutes
+            showCustomBreak = template.breakMinutes > 0 && ![15, 30, 45, 60].contains(template.breakMinutes)
+            if !template.locationName.isEmpty {
+                locationLabel = template.locationName
+                selectedSiteID = store.jobSites.first {
+                    $0.name.caseInsensitiveCompare(template.locationName) == .orderedSame
+                }?.id
+            }
+            expandedField = nil
+        }
+        store.markShiftTemplateUsed(id: template.id)
+    }
+
+    /// The template the form currently matches, if any. Derived rather than
+    /// stored: setting an "applied" flag inside `apply` would be cleared by
+    /// the very `onChange` handlers that `apply`'s own writes trigger.
+    private var matchingTemplateID: String? {
+        let s = ShiftTemplate.minutes(from: start)
+        let e = ShiftTemplate.minutes(from: end)
+        return store.shiftTemplates.first {
+            $0.startMinutes == s && $0.endMinutes == e && $0.breakMinutes == breakMinutes
+        }?.id
     }
 
     private func inlineTimePicker(_ selection: Binding<Date>) -> some View {
