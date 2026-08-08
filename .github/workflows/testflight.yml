@@ -1,0 +1,225 @@
+name: TestFlight
+
+# Manual only. An accidental upload burns a build number and pushes a build to
+# testers, so this never fires on push — you click "Run workflow" when you mean
+# it. To ship on every merge to main instead, add a `push: branches: [main]`
+# trigger here.
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: "Build number (CFBundleVersion). Leave blank to use a UTC timestamp, which is always unique and always increasing."
+        required: false
+        type: string
+
+concurrency:
+  # Two uploads racing would fight over build numbers in App Store Connect.
+  group: testflight
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    env:
+      SCHEME: HoursTracker
+      PROJECT: HoursTracker.xcodeproj
+      TEAM_ID: "3649Y4UC9W"
+
+    steps:
+      - name: Check out the commit being shipped
+        uses: actions/checkout@v4
+
+      - name: Select the newest installed Xcode
+        run: |
+          set -euo pipefail
+          # The widget target deploys to iOS 26.2, so an older default Xcode on
+          # the runner image would fail to build it. Pick the highest installed.
+          ls /Applications | grep -i '^Xcode' || true
+          newest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using $newest"
+          sudo xcode-select -s "$newest/Contents/Developer"
+          xcodebuild -version
+
+      - name: Resolve the build number
+        id: version
+        run: |
+          set -euo pipefail
+          requested="${{ inputs.build_number }}"
+          if [ -n "$requested" ]; then
+            build="$requested"
+          else
+            # yymmddHHMM — monotonically increasing and collision-proof, which
+            # is all App Store Connect requires of CFBundleVersion.
+            build=$(date -u +%y%m%d%H%M)
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "Building with CFBundleVersion $build"
+
+      - name: Install the signing certificate
+        env:
+          DIST_CERT_P12_BASE64: ${{ secrets.DIST_CERT_P12_BASE64 }}
+          DIST_CERT_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DIST_CERT_P12_BASE64:-}" ]; then
+            echo "::error::Missing repo secret DIST_CERT_P12_BASE64 (base64 of your Apple Distribution .p12) and/or DIST_CERT_PASSWORD."
+            exit 1
+          fi
+          # A throwaway keychain scoped to this run; the runner is destroyed
+          # afterwards, but unlocking the default login keychain in CI is a
+          # habit worth not forming.
+          security create-keychain -p "${{ github.run_id }}" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "${{ github.run_id }}" build.keychain
+          security set-keychain-settings -lut 3600 build.keychain
+          # Making it the default is not enough — xcodebuild searches the
+          # keychain *search list*, and omitting this is the usual cause of
+          # "No signing certificate found" despite a successful import.
+          security list-keychains -d user -s build.keychain \
+            $(security list-keychains -d user | tr -d '"')
+
+          echo "$DIST_CERT_P12_BASE64" | base64 --decode > /tmp/dist.p12
+          security import /tmp/dist.p12 -k build.keychain \
+            -P "$DIST_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f /tmp/dist.p12
+          # Lets codesign use the key without an interactive auth prompt.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "${{ github.run_id }}" build.keychain > /dev/null
+          security find-identity -v -p codesigning build.keychain
+
+      - name: Install the App Store Connect API key
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ASC_KEY_ID:-}" ] || [ -z "${ASC_PRIVATE_KEY:-}" ]; then
+            echo "::error::Missing repo secret ASC_KEY_ID and/or ASC_PRIVATE_KEY (contents of the App Store Connect AuthKey .p8)."
+            exit 1
+          fi
+          # Xcode looks here for the key backing -allowProvisioningUpdates, and
+          # altool reads the same location for --apiKey.
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s\n' "$ASC_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+
+      - name: Resolve Swift package dependencies
+        run: |
+          set -euo pipefail
+          # Firebase and GoogleSignIn resolve here rather than inside the
+          # archive step so a registry hiccup fails with an obvious message.
+          xcodebuild -resolvePackageDependencies -project "$PROJECT" -scheme "$SCHEME"
+
+      - name: Archive
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          # The project uses automatic signing, so -allowProvisioningUpdates
+          # lets Xcode fetch/create the App Store profiles for the app and the
+          # widget extension using the API key above. CURRENT_PROJECT_VERSION is
+          # overridden on the command line so every target in the archive
+          # (app + widget) shares one CFBundleVersion, which the store requires.
+          xcodebuild archive \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/HoursTracker.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CURRENT_PROJECT_VERSION="${{ steps.version.outputs.build }}" \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="$TEAM_ID"
+
+      - name: Export the .ipa
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>teamID</key>
+            <string>${TEAM_ID}</string>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>destination</key>
+            <string>export</string>
+          </dict>
+          </plist>
+          PLIST
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/HoursTracker.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+          ls -lh "$RUNNER_TEMP/export"
+
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          ipa=$(find "$RUNNER_TEMP/export" -maxdepth 1 -name '*.ipa' | head -1)
+          if [ -z "$ipa" ]; then
+            echo "::error::Export produced no .ipa"
+            exit 1
+          fi
+          echo "Uploading $ipa"
+          # --apiKey/--apiIssuer read the .p8 installed above. Processing on
+          # App Store Connect continues for a few minutes after this returns.
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$ipa" \
+            --apiKey "$ASC_KEY_ID" \
+            --apiIssuer "$ASC_ISSUER_ID"
+
+      - name: Save the archive for debugging
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ steps.version.outputs.build }}
+          path: |
+            ${{ runner.temp }}/export/*.ipa
+            ${{ runner.temp }}/HoursTracker.xcarchive/**/*.dSYM
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: success()
+        run: |
+          {
+            echo "### Uploaded to TestFlight"
+            echo ""
+            echo "- Build: \`${{ steps.version.outputs.build }}\`"
+            echo "- Commit: \`${{ github.sha }}\`"
+            echo ""
+            echo "Processing takes a few minutes. Once it finishes you may need to"
+            echo "answer the export-compliance question in App Store Connect before"
+            echo "the build reaches testers."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tear down the keychain
+        if: always()
+        run: |
+          security delete-keychain build.keychain || true
+          rm -f ~/.appstoreconnect/private_keys/*.p8 || true
