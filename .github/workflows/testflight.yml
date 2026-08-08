@@ -1,10 +1,12 @@
 name: TestFlight
 
-# Manual only. An accidental upload burns a build number and pushes a build to
-# testers, so this never fires on push — you click "Run workflow" when you mean
-# it. To ship on every merge to main instead, add a `push: branches: [main]`
-# trigger here.
+# Every merge to main ships a build to testers, plus a manual trigger for
+# re-runs and for shipping a branch. Pushes get the timestamp build number
+# (`inputs.build_number` is empty on a push event); only the manual run can
+# pin an explicit one.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       build_number:
