@@ -80,6 +80,39 @@ function friendShiftAlertsEnabled(data) {
 }
 
 /**
+ * The author's current display name, for alerts whose stored copy is blank.
+ *
+ * Reads publicProfiles first — it is the friend-facing projection and the name
+ * friends already see — then falls back to the users doc. Returns "" when
+ * neither has one, leaving the caller to pick its own wording.
+ */
+async function resolveDisplayName(uid) {
+  try {
+    const [profileSnap, userSnap] = await Promise.all([
+      db.collection("publicProfiles").doc(uid).get(),
+      db.collection("users").doc(uid).get(),
+    ]);
+    const fromProfile = String(profileSnap.data()?.displayName || "").trim();
+    if (fromProfile) return fromProfile;
+    return String(userSnap.data()?.displayName || "").trim();
+  } catch (err) {
+    console.warn(`resolveDisplayName uid=${uid} failed:`, err?.message || err);
+    return "";
+  }
+}
+
+/**
+ * Uppercases the first character only. Activity bodies are authored to follow
+ * a name ("worked 8h today"), so they need a capital when promoted to a
+ * standalone notification body.
+ */
+function capitalizeFirst(text) {
+  const s = String(text || "").trim();
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
  * Resolve mutual friend UIDs by reading both the legacy per-user subcollection
  * and the top-level `friendships` collection, then verifying reciprocity.
  * Returns a deduplicated array of friend UIDs.
@@ -185,9 +218,19 @@ exports.notifyFriendsOnShiftLogged = onDocumentCreated(
 
     const authorUid = event.params.authorUid;
     const eventId = event.params.eventId;
-    const authorName = data.authorDisplayName || "A friend";
+    // The event carries a copy of the author's name, but it can be empty (the
+    // client writes whatever `profile_display_name` holds, which is unset until
+    // the user sets one). Falling straight through to "A friend" is what made
+    // every alert anonymous, so look the name up before giving up on it.
+    const authorName =
+      String(data.authorDisplayName || "").trim() ||
+      (await resolveDisplayName(authorUid)) ||
+      "A friend";
     const body = data.body || "logged a shift";
-    const notificationBody = `${authorName} ${body}`;
+    // Name goes in the title: on a lock screen or banner the title is the line
+    // that always renders, and "who" is the whole point of the alert.
+    const notificationTitle = `${authorName} logged a shift`;
+    const notificationBody = capitalizeFirst(body);
 
     // Idempotency: skip if we already sent notifications for this event.
     const dedupeRef = db.collection("_fcmDedup").doc(`shift_${authorUid}_${eventId}`);
@@ -224,7 +267,7 @@ exports.notifyFriendsOnShiftLogged = onDocumentCreated(
             .send({
               token,
               notification: {
-                title: "Your friend logged a shift!",
+                title: notificationTitle,
                 body: notificationBody,
               },
               data: {
