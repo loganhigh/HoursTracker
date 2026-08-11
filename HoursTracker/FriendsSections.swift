@@ -1,10 +1,73 @@
 import SwiftUI
+import CoreImage.CIFilterBuiltins
 
 // MARK: - Friends tab sections (Phase 6)
 //
 // Quiet-card building blocks for the Friends hub: the friend-code card and
 // the request / friend rows.
 // All colors come from tokens; hairline strokes, flat fills, no glows.
+
+// MARK: - Friend QR code
+
+/// Renders the deep-link QR for a friend code. Scanning it with the iPhone
+/// camera opens the app and pre-fills the Add a friend sheet with the code.
+enum FriendQRCode {
+    /// Dark modules on a white tile — QR readers need that contrast, so the
+    /// tile stays white in both themes rather than adopting card colors.
+    static func image(for code: String) -> UIImage? {
+        guard let url = FriendsService.addFriendURL(code: code) else { return nil }
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(url.absoluteString.utf8)
+        filter.correctionLevel = "M"
+        guard let output = filter.outputImage else { return nil }
+        // The generator emits ~1pt modules; scale up so the image stays sharp
+        // instead of being bilinearly blurred at display size.
+        let scaled = output.transformed(by: CGAffineTransform(scaleX: 12, y: 12))
+        guard let cgImage = CIContext().createCGImage(scaled, from: scaled.extent) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
+    }
+}
+
+/// The QR block inside the friend-code card: white tile, code QR, caption.
+struct FriendQRBlock: View {
+    let code: String
+
+    /// Generated once per code — CIFilter work doesn't belong in `body`.
+    @State private var qrImage: UIImage?
+
+    var body: some View {
+        VStack(spacing: AppSpacing.xs) {
+            if let qrImage {
+                Image(uiImage: qrImage)
+                    .resizable()
+                    .interpolation(.none)
+                    .scaledToFit()
+                    .frame(width: 132, height: 132)
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                            .fill(Color.white)
+                    )
+
+                Text("Scan to add me as a friend")
+                    .appText(.caption)
+                    .foregroundStyle(AppColors.faint)
+            }
+        }
+        .onAppear {
+            if qrImage == nil {
+                qrImage = FriendQRCode.image(for: code)
+            }
+        }
+        .onChange(of: code) { _, newCode in
+            qrImage = FriendQRCode.image(for: newCode)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Your friend QR code. Others can scan it with their camera to add you.")
+    }
+}
 
 // MARK: - Friend code card
 
@@ -44,6 +107,10 @@ struct FriendCodeCard: View {
                 Text(copyConfirmation ? "Copied to clipboard" : "Tap to copy your code")
                     .appText(.caption)
                     .foregroundStyle(copyConfirmation ? AppColors.positive : AppColors.faint)
+            }
+
+            if let code {
+                FriendQRBlock(code: code)
             }
 
             Rectangle()

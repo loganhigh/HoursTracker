@@ -159,9 +159,13 @@ private struct AppRootView: View {
         .background(AppTheme.Colors.bg.ignoresSafeArea())
         .animation(.easeInOut(duration: 0.25), value: appTutorialComplete)
         .onOpenURL { url in
-            // Crew-join links (`<scheme>://join-crew?code=XXXXXX`) share the
-            // same registered scheme as Google Sign-In's OAuth redirect —
-            // check for the crew-specific host first, then fall through.
+            // Friend-QR links (`<scheme>://add-friend?code=XXXXXX`) and
+            // crew-join links share the same registered scheme as Google
+            // Sign-In's OAuth redirect — check the app-specific hosts first,
+            // then fall through to the OAuth handler.
+            if FriendsService.handleIncomingURL(url) {
+                return
+            }
             if CrewService.handleIncomingURL(url) {
                 return
             }

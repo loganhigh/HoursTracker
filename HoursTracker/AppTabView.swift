@@ -59,6 +59,7 @@ struct AppTabView: View {
     @State private var showingSettings = false
     @AppStorage(FriendsFeature.storageKey) private var friendsEnabled = true
     @ObservedObject private var crewService = CrewService.shared
+    @ObservedObject private var friendsService = FriendsService.shared
 
     /// Intercepting selection binding: the "+" item opens the add-shift sheet
     /// instead of becoming the selected tab, and a request for a tab that isn't
@@ -135,13 +136,15 @@ struct AppTabView: View {
             SettingsView(store: store, settings: $store.paySettings)
                 .environmentObject(authService)
         }
-        .onChange(of: crewService.pendingJoinCode) { _, newValue in
-            // A `join-crew` deep link can land while Settings isn't open
-            // (e.g. the user is on Home) — present it so SettingsView's own
-            // `onAppear`/`onChange` can pick up the pending code and open
-            // the Join a Crew sheet pre-filled.
-            if newValue != nil && !showingSettings {
-                showingSettings = true
+        // Crew-join deep links are ignored while crews are paused — the
+        // Settings rows that consumed them are gone, so presenting Settings
+        // here would just strand the user on an unrelated screen.
+        .onChange(of: friendsService.pendingFriendCode) { _, newValue in
+            // A scanned friend QR lands here: bring the Friends tab forward
+            // so its view can consume the code and open the pre-filled
+            // Add a friend sheet.
+            if newValue != nil && friendsEnabled {
+                tabRouter.selection = .friends
             }
         }
     }

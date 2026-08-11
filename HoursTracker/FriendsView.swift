@@ -79,6 +79,10 @@ struct FriendsView: View {
                 Task { await friendsService.refreshFriendProfiles() }
             }
             store.syncProfileSnapshotToCloud()
+            consumePendingFriendCodeIfNeeded()
+        }
+        .onChange(of: friendsService.pendingFriendCode) { _, _ in
+            consumePendingFriendCodeIfNeeded()
         }
         .onChange(of: authService.user?.uid) { _, uid in
             if let uid {
@@ -210,10 +214,7 @@ struct FriendsView: View {
                 FriendsHeroHeader(onAddFriend: { showingAddFriend = true })
 
                 if !entries.isEmpty {
-                    PayPeriodPodiumCard(
-                        entries: entries,
-                        periodSubtitle: payCycle.workRangeText()
-                    )
+                    PayPeriodPodiumCard(entries: entries)
                 }
 
                 if let actionMessage {
@@ -326,6 +327,16 @@ struct FriendsView: View {
                 copyConfirmation = false
             }
         }
+    }
+
+    /// Consumes a scanned-QR `add-friend` deep link by opening the Add a
+    /// friend sheet with the code pre-filled. Clears the pending code
+    /// immediately so it isn't re-consumed if this view reappears.
+    private func consumePendingFriendCodeIfNeeded() {
+        guard let code = friendsService.pendingFriendCode else { return }
+        friendsService.pendingFriendCode = nil
+        codeInput = code
+        showingAddFriend = true
     }
 
     private func sendRequest() async {

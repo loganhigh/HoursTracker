@@ -128,6 +128,10 @@ final class FriendsService: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var myFriendCode: String?
+    /// Set by an `add-friend` deep link (a scanned friend QR code). The
+    /// Friends tab consumes it: opens the Add a friend sheet with the code
+    /// pre-filled.
+    @Published var pendingFriendCode: String?
 
     private let db = Firestore.firestore()
     private lazy var functions = Functions.functions(region: "us-central1")
@@ -409,6 +413,37 @@ final class FriendsService: ObservableObject {
             code.append(digits.randomElement() ?? "2")
         }
         return code
+    }
+
+    // MARK: - Friend QR deep link
+
+    /// `<scheme>://add-friend?code=XXXXXX` — what a friend-code QR encodes.
+    /// Scanning it with the iPhone camera opens the app and pre-fills the
+    /// Add a friend sheet. Reuses the app's one registered URL scheme, same
+    /// as crew invites.
+    static func addFriendURL(code: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = CrewService.deepLinkScheme
+        components.host = "add-friend"
+        components.queryItems = [URLQueryItem(name: "code", value: code)]
+        return components.url
+    }
+
+    /// Returns false for any URL it doesn't recognize so the caller falls
+    /// through to the other handlers this scheme carries.
+    @discardableResult
+    static func handleIncomingURL(_ url: URL) -> Bool {
+        guard url.host == "add-friend",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let rawCode = components.queryItems?.first(where: { $0.name == "code" })?.value,
+              !rawCode.isEmpty
+        else { return false }
+
+        let code = rawCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        Task { @MainActor in
+            FriendsService.shared.pendingFriendCode = code
+        }
+        return true
     }
 
     /// Reads the current user's doc and stamps a `friendCode` if one isn't set yet.

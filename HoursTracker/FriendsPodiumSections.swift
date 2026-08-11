@@ -39,17 +39,12 @@ struct FriendsHeroHeader: View {
 
 struct PayPeriodPodiumCard: View {
     let entries: [LeaderboardEntry]
-    /// The viewer's own cheque window, e.g. "Aug 4 – Aug 17". Shown instead of
-    /// a fixed "Mon → Sun" so a bi-weekly cycle reads as one.
-    let periodSubtitle: String
 
     private var podium: [LeaderboardEntry] { Array(entries.prefix(3)) }
     private var me: LeaderboardEntry? { entries.first(where: \.isMe) }
 
     var body: some View {
         VStack(spacing: AppSpacing.md) {
-            header
-
             HStack(alignment: .top, spacing: AppSpacing.xs) {
                 podiumSlot(index: 1)
                 podiumSlot(index: 0)
@@ -69,24 +64,6 @@ struct PayPeriodPodiumCard: View {
                         .stroke(AppColors.accent.opacity(0.25), lineWidth: 1)
                 )
         )
-    }
-
-    private var header: some View {
-        HStack(alignment: .top) {
-            Image(systemName: "trophy.fill")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(AppColors.accent)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("PAY PERIOD PODIUM")
-                    .font(.system(size: 12, weight: .heavy, design: .rounded))
-                    .foregroundStyle(AppColors.text)
-                    .tracking(0.8)
-                Text(periodSubtitle)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.faint)
-            }
-            Spacer(minLength: AppSpacing.xs)
-        }
     }
 
     private func tint(forRank rank: Int) -> Color {
