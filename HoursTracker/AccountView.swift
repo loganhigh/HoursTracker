@@ -347,12 +347,6 @@ struct AccountView: View {
 
                     AccountRowHairline()
 
-                    // Account deletion — required by App Store Review
-                    // Guideline 5.1.1(v). Confirmation flow unchanged.
-                    deleteAccountRow
-
-                    AccountRowHairline()
-
                     // Legal links continue the same list rather than sitting
                     // in their own tile pair below it. LegalLinksSection (the
                     // two-tile layout) is still what the paywall uses.
@@ -373,6 +367,14 @@ struct AccountView: View {
                         AccountNavRow(icon: "doc.text.fill", title: "Terms of Use")
                     }
                     .buttonStyle(PremiumPressStyle())
+
+                    AccountRowHairline()
+
+                    // Last row in the card: destructive actions belong at the
+                    // bottom, past everything routine. Account deletion is
+                    // required by App Store Review Guideline 5.1.1(v); the
+                    // confirmation flow is unchanged.
+                    deleteAccountRow
                 }
             } else {
                 AccountRowsCard {

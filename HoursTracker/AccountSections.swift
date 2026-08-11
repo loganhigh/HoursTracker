@@ -2,22 +2,26 @@ import SwiftUI
 
 // MARK: - Account sections (Phase 9 — You tab)
 //
-// Building blocks for AccountView: the XP capsule under the identity hero and
-// the quiet navigation/account rows. Tokens + DesignComponents only — flat
-// fills, hairline strokes, zero glows, no motion.
+// Building blocks for AccountView: the XP progress bar under the identity hero
+// and the quiet navigation/account rows. Tokens + DesignComponents only — flat
+// fills, hairline strokes, zero glows. The XP fill is the one moving part, and
+// only on change.
 
 // MARK: - XP capsule
 
-/// Slim XP bar for the You tab: "LVL N" chip inside the track at the left,
-/// "x,xxx / y,yyy XP" caption at the right. Completely static — the fill is
-/// rendered straight from the current XP with no animation, so opening the tab
-/// never replays a fill. Reads the Home strip's persisted cache
-/// (`XPStripCache`) as a cold-launch fallback — HomeXPStrip owns the writes.
+/// Slim XP progress bar for the You tab: caption above, track + fill below.
+///
+/// The fill animates on *change* only — `.animation(value:)` doesn't run on
+/// first render, so opening the tab still never replays a fill from zero. That
+/// keeps the original constraint (no cold-launch pop, helped by the
+/// `XPStripCache` fallback below, which HomeXPStrip owns the writes for) while
+/// letting real XP gains and the arrival of server stats move the bar visibly.
 struct ProfileXPCapsule: View {
     @ObservedObject var store: HoursStore
     // Server stats drive displayedGamificationProfile(); observe so the bar
     // re-renders the moment they arrive.
     @ObservedObject private var statsListener = StatsListenerService.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @AppStorage(XPStripCache.progressKey) private var cachedProgress: Double = 0
 
@@ -29,7 +33,6 @@ struct ProfileXPCapsule: View {
         return min(max(Double(p.xpIntoCurrentLevel) / Double(p.xpForNextLevel), 0), 1)
     }
 
-    /// The fill, rendered directly with no animation and no intermediate state.
     /// Falls back to the Home strip's persisted fill until server stats land,
     /// so a cold launch shows the last known value rather than an empty bar
     /// that pops full a moment later.
@@ -41,31 +44,45 @@ struct ProfileXPCapsule: View {
         "\(profile.xpIntoCurrentLevel.formatted()) / \(profile.xpForNextLevel.formatted()) XP"
     }
 
-    var body: some View {
-        ZStack {
-            Capsule()
-                .fill(AppColors.stroke.opacity(0.5))
+    private var percent: Int {
+        Int((min(max(displayedProgress, 0), 1) * 100).rounded())
+    }
 
-            GeometryReader { geo in
-                let fillWidth = max(0, geo.size.width * displayedProgress)
-                if fillWidth > 0 {
-                    Capsule()
-                        .fill(AppColors.accent.opacity(0.3))
-                        .frame(width: fillWidth, height: geo.size.height)
-                }
+    var body: some View {
+        VStack(spacing: 7) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(xpCaption)
+                    .appText(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(AppColors.text)
+                Spacer(minLength: AppSpacing.xs)
+                Text("\(percent)%")
+                    .appText(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(AppColors.accent)
             }
 
-            Text(xpCaption)
-                .appText(.caption)
-                .monospacedDigit()
-                .foregroundStyle(AppColors.text)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(AppColors.stroke.opacity(0.6))
+
+                    Capsule()
+                        .fill(AppColors.accentGradient)
+                        .frame(width: max(0, geo.size.width * displayedProgress))
+                }
+            }
+            .frame(height: 10)
+            // Only fires when the value actually changes — the fill is not
+            // replayed from zero when the tab appears.
+            .animation(
+                reduceMotion ? nil : .easeInOut(duration: 0.7),
+                value: displayedProgress
+            )
         }
-        .frame(height: 34)
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(AppColors.stroke, lineWidth: 0.5))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(profile.xpIntoCurrentLevel) of \(profile.xpForNextLevel) experience points"
+            "\(profile.xpIntoCurrentLevel) of \(profile.xpForNextLevel) experience points, \(percent) percent"
         )
     }
 }
