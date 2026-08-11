@@ -26,8 +26,13 @@ struct LeaderboardRankRow: View {
             Text("\(entry.rank)")
                 .font(.system(size: 17, weight: .heavy, design: .rounded))
                 .foregroundStyle(rankTint)
-                .frame(width: 22)
                 .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                // Wide enough for two digits at this size — without a
+                // lineLimit, a rank ≥10 wrapped onto two lines ("1" over "0")
+                // instead of sitting on one.
+                .frame(width: 28)
 
             ProfileAvatarView(
                 name: entry.name,
