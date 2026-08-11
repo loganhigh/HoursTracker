@@ -84,7 +84,9 @@ struct WeeklyPodiumCard: View {
                 podiumSlot(index: 2)
             }
 
-            if let gapRow { gapRow }
+            // `gapRow` is a @ViewBuilder that renders nothing when there is no
+            // gap to show, so it needs no conditional here.
+            gapRow
         }
         .padding(AppSpacing.md)
         .background(
