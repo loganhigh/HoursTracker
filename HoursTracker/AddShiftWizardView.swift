@@ -106,10 +106,12 @@ struct AddShiftWizardView: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
 
-                footer
-                    .padding(.horizontal, AppSpacing.lg)
-                    .padding(.top, AppSpacing.sm)
-                    .padding(.bottom, AppSpacing.xl)
+                if step == .review {
+                    footer
+                        .padding(.horizontal, AppSpacing.lg)
+                        .padding(.top, AppSpacing.sm)
+                        .padding(.bottom, AppSpacing.xl)
+                }
             }
         }
         .toast(isPresented: $showToast, message: toastMessage, showsCheckmark: false)
@@ -180,23 +182,12 @@ struct AddShiftWizardView: View {
         }
     }
 
-    @ViewBuilder
+    /// Review step only — the When step's Continue sits inline under Total Time.
     private var footer: some View {
-        switch step {
-        case .when:
-            VStack(spacing: AppSpacing.sm) {
-                EntryValidationLine(isValid: canSave, message: validationMessage)
-                Button("Continue") { advance() }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(!canSave)
-                    .opacity(canSave ? 1 : 0.55)
-            }
-        case .review:
-            Button("Save Shift") { save() }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(!canSave || showSaveSuccess)
-                .opacity(canSave ? 1 : 0.55)
-        }
+        Button("Save Shift") { save() }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(!canSave || showSaveSuccess)
+            .opacity(canSave ? 1 : 0.55)
     }
 
     // MARK: - Screen 1 · When & Where
@@ -273,6 +264,13 @@ struct AddShiftWizardView: View {
         if shiftKind == .work {
             AddShiftTotalTimePanel(hours: paidHours, caption: totalCaption)
         }
+
+        // Sits in the content flow right under Total Time rather than in a
+        // pinned footer bar, and carries no panel or card behind it.
+        Button("Continue") { advance() }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(!canSave)
+            .opacity(canSave ? 1 : 0.55)
     }
 
     /// Saved templates as one-tap chips. Applying one fills times, break, and
