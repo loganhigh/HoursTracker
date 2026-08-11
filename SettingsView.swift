@@ -307,28 +307,35 @@ struct SettingsView: View {
                 .listRowSeparatorTint(AppColors.stroke)
 
                 // MARK: - Hour Tracker Pro
-                Section {
-                    Button {
-                        Haptics.lightTap()
-                        showingPremiumSheet = true
-                    } label: {
-                        HStack(spacing: AppSpacing.sm) {
-                            SettingsRowLabel(
-                                icon: "crown.fill",
-                                title: "Hour Tracker Pro",
-                                subtitle: premium.isPremium
-                                    ? (premium.activeSubscription?.settingsStatusLine ?? "Active")
-                                    : "Live tracking, Dynamic Island, templates, reports"
-                            )
-                            Spacer(minLength: AppSpacing.xs)
-                            SettingsChevron()
+                // The only Pro surface that shows regardless of entitlement, so
+                // it is the one that has to be switched off explicitly. Every
+                // other Pro affordance in Settings is an `if !premium.isPremium`
+                // crown badge, which disappears on its own once the kill switch
+                // pins the entitlement open.
+                if MonetizationConfig.isProEnabled {
+                    Section {
+                        Button {
+                            Haptics.lightTap()
+                            showingPremiumSheet = true
+                        } label: {
+                            HStack(spacing: AppSpacing.sm) {
+                                SettingsRowLabel(
+                                    icon: "crown.fill",
+                                    title: "Hour Tracker Pro",
+                                    subtitle: premium.isPremium
+                                        ? (premium.activeSubscription?.settingsStatusLine ?? "Active")
+                                        : "Live tracking, Dynamic Island, templates, reports"
+                                )
+                                Spacer(minLength: AppSpacing.xs)
+                                SettingsChevron()
+                            }
                         }
+                    } header: {
+                        SectionEyebrow("Hour Tracker Pro")
                     }
-                } header: {
-                    SectionEyebrow("Hour Tracker Pro")
+                    .listRowBackground(AppColors.card.opacity(0.55))
+                    .listRowSeparatorTint(AppColors.stroke)
                 }
-                .listRowBackground(AppColors.card.opacity(0.55))
-                .listRowSeparatorTint(AppColors.stroke)
 
                 // MARK: - Data & Backup
                 Section {

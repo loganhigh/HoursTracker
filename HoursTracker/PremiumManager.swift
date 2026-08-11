@@ -79,13 +79,24 @@ final class PremiumManager: ObservableObject {
     private var didConfigure = false
 
     private init() {
-        isPremium = UserDefaults.standard.bool(forKey: cacheKey)
+        // With the tier switched off every gate reads as unlocked, so the
+        // cached entitlement is irrelevant. It is deliberately left on disk:
+        // re-enabling Pro should restore a real subscriber's status without
+        // waiting on the first StoreKit round trip.
+        isPremium = MonetizationConfig.isProEnabled
+            ? UserDefaults.standard.bool(forKey: cacheKey)
+            : true
     }
 
     /// Call once at app launch.
     func configure() {
         guard !didConfigure else { return }
         didConfigure = true
+
+        // Nothing is for sale while the tier is off — skip the storefront
+        // request and the transaction listener rather than asking StoreKit
+        // about products the build never shows.
+        guard MonetizationConfig.isProEnabled else { return }
 
         startTransactionListener()
         Task {
@@ -230,7 +241,13 @@ final class PremiumManager: ObservableObject {
     }
 
     private func setPremium(_ value: Bool) {
-        if isPremium != value { isPremium = value }
+        // Every write to the entitlement funnels through here — entitlement
+        // refreshes, purchases, and the DEBUG toggle alike. Pinning the
+        // published value while the tier is off means no code path can
+        // re-lock a feature. The real value still reaches the cache, so
+        // re-enabling Pro finds an accurate entitlement waiting.
+        let effective = MonetizationConfig.isProEnabled ? value : true
+        if isPremium != effective { isPremium = effective }
         UserDefaults.standard.set(value, forKey: cacheKey)
     }
 
