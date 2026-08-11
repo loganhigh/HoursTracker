@@ -306,18 +306,9 @@ struct AccountView: View {
             AccountRowHairline()
 
             Button {
-                openURL(AppLegalURLs.website)
-            } label: {
-                AccountNavRow(icon: "globe", title: "Website")
-            }
-            .buttonStyle(PremiumPressStyle())
-
-            AccountRowHairline()
-
-            Button {
                 openURL(AppLegalURLs.support)
             } label: {
-                AccountNavRow(icon: "envelope.fill", title: "Contact")
+                AccountNavRow(icon: "envelope.fill", title: "Contact Support")
             }
             .buttonStyle(PremiumPressStyle())
         }
@@ -359,10 +350,30 @@ struct AccountView: View {
                     // Account deletion — required by App Store Review
                     // Guideline 5.1.1(v). Confirmation flow unchanged.
                     deleteAccountRow
-                }
 
-                LegalLinksSection()
-                    .padding(.top, AppSpacing.xxs)
+                    AccountRowHairline()
+
+                    // Legal links continue the same list rather than sitting
+                    // in their own tile pair below it. LegalLinksSection (the
+                    // two-tile layout) is still what the paywall uses.
+                    Button {
+                        Haptics.lightTap()
+                        openURL(AppLegalURLs.privacyPolicy)
+                    } label: {
+                        AccountNavRow(icon: "hand.raised.fill", title: "Privacy Policy")
+                    }
+                    .buttonStyle(PremiumPressStyle())
+
+                    AccountRowHairline()
+
+                    Button {
+                        Haptics.lightTap()
+                        openURL(AppLegalURLs.termsOfUse)
+                    } label: {
+                        AccountNavRow(icon: "doc.text.fill", title: "Terms of Use")
+                    }
+                    .buttonStyle(PremiumPressStyle())
+                }
             } else {
                 AccountRowsCard {
                     VStack(spacing: AppSpacing.sm) {
@@ -424,8 +435,11 @@ struct AccountView: View {
     // MARK: - Footer
 
     private var versionFooter: some View {
+        // The eyebrow style uppercases, which rendered this as "V2.5" — the
+        // font and tracking are kept, the textCase is not.
         Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
-            .appText(.eyebrow)
+            .font(AppTypography.eyebrow)
+            .tracking(AppTypography.eyebrowTracking)
             .foregroundStyle(AppColors.subtext.opacity(0.4))
             .padding(.top, AppSpacing.xs)
     }
