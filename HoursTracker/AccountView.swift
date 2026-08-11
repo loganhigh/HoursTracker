@@ -68,20 +68,25 @@ struct AccountView: View {
     // MARK: - Body
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: AppSpacing.xl) {
-                identityHero
-                ProfileXPCapsule(store: store)
-                lifetimeStatsSection
-                navigationCard
-                accountSection
-                versionFooter
+        VStack(spacing: 0) {
+            // Outside the ScrollView so settings stays reachable from anywhere
+            // on the page rather than scrolling away with the hero.
+            settingsBar
+
+            ScrollView {
+                VStack(spacing: AppSpacing.xl) {
+                    identityHero
+                    ProfileXPCapsule(store: store)
+                    lifetimeStatsSection
+                    navigationCard
+                    accountSection
+                    versionFooter
+                }
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.bottom, AppSpacing.xl)
             }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.top, 10)
-            .padding(.bottom, AppSpacing.xl)
+            .scrollContentBackground(.hidden)
         }
-        .scrollContentBackground(.hidden)
         .background(AppColors.bg.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showingSettings) {
@@ -99,6 +104,33 @@ struct AccountView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Settings bar
+
+    private var settingsBar: some View {
+        HStack {
+            Spacer(minLength: 0)
+
+            Button {
+                Haptics.lightTap()
+                showingSettings = true
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        Circle()
+                            .fill(AppColors.card.opacity(0.7))
+                            .overlay(Circle().stroke(AppColors.stroke, lineWidth: 0.5))
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Settings")
+        }
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.bottom, AppSpacing.xs)
     }
 
     // MARK: - Identity hero (no card — sits on the background)
@@ -239,16 +271,6 @@ struct AccountView: View {
                     title: "Badges",
                     detail: "\(badgeCounts.earned) of \(badgeCounts.total)"
                 )
-            }
-            .buttonStyle(PremiumPressStyle())
-
-            AccountRowHairline()
-
-            Button {
-                Haptics.lightTap()
-                showingSettings = true
-            } label: {
-                AccountNavRow(icon: "gearshape.fill", title: "Settings")
             }
             .buttonStyle(PremiumPressStyle())
 
