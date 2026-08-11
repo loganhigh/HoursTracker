@@ -156,7 +156,7 @@ struct AccountView: View {
             .foregroundStyle(ringColor)
 
             if !equippedTitle.isEmpty {
-                Text("\u{201C}\(equippedTitle)\u{201D}")
+                Text(equippedTitle)
                     .appText(.caption)
                     .foregroundStyle(AppColors.subtext)
                     .multilineTextAlignment(.center)

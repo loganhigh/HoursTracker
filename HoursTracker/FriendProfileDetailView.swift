@@ -199,7 +199,7 @@ struct FriendProfileDetailView: View {
             )
 
             if !friend.equippedTitle.isEmpty, friend.privacy.shareBadges {
-                Text("\u{201C}\(friend.equippedTitle)\u{201D}")
+                Text(friend.equippedTitle)
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(AppColors.subtext)
                     .multilineTextAlignment(.center)

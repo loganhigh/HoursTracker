@@ -9,7 +9,8 @@ import SwiftUI
 // MARK: - XP capsule
 
 /// Slim XP bar for the You tab: "LVL N" chip inside the track at the left,
-/// "x,xxx / y,yyy XP" caption at the right. Fill animates on appear, seeded
+/// "x,xxx / y,yyy XP" caption at the right. The fill is static once settled —
+/// it eases to a new value when XP changes, with no looping decoration. Seeded
 /// read-only from the Home strip's persisted cache (`XPStripCache`) so a cold
 /// launch starts at the last displayed fill — HomeXPStrip owns the writes.
 struct ProfileXPCapsule: View {
@@ -41,18 +42,12 @@ struct ProfileXPCapsule: View {
             Capsule()
                 .fill(AppColors.stroke.opacity(0.5))
 
-            // Fill + a slow sheen that travels across the filled portion only,
-            // so an empty bar stays completely still. The sweep is driven by a
-            // phase animator (not a repeatForever on state), which cannot get
-            // stranded mid-travel and leave a static bright band on the bar.
             GeometryReader { geo in
                 let fillWidth = max(0, geo.size.width * displayedProgress)
                 if fillWidth > 0 {
                     Capsule()
                         .fill(AppColors.accent.opacity(0.3))
                         .frame(width: fillWidth, height: geo.size.height)
-                        .overlay(alignment: .leading) { sheen(fillWidth: fillWidth) }
-                        .clipShape(Capsule())
                 }
             }
 
@@ -70,33 +65,6 @@ struct ProfileXPCapsule: View {
         )
         .onAppear { seedAndAnimate() }
         .onChange(of: liveProgress) { _, _ in animateToLive() }
-    }
-
-    /// Sweeps a soft highlight from just before the fill's leading edge to just
-    /// past its trailing edge, then snaps back instantly (zero-duration return
-    /// phase) so the travel only ever reads one way. Off under Reduce Motion.
-    @ViewBuilder
-    private func sheen(fillWidth: CGFloat) -> some View {
-        if !reduceMotion {
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            AppColors.accent.opacity(0),
-                            AppColors.accent.opacity(0.5),
-                            AppColors.accent.opacity(0)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(width: max(24, fillWidth * 0.35))
-                .phaseAnimator([0, 1]) { view, phase in
-                    view.offset(x: phase == 0 ? -fillWidth * 0.4 : fillWidth)
-                } animation: { phase in
-                    phase == 0 ? .linear(duration: 0) : .linear(duration: 2.4)
-                }
-        }
     }
 
     private func seedAndAnimate() {
