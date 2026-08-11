@@ -1,4 +1,7 @@
 import SwiftUI
+// The podium's reset countdown uses Timer.publish(...).autoconnect(), which is
+// Combine's, not SwiftUI's.
+import Combine
 
 // MARK: - Friends leaderboard: header, podium, metric switcher
 //
