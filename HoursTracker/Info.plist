@@ -4,6 +4,31 @@
 <dict>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<!-- Siri requires every App Shortcut phrase to name the app, so the only
+	     way to shorten what the user has to say is to give the app shorter
+	     names to be called by. With these, "Hey Siri, log a shift in Hours"
+	     works as well as the full "Hour Tracker". -->
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Hours</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>Hours</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Tracker</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>Tracker</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Hour Tracker</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>Hour Tracker</string>
+		</dict>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

@@ -113,15 +113,32 @@ struct HoursThisWeekIntent: AppIntent {
 
 // MARK: - App Shortcuts (auto-discoverable in Siri + the Shortcuts app)
 
+/// Siri phrases.
+///
+/// Every phrase has to contain `\(.applicationName)` — App Shortcuts will not
+/// register without it, so a bare "Hey Siri, log 8am to 4pm" is not something
+/// the app can offer. Two things soften that: `INAlternativeAppNames` in
+/// Info.plist lets the user say the much shorter "Hours" or "Tracker", and the
+/// phrases below are worded so the app name lands at the end of a natural
+/// sentence rather than in the middle of one.
+///
+/// A phrase can also carry at most ONE parameter, so "log 8am to 4pm" — two
+/// times plus a date — cannot be matched in a single utterance. Siri collects
+/// the times conversationally after the phrase instead. Anyone who wants their
+/// own exact wording can build a personal shortcut in the Shortcuts app, which
+/// has neither restriction: these intents are already exposed there.
 struct HourTrackerShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: AddShiftIntent(),
             phrases: [
-                "Add a shift to \(.applicationName)",
-                "Add a shift in \(.applicationName)",
+                "Log my shift in \(.applicationName)",
+                "Log my hours in \(.applicationName)",
                 "Log a shift in \(.applicationName)",
-                "Log hours in \(.applicationName)"
+                "Log hours in \(.applicationName)",
+                "Log today in \(.applicationName)",
+                "Add a shift to \(.applicationName)",
+                "Add a shift in \(.applicationName)"
             ],
             shortTitle: "Add a Shift",
             systemImageName: "plus.circle.fill"

@@ -203,8 +203,6 @@ struct AddShiftWizardView: View {
 
     @ViewBuilder
     private var whenStep: some View {
-        entryModeToggle
-
         if shiftKind == .work, !store.shiftTemplates.isEmpty {
             templateStrip
         }
@@ -275,50 +273,6 @@ struct AddShiftWizardView: View {
         if shiftKind == .work {
             AddShiftTotalTimePanel(hours: paidHours, caption: totalCaption)
         }
-    }
-
-    /// "Manual" / "Clock In" pill — manual is always the selected state here
-    /// (this screen only exists for manual entry); tapping Clock In starts a
-    /// live shift instead (Pro-gated), and the parent router swaps this
-    /// sheet for `LiveShiftTrackingView` once `LiveShiftManager.activeShift`
-    /// is set.
-    private var entryModeToggle: some View {
-        HStack(spacing: 4) {
-            Text("Manual")
-                .font(.system(.subheadline, design: .rounded, weight: .bold))
-                .foregroundStyle(AppColors.textOnAccent)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
-                .background(Capsule().fill(AppColors.accentGradient))
-
-            Button {
-                Haptics.lightTap()
-                if premium.isPremium {
-                    liveShift.clockIn()
-                } else {
-                    showingClockInPaywall = true
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Text("Clock In")
-                    if !premium.isPremium {
-                        Image(systemName: "lock.fill")
-                            .font(.system(size: 10, weight: .bold))
-                    }
-                }
-                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                .foregroundStyle(AppColors.subtext)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(4)
-        .background(
-            Capsule()
-                .fill(AppColors.card)
-                .overlay(Capsule().stroke(AppColors.stroke, lineWidth: 1))
-        )
     }
 
     /// Saved templates as one-tap chips. Applying one fills times, break, and
