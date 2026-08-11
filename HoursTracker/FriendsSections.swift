@@ -127,6 +127,9 @@ struct FriendStatsRow: View {
     /// relative fill of the capsule bar. Pass 0 when nobody shares hours.
     var maxWeeklyHours: Double = 0
     var onOpenProfile: (() -> Void)? = nil
+    /// Supplied by the friends list so nudging is one tap from the row that
+    /// shows their hours, instead of only from the bottom of their profile.
+    var onNudge: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 14) {
@@ -187,6 +190,24 @@ struct FriendStatsRow: View {
                 .background(Capsule().fill(AppColors.card))
             }
 
+            if let onNudge {
+                // Its own Button so the tap lands here rather than on the
+                // row's open-profile gesture underneath.
+                Button {
+                    Haptics.lightTap()
+                    onNudge()
+                } label: {
+                    Image(systemName: "hand.wave.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.accent)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(AppColors.accent.opacity(0.12)))
+                        .overlay(Circle().stroke(AppColors.accent.opacity(0.25), lineWidth: 1))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(AppColors.faint)
@@ -207,6 +228,9 @@ struct FriendStatsRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens friend profile")
+        // `children: .combine` folds the nudge button into the row, so VoiceOver
+        // would otherwise have no way to reach it.
+        .accessibilityAction(named: "Nudge") { onNudge?() }
     }
 
     private var streakChip: some View {

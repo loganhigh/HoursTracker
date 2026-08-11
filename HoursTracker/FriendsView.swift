@@ -19,6 +19,9 @@ struct FriendsView: View {
     @State private var isSending = false
     @State private var sendTimeoutTask: Task<Void, Never>?
     @State private var profileFriendUid: String?
+    @State private var nudgeTarget: FriendProfile?
+    @State private var isSendingNudge = false
+    @State private var nudgeResultMessage: String?
 
     private var myName: String {
         UserDefaults.standard.string(forKey: "profile_display_name") ?? "Worker"
@@ -63,6 +66,58 @@ struct FriendsView: View {
                     await removeFriend(friend)
                 }
             )
+        }
+        .sheet(item: $nudgeTarget) { friend in
+            FriendShiftNudgePicker(
+                friendName: friend.displayName,
+                isSending: isSendingNudge,
+                onPick: { kind in sendNudge(to: friend, kind: kind) },
+                onCancel: { nudgeTarget = nil }
+            )
+        }
+        .overlay(alignment: .bottom) {
+            if let nudgeResultMessage {
+                Text(nudgeResultMessage)
+                    .appText(.caption)
+                    .foregroundStyle(AppColors.text)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(
+                        Capsule().fill(AppColors.card)
+                            .overlay(Capsule().stroke(AppColors.stroke, lineWidth: 0.5))
+                    )
+                    .padding(.bottom, 18)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    /// Sends from the list row. Mirrors the profile's flow, but the confirmation
+    /// is a transient toast — there is no row-level space to keep it around.
+    private func sendNudge(to friend: FriendProfile, kind: NudgeKind) {
+        guard let uid = authService.user?.uid, !isSendingNudge else { return }
+        isSendingNudge = true
+        Task {
+            defer { isSendingNudge = false }
+            let message: String
+            do {
+                try await FriendShiftNudgeService.shared.sendNudge(
+                    to: friend.uid,
+                    myUid: uid,
+                    myName: UserDefaults.standard.string(forKey: "profile_display_name") ?? "",
+                    kind: kind
+                )
+                Haptics.success()
+                message = "Sent \(kind.emoji) \(kind.label) to \(friend.displayName)."
+            } catch {
+                Haptics.error()
+                message = (error as? LocalizedError)?.errorDescription
+                    ?? "Couldn't send the nudge. Try again later."
+            }
+            nudgeTarget = nil
+            withAnimation { nudgeResultMessage = message }
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            withAnimation { nudgeResultMessage = nil }
         }
     }
 
@@ -163,6 +218,9 @@ struct FriendsView: View {
                         maxWeeklyHours: maxWeekly,
                         onOpenProfile: {
                             profileFriendUid = friend.uid
+                        },
+                        onNudge: {
+                            nudgeTarget = friend
                         }
                     )
                 }

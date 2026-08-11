@@ -3,6 +3,94 @@ import Combine
 import FirebaseAuth
 import FirebaseFirestore
 
+// MARK: - Nudge catalog
+
+/// One sendable nudge. Two tones, deliberately: cheering a friend on and
+/// goading them are both reasons to open the app, and a single generic
+/// "don't forget to log your shifts" served neither.
+///
+/// `id` is what lands in Firestore and what the Cloud Function keys its push
+/// copy off, so the values are stable strings — renaming one silently
+/// downgrades in-flight nudges to the generic fallback.
+struct NudgeKind: Identifiable, Equatable, Hashable {
+    enum Tone: String, CaseIterable {
+        case cheer
+        case compete
+
+        var sectionTitle: String {
+            switch self {
+            case .cheer: return "Cheer them on"
+            case .compete: return "Talk some trash"
+            }
+        }
+    }
+
+    let id: String
+    let emoji: String
+    /// What the sender picks from.
+    let label: String
+    /// What the recipient reads. `{name}` is replaced with their first name,
+    /// Apple-Fitness style, so the message lands as addressed to them.
+    let messageTemplate: String
+    let tone: Tone
+
+    func message(recipientFirstName: String) -> String {
+        let name = recipientFirstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            // Drop the direct address rather than greeting an empty string.
+            return messageTemplate
+                .replacingOccurrences(of: ", {name}", with: "")
+                .replacingOccurrences(of: " {name}", with: "")
+                .replacingOccurrences(of: "{name}", with: "")
+        }
+        return messageTemplate.replacingOccurrences(of: "{name}", with: name)
+    }
+
+    static let all: [NudgeKind] = [
+        NudgeKind(id: "goodJob", emoji: "👏", label: "Good job",
+                  messageTemplate: "Good job, {name}! Those hours are stacking up.",
+                  tone: .cheer),
+        NudgeKind(id: "keepGoing", emoji: "💪", label: "Keep going",
+                  messageTemplate: "Keep going, {name}! You've got this.",
+                  tone: .cheer),
+        NudgeKind(id: "proudOfYou", emoji: "🙌", label: "Proud of you",
+                  messageTemplate: "Proud of you, {name}. Great week of work.",
+                  tone: .cheer),
+        NudgeKind(id: "almostThere", emoji: "⭐️", label: "Almost there",
+                  messageTemplate: "Almost there, {name} — finish strong!",
+                  tone: .cheer),
+        NudgeKind(id: "beatMyHours", emoji: "🔥", label: "Beat my hours",
+                  messageTemplate: "Think you can beat my hours, {name}? Go on then.",
+                  tone: .compete),
+        NudgeKind(id: "slacking", emoji: "😴", label: "You're slacking",
+                  messageTemplate: "You're slacking, {name}. Get back out there!",
+                  tone: .compete),
+        NudgeKind(id: "catchMe", emoji: "🏆", label: "Catch me if you can",
+                  messageTemplate: "Catch me if you can, {name}!",
+                  tone: .compete),
+        logShifts,
+    ]
+
+    /// Nudges written before this catalog existed carry no type. They were all
+    /// the generic reminder, so that is what they resolve to. Declared
+    /// standalone rather than looked up out of `all`, so the fallback can never
+    /// be a force-unwrapped search that trips if the id is ever renamed.
+    static let logShifts = NudgeKind(
+        id: "logShifts", emoji: "👋", label: "Log your shifts",
+        messageTemplate: "Don't forget to log your shifts, {name}!",
+        tone: .compete
+    )
+
+    static var fallback: NudgeKind { logShifts }
+
+    static func kind(id: String?) -> NudgeKind {
+        guard let id else { return fallback }
+        return all.first { $0.id == id } ?? fallback
+    }
+
+    static func kinds(tone: Tone) -> [NudgeKind] { all.filter { $0.tone == tone } }
+}
+
 // MARK: - Model
 
 struct FriendShiftNudge: Identifiable, Equatable {
@@ -11,6 +99,7 @@ struct FriendShiftNudge: Identifiable, Equatable {
     let fromName: String
     let createdAt: Date
     let reaction: String?
+    let kind: NudgeKind
 
     static func from(id: String, data: [String: Any]) -> FriendShiftNudge? {
         guard
@@ -24,7 +113,8 @@ struct FriendShiftNudge: Identifiable, Equatable {
             fromUid: fromUid,
             fromName: fromName,
             createdAt: createdAt,
-            reaction: reaction
+            reaction: reaction,
+            kind: NudgeKind.kind(id: data["type"] as? String)
         )
     }
 }
@@ -96,10 +186,21 @@ final class FriendShiftNudgeService: ObservableObject {
         }
     }
 
-    func sendNudge(to friendUid: String, myUid: String, myName: String) async throws {
+    /// - Parameter bypassCooldown: set only when firing straight back at a
+    ///   nudge just received. A volley is the point of the feature, and the
+    ///   per-friend daily cooldown would otherwise kill it on the first
+    ///   return shot. Each direction still marks its own cooldown, so this
+    ///   buys one reply, not an open channel.
+    func sendNudge(
+        to friendUid: String,
+        myUid: String,
+        myName: String,
+        kind: NudgeKind,
+        bypassCooldown: Bool = false
+    ) async throws {
         guard !friendUid.isEmpty else { return }
         guard friendUid != myUid else { throw NudgeError.selfNudge }
-        if isOnCooldown(to: friendUid) { throw NudgeError.cooldown }
+        if !bypassCooldown, isOnCooldown(to: friendUid) { throw NudgeError.cooldown }
 
         let trimmedName = myName.trimmingCharacters(in: .whitespacesAndNewlines)
         let clampedName = trimmedName.isEmpty ? "A friend" : String(trimmedName.prefix(40))
@@ -108,6 +209,7 @@ final class FriendShiftNudgeService: ObservableObject {
         let payload: [String: Any] = [
             "fromUid": myUid,
             "fromName": clampedName,
+            "type": kind.id,
             "status": "pending",
             "createdAt": FieldValue.serverTimestamp()
         ]

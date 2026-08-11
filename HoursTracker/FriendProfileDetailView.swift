@@ -23,6 +23,7 @@ struct FriendProfileDetailView: View {
     @State private var isSendingNudge = false
     @State private var nudgeSent = false
     @State private var nudgeMessage: String?
+    @State private var showingNudgePicker = false
 
     // CEO-only stats recompute (also gated server-side by UID + passcode).
     @State private var showAdminPasscodePrompt = false
@@ -331,7 +332,8 @@ struct FriendProfileDetailView: View {
                 didSend: nudgeSent,
                 tint: accent
             ) {
-                Task { await performNudge(friend: friend) }
+                Haptics.lightTap()
+                showingNudgePicker = true
             }
             if let nudgeMessage {
                 Text(nudgeMessage)
@@ -341,9 +343,19 @@ struct FriendProfileDetailView: View {
                     .transition(.opacity)
             }
         }
+        .sheet(isPresented: $showingNudgePicker) {
+            FriendShiftNudgePicker(
+                friendName: friend.displayName,
+                isSending: isSendingNudge,
+                onPick: { kind in
+                    Task { await performNudge(friend: friend, kind: kind) }
+                },
+                onCancel: { showingNudgePicker = false }
+            )
+        }
     }
 
-    private func performNudge(friend: FriendProfile) async {
+    private func performNudge(friend: FriendProfile, kind: NudgeKind) async {
         guard !isSendingNudge, !nudgeSent else { return }
         guard let uid = authService.user?.uid else { return }
         let myName = UserDefaults.standard.string(forKey: "profile_display_name") ?? "A friend"
@@ -354,13 +366,16 @@ struct FriendProfileDetailView: View {
             try await FriendShiftNudgeService.shared.sendNudge(
                 to: friend.uid,
                 myUid: uid,
-                myName: myName
+                myName: myName,
+                kind: kind
             )
             Haptics.success()
             nudgeSent = true
-            nudgeMessage = "They'll get a reminder to log their shifts."
+            showingNudgePicker = false
+            nudgeMessage = "Sent \(kind.emoji) \(kind.label)."
         } catch {
             Haptics.error()
+            showingNudgePicker = false
             nudgeMessage = (error as? LocalizedError)?.errorDescription
                 ?? "Couldn't send the nudge. Try again later."
         }

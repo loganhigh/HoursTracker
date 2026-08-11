@@ -102,6 +102,53 @@ async function resolveDisplayName(uid) {
 }
 
 /**
+ * Sendable nudges, keyed by the id stored on the nudge doc. Mirrors
+ * `NudgeKind.all` in FriendShiftNudgeService.swift — the two lists must stay
+ * in step, since the client renders the same message in-app while this one
+ * renders the push. Ids are stable; renaming one downgrades in-flight nudges
+ * to the generic fallback rather than breaking them.
+ */
+const NUDGE_KINDS = {
+  goodJob: { id: "goodJob", emoji: "👏", messageTemplate: "Good job, {name}! Those hours are stacking up." },
+  keepGoing: { id: "keepGoing", emoji: "💪", messageTemplate: "Keep going, {name}! You've got this." },
+  proudOfYou: { id: "proudOfYou", emoji: "🙌", messageTemplate: "Proud of you, {name}. Great week of work." },
+  almostThere: { id: "almostThere", emoji: "⭐️", messageTemplate: "Almost there, {name} — finish strong!" },
+  beatMyHours: { id: "beatMyHours", emoji: "🔥", messageTemplate: "Think you can beat my hours, {name}? Go on then." },
+  slacking: { id: "slacking", emoji: "😴", messageTemplate: "You're slacking, {name}. Get back out there!" },
+  catchMe: { id: "catchMe", emoji: "🏆", messageTemplate: "Catch me if you can, {name}!" },
+  logShifts: { id: "logShifts", emoji: "👋", messageTemplate: "Don't forget to log your shifts, {name}!" },
+};
+
+/**
+ * First word of a display name, or "" when there isn't one.
+ *
+ * Deliberately not recompute.js's `firstNameOnly`, which substitutes the
+ * placeholder "Tracker" for a missing name — fine for a leaderboard row,
+ * wrong here, where it would address someone as "Good job, Tracker!". An
+ * empty return lets renderNudgeMessage drop the direct address instead.
+ */
+function firstNameOrEmpty(displayName) {
+  const trimmed = String(displayName || "").trim();
+  if (!trimmed) return "";
+  return trimmed.split(/\s+/)[0];
+}
+
+/**
+ * Substitutes the recipient's first name into a nudge template. With no name
+ * to use, the direct address is removed rather than greeting an empty string.
+ */
+function renderNudgeMessage(template, firstName) {
+  const name = String(firstName || "").trim();
+  if (!name) {
+    return template
+      .replace(", {name}", "")
+      .replace(" {name}", "")
+      .replace("{name}", "");
+  }
+  return template.replace("{name}", name);
+}
+
+/**
  * Uppercases the first character only. Activity bodies are authored to follow
  * a name ("worked 8h today"), so they need a capital when promoted to a
  * standalone notification body.
@@ -352,13 +399,23 @@ exports.notifyOnShiftNudge = onDocumentCreated(
     const targetData = targetUser.data();
     if (!friendShiftAlertsEnabled(targetData)) return;
 
+    // Mirrors NudgeKind.all in FriendShiftNudgeService.swift. The copy is
+    // resolved here rather than read off the nudge doc so a client can't put
+    // arbitrary text into someone else's notification — the doc carries only
+    // an id, and an unrecognized one falls back to the generic reminder.
+    const kind = NUDGE_KINDS[data.type] || NUDGE_KINDS.logShifts;
+    const firstName = firstNameOrEmpty(
+      String(targetData?.displayName || "").trim() || (await resolveDisplayName(targetUid))
+    );
+
     await sendPushToUser(targetUid, targetData, {
-      title: "Shift reminder",
-      body: `${fromName} nudged you to log your shifts — tap to reply with an emoji`,
+      title: `${kind.emoji} ${fromName}`,
+      body: renderNudgeMessage(kind.messageTemplate, firstName),
       dataPayload: {
         type: "friend_nudge",
         nudgeId: event.params.nudgeId,
         fromUid: data.fromUid || "",
+        nudgeType: kind.id,
       },
     });
   }
