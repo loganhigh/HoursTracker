@@ -4,15 +4,15 @@ import SwiftUI
 //
 // Building blocks for AccountView: the XP capsule under the identity hero and
 // the quiet navigation/account rows. Tokens + DesignComponents only — flat
-// fills, hairline strokes, zero glows. Motion honors Reduce Motion.
+// fills, hairline strokes, zero glows, no motion.
 
 // MARK: - XP capsule
 
 /// Slim XP bar for the You tab: "LVL N" chip inside the track at the left,
-/// "x,xxx / y,yyy XP" caption at the right. The fill is static once settled —
-/// it eases to a new value when XP changes, with no looping decoration. Seeded
-/// read-only from the Home strip's persisted cache (`XPStripCache`) so a cold
-/// launch starts at the last displayed fill — HomeXPStrip owns the writes.
+/// "x,xxx / y,yyy XP" caption at the right. Completely static — the fill is
+/// rendered straight from the current XP with no animation, so opening the tab
+/// never replays a fill. Reads the Home strip's persisted cache
+/// (`XPStripCache`) as a cold-launch fallback — HomeXPStrip owns the writes.
 struct ProfileXPCapsule: View {
     @ObservedObject var store: HoursStore
     // Server stats drive displayedGamificationProfile(); observe so the bar
@@ -21,16 +21,20 @@ struct ProfileXPCapsule: View {
 
     @AppStorage(XPStripCache.progressKey) private var cachedProgress: Double = 0
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var displayedProgress: Double = 0
-    @State private var seeded = false
-
     private var profile: GamificationProfile { store.displayedGamificationProfile() }
 
     private var liveProgress: Double {
         let p = profile
         guard p.xpForNextLevel > 0 else { return 0 }
         return min(max(Double(p.xpIntoCurrentLevel) / Double(p.xpForNextLevel), 0), 1)
+    }
+
+    /// The fill, rendered directly with no animation and no intermediate state.
+    /// Falls back to the Home strip's persisted fill until server stats land,
+    /// so a cold launch shows the last known value rather than an empty bar
+    /// that pops full a moment later.
+    private var displayedProgress: Double {
+        profile.xpForNextLevel > 0 ? liveProgress : cachedProgress
     }
 
     private var xpCaption: String {
@@ -63,22 +67,6 @@ struct ProfileXPCapsule: View {
         .accessibilityLabel(
             "\(profile.xpIntoCurrentLevel) of \(profile.xpForNextLevel) experience points"
         )
-        .onAppear { seedAndAnimate() }
-        .onChange(of: liveProgress) { _, _ in animateToLive() }
-    }
-
-    private func seedAndAnimate() {
-        if !seeded {
-            seeded = true
-            displayedProgress = cachedProgress
-        }
-        animateToLive()
-    }
-
-    private func animateToLive() {
-        withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
-            displayedProgress = liveProgress
-        }
     }
 }
 
