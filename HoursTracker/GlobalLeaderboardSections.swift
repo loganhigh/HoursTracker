@@ -35,7 +35,6 @@ enum GlobalHoursFormat {
 
 struct GlobalLeaderboardHeader: View {
     let onBack: () -> Void
-    let onGlobe: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: AppSpacing.sm) {
@@ -56,31 +55,7 @@ struct GlobalLeaderboardHeader: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Back")
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Global Leaderboard")
-                    .font(.system(size: 27, weight: .heavy, design: .rounded))
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Text("All time hours")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppColors.subtext)
-            }
-
-            Spacer(minLength: AppSpacing.xs)
-
-            Button {
-                Haptics.lightTap()
-                onGlobe()
-            } label: {
-                Image(systemName: "globe")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(AppColors.textOnAccent)
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(AppColors.accent))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Change your country flag")
+            Spacer(minLength: 0)
         }
     }
 }
@@ -90,7 +65,6 @@ struct GlobalLeaderboardHeader: View {
 struct GlobalRankHeroCard: View {
     /// `nil` when the signed-in user isn't on the board yet.
     let rank: Int?
-    let hours: Double
 
     var body: some View {
         VStack(spacing: 0) {
@@ -113,14 +87,6 @@ struct GlobalRankHeroCard: View {
                 }
             }
             .padding(.top, 4)
-
-            Text(GlobalHoursFormat.hours(hours))
-                .font(.system(size: 30, weight: .heavy, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(AppColors.accent)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, AppSpacing.lg)

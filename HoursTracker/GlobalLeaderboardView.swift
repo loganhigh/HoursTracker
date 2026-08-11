@@ -11,10 +11,7 @@ import SwiftUI
 struct GlobalLeaderboardView: View {
     @ObservedObject private var topTrackers = TopTrackersService.shared
     @EnvironmentObject private var authService: AuthService
-    @EnvironmentObject private var store: HoursStore
     @Environment(\.dismiss) private var dismiss
-
-    @State private var showingCountryPicker = false
 
     private var myUid: String? { authService.user?.uid }
 
@@ -44,27 +41,14 @@ struct GlobalLeaderboardView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            GlobalLeaderboardHeader(
-                onBack: { dismiss() },
-                onGlobe: { showingCountryPicker = true }
-            )
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.bottom, AppSpacing.sm)
+            GlobalLeaderboardHeader(onBack: { dismiss() })
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.bottom, AppSpacing.sm)
 
             content
         }
         .background(AppColors.bg.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
-        .sheet(isPresented: $showingCountryPicker) {
-            NavigationStack {
-                CountryFlagPickerView(store: store)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Cancel") { showingCountryPicker = false }
-                        }
-                    }
-            }
-        }
         .task {
             await topTrackers.ensureFullLeaderboardLoaded()
         }
@@ -84,10 +68,7 @@ struct GlobalLeaderboardView: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: AppSpacing.sm) {
-                    GlobalRankHeroCard(
-                        rank: myTracker?.rank,
-                        hours: myTracker?.hours ?? 0
-                    )
+                    GlobalRankHeroCard(rank: myTracker?.rank)
 
                     GlobalStatsStrip(
                         trackerCount: topTrackers.allTrackers.count,

@@ -116,15 +116,14 @@ struct AccountView: View {
                 Haptics.lightTap()
                 showingSettings = true
             } label: {
+                // No circle chrome — a filled badge here read as clipping into
+                // the avatar just below it. The icon alone still gets a full
+                // 40x40 tap target.
                 Image(systemName: "gearshape.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(AppColors.subtext)
                     .frame(width: 40, height: 40)
-                    .background(
-                        Circle()
-                            .fill(AppColors.card.opacity(0.7))
-                            .overlay(Circle().stroke(AppColors.stroke, lineWidth: 0.5))
-                    )
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
