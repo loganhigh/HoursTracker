@@ -137,7 +137,9 @@ struct FriendsView: View {
                     }
                 }
             }
-            .presentationDetents([.medium, .large])
+            // .medium cut off the notify caption below the QR card once the
+            // QR block was added — .large gives the taller content room.
+            .presentationDetents([.large])
         }
         .sheet(item: $nudgeTarget) { friend in
             FriendShiftNudgePicker(
@@ -304,13 +306,15 @@ struct FriendsView: View {
 
     private var notifyCaption: some View {
         HStack(spacing: AppSpacing.xs) {
-            Image(systemName: "bell")
+            Image(systemName: "bell.fill")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(AppColors.subtext)
+                .foregroundStyle(AppColors.accent)
             Text("You'll be connected instantly")
-                .appText(.caption)
-                .foregroundStyle(AppColors.subtext)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.text)
         }
+        .padding(.top, AppSpacing.xxs)
+        .padding(.bottom, AppSpacing.sm)
     }
 
     // MARK: - Actions

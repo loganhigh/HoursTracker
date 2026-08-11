@@ -104,9 +104,14 @@ struct FriendCodeCard: View {
                 .buttonStyle(.plain)
                 .disabled(code == nil)
 
-                Text(copyConfirmation ? "Copied to clipboard" : "Tap to copy your code")
-                    .appText(.caption)
-                    .foregroundStyle(copyConfirmation ? AppColors.positive : AppColors.faint)
+                // Only the transient copy confirmation shows here — the idle
+                // "tap to copy" hint was removed; the code button's own
+                // doc.on.doc icon already signals it's tappable.
+                if copyConfirmation {
+                    Text("Copied to clipboard")
+                        .appText(.caption)
+                        .foregroundStyle(AppColors.positive)
+                }
             }
 
             if let code {
