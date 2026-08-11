@@ -2,10 +2,10 @@ import SwiftUI
 
 // MARK: - Friends hub
 //
-// A competitive board: header, pay-period podium, ranked rows (the signed-in
-// user among their friends), then the crew summary. It ranks on the viewer's
-// own cheque window rather than a fixed week, so a bi-weekly cycle shows a
-// bi-weekly board. Adding a friend lives in a sheet behind the header's +
+// A competitive board: header, pay-period podium, then ranked rows with the
+// signed-in user among their friends. It ranks on the viewer's own cheque
+// window rather than a fixed week, so a bi-weekly cycle shows a bi-weekly
+// board. Adding a friend lives in a sheet behind the header's +
 // button. Board types live in FriendsLeaderboardModel.swift, the podium in
 // FriendsPodiumSections.swift, rows in FriendsLeaderboardSections.swift, and
 // the friend-code card and request rows remain in FriendsSections.swift.
@@ -35,9 +35,9 @@ struct FriendsView: View {
 
     // MARK: - Board
 
-    /// The viewer's current cheque window. Drives the board's period, its
-    /// subtitle and its countdown, so someone paid bi-weekly gets a bi-weekly
-    /// board instead of a fixed Mon–Sun week.
+    /// The viewer's current cheque window. Drives which shifts the board counts
+    /// and the period shown under its title, so someone paid bi-weekly gets a
+    /// bi-weekly board instead of a fixed Mon–Sun week.
     private var payCycle: PayCycle { store.currentPayCycle() }
 
     /// The signed-in user plus every friend, ranked by pay-period hours.
@@ -212,8 +212,7 @@ struct FriendsView: View {
                 if !entries.isEmpty {
                     PayPeriodPodiumCard(
                         entries: entries,
-                        periodSubtitle: payCycle.workRangeText(),
-                        resetsAt: payCycle.end
+                        periodSubtitle: payCycle.workRangeText()
                     )
                 }
 
@@ -260,10 +259,6 @@ struct FriendsView: View {
 
                 friendsList(entries)
                     .padding(.top, AppSpacing.xxs)
-
-                if entries.count > 1 {
-                    CrewSummaryCard(entries: entries, onOpen: nil)
-                }
             }
             .padding(.horizontal, AppSpacing.md)
             .padding(.vertical, AppSpacing.md)

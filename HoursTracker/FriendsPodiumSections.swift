@@ -1,7 +1,4 @@
 import SwiftUI
-// The podium's reset countdown uses Timer.publish(...).autoconnect(), which is
-// Combine's, not SwiftUI's.
-import Combine
 
 // MARK: - Friends leaderboard: header + pay-period podium
 //
@@ -45,12 +42,6 @@ struct PayPeriodPodiumCard: View {
     /// The viewer's own cheque window, e.g. "Aug 4 – Aug 17". Shown instead of
     /// a fixed "Mon → Sun" so a bi-weekly cycle reads as one.
     let periodSubtitle: String
-    let resetsAt: Date?
-
-    /// Ticks the countdown. Driven by a timer rather than recomputed on render
-    /// so the value does not sit frozen while the screen is open.
-    @State private var now = Date()
-    private let ticker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     private var podium: [LeaderboardEntry] { Array(entries.prefix(3)) }
     private var me: LeaderboardEntry? { entries.first(where: \.isMe) }
@@ -78,7 +69,6 @@ struct PayPeriodPodiumCard: View {
                         .stroke(AppColors.accent.opacity(0.25), lineWidth: 1)
                 )
         )
-        .onReceive(ticker) { now = $0 }
     }
 
     private var header: some View {
@@ -96,28 +86,7 @@ struct PayPeriodPodiumCard: View {
                     .foregroundStyle(AppColors.faint)
             }
             Spacer(minLength: AppSpacing.xs)
-            if let countdown {
-                VStack(alignment: .trailing, spacing: 1) {
-                    Text("Resets in")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(AppColors.faint)
-                    Text(countdown)
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(AppColors.accent)
-                        .monospacedDigit()
-                }
-            }
         }
-    }
-
-    private var countdown: String? {
-        guard let resetsAt else { return nil }
-        let remaining = resetsAt.timeIntervalSince(now)
-        guard remaining > 0 else { return nil }
-        let days = Int(remaining) / 86400
-        let hours = (Int(remaining) % 86400) / 3600
-        let minutes = (Int(remaining) % 3600) / 60
-        return days > 0 ? "\(days)d \(hours)h \(minutes)m" : "\(hours)h \(minutes)m"
     }
 
     private func tint(forRank rank: Int) -> Color {

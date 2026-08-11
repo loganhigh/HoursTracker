@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Friends leaderboard: ranked rows + crew summary
+// MARK: - Friends leaderboard: ranked rows
 //
 // The lower half of the Friends hub. Data types live in
 // FriendsLeaderboardModel.swift; the podium in FriendsPodiumSections.swift.
@@ -123,113 +123,5 @@ struct LeaderboardRankRow: View {
                 .foregroundStyle(movement > 0 ? AppColors.positive : AppColors.negative)
             }
         }
-    }
-}
-
-// MARK: - Crew summary
-
-struct CrewSummaryCard: View {
-    let entries: [LeaderboardEntry]
-    let onOpen: (() -> Void)?
-
-    /// Everyone's shared pay-period hours added together.
-    private var crewHours: Double {
-        entries.filter { !$0.hoursHidden }.reduce(0) { $0 + $1.payPeriodHours }
-    }
-
-    /// The next 100-hour milestone above the crew's current total. Derived
-    /// rather than configured — the app has no per-crew goal to read, and a
-    /// made-up target would be a number the user could never change.
-    private var goal: Double {
-        max(100, (crewHours / 100).rounded(.down) * 100 + 100)
-    }
-
-    private var topPerformer: LeaderboardEntry? {
-        entries.filter { !$0.hoursHidden }.max { $0.payPeriodHours < $1.payPeriodHours }
-    }
-
-    var body: some View {
-        HStack(spacing: AppSpacing.md) {
-            HStack(spacing: AppSpacing.sm) {
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(AppColors.accent)
-                    .frame(width: 42, height: 42)
-                    .background(Circle().fill(AppColors.accent.opacity(0.14)))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Crew Goal")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(AppColors.subtext)
-                    HStack(alignment: .firstTextBaseline, spacing: 3) {
-                        Text(AppTheme.Format.hours(crewHours))
-                            .font(.system(size: 19, weight: .heavy, design: .rounded))
-                            .foregroundStyle(AppColors.text)
-                            .monospacedDigit()
-                        Text("/ \(Int(goal))h")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AppColors.faint)
-                    }
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(AppColors.stroke.opacity(0.6)).frame(height: 5)
-                            Capsule()
-                                .fill(AppColors.accentGradient)
-                                .frame(width: max(0, geo.size.width * min(crewHours / goal, 1)), height: 5)
-                        }
-                        .frame(maxHeight: .infinity, alignment: .center)
-                    }
-                    .frame(height: 6)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Rectangle()
-                .fill(AppColors.stroke)
-                .frame(width: 0.5, height: 46)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Top Performer")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(AppColors.subtext)
-                if let topPerformer {
-                    HStack(spacing: 4) {
-                        Text(topPerformer.isMe ? "You" : topPerformer.firstName)
-                            .font(.system(size: 16, weight: .heavy, design: .rounded))
-                            .foregroundStyle(AppColors.text)
-                            .lineLimit(1)
-                        if topPerformer.streak > 0 { Text("🔥").font(.system(size: 12)) }
-                    }
-                    Text("\(AppTheme.Format.hours(topPerformer.payPeriodHours)) this period")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(AppColors.faint)
-                        .lineLimit(1)
-                } else {
-                    Text("—")
-                        .font(.system(size: 16, weight: .heavy, design: .rounded))
-                        .foregroundStyle(AppColors.faint)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            if onOpen != nil {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(AppColors.faint)
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(AppColors.card2))
-            }
-        }
-        .padding(AppSpacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                .fill(AppColors.card.opacity(0.55))
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                        .stroke(AppColors.stroke, lineWidth: 0.5)
-                )
-        )
-        .contentShape(Rectangle())
-        .onTapGesture { onOpen?() }
     }
 }
