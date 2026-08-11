@@ -940,6 +940,33 @@ function leaderboardAlertsEnabled(data) {
 }
 
 /**
+ * The closest tracker who overtook `cand` since their last-notified baseline:
+ * ranked above them now, ranked below them then. Returns a display name, or
+ * null when nobody actually passed (a rank can also drop because someone
+ * *above* them left the board, which is not an overtake and shouldn't be
+ * reported as one).
+ *
+ * "Closest" = the largest rank number among the overtakers, i.e. the one
+ * directly ahead — the person the user has a realistic shot at recatching.
+ */
+function nearestOvertaker(cand, current, prevRankByUid) {
+  let best = null;
+  for (const entry of current) {
+    if (!entry || entry.uid === cand.uid) continue;
+    if (!Number.isFinite(entry.rank) || entry.rank >= cand.rank) continue; // not above us now
+    const was = prevRankByUid.get(entry.uid);
+    // Unknown previous rank means they weren't on the broadcast slice before,
+    // so they climbed in from below — that counts as passing us.
+    const wasBelow = was === undefined || was > cand.baselineRank;
+    if (!wasBelow) continue;
+    if (!best || entry.rank > best.rank) best = entry;
+  }
+  if (!best) return null;
+  const name = String(best.name || "").trim();
+  return name || "Someone";
+}
+
+/**
  * Push an alert to users whose global-leaderboard position changed between the
  * previous broadcast and the one just written.
  *
@@ -981,9 +1008,16 @@ async function notifyLeaderboardRankMoves(previous, current) {
     const baseline = last ? last.rank : prevRankByUid.get(uid);
     if (baseline === undefined) {
       // Wasn't on the broadcast board at all last refresh: broke into the top N.
-      candidates.push({ uid, rank, delta: null, sortKey: 999 });
+      candidates.push({ uid, rank, delta: null, baselineRank: null, sortKey: 999 });
     } else if (baseline !== rank) {
-      candidates.push({ uid, rank, delta: baseline - rank, sortKey: Math.abs(baseline - rank) });
+      candidates.push({
+        uid,
+        rank,
+        delta: baseline - rank,
+        // Kept so a downward move can work out who came past them.
+        baselineRank: baseline,
+        sortKey: Math.abs(baseline - rank),
+      });
     }
   }
 
@@ -1027,8 +1061,13 @@ async function notifyLeaderboardRankMoves(previous, current) {
       title = "You're climbing! 📈";
       body = `You moved up ${spots} to #${cand.rank} on the global leaderboard.`;
     } else {
-      title = "Leaderboard update";
-      body = `You slipped to #${cand.rank} on the global leaderboard — log some hours to climb back!`;
+      // Naming whoever actually went past is the point of a "someone passed
+      // you" alert — a bare rank number doesn't tell the user who to chase.
+      const overtaker = nearestOvertaker(cand, current, prevRankByUid);
+      title = overtaker ? `${overtaker} passed you 👀` : "Leaderboard update";
+      body = overtaker
+        ? `${overtaker} moved ahead of you — you're now #${cand.rank} on the global leaderboard.`
+        : `You slipped to #${cand.rank} on the global leaderboard — log some hours to climb back!`;
     }
 
     await sendPushToUser(cand.uid, userData, {

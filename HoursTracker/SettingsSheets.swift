@@ -83,6 +83,11 @@ struct NotificationsSheet: View {
                     }
                     .tint(AppColors.accent)
 
+                    Toggle(isOn: $smartNotifier.leaderboardAlertsEnabled) {
+                        SettingsRowLabel(icon: "trophy.fill", title: "Leaderboard alerts")
+                    }
+                    .tint(AppColors.accent)
+
                     if smartNotifier.dailyReminderEnabled {
                         Button {
                             showingReminderTimePicker = true
@@ -97,7 +102,7 @@ struct NotificationsSheet: View {
                 } header: {
                     SectionEyebrow("Alerts")
                 } footer: {
-                    Text("Get notified about milestones, progress, daily reminders, motivation quotes, streak alerts, friend shifts (e.g. \"Jacob worked 13h today\") and \"Did you work today?\".")
+                    Text("Get notified about milestones, progress, daily reminders, motivation quotes, streak alerts, friend shifts (e.g. \"Jacob worked 13h today\"), when someone passes you on the global leaderboard, and \"Did you work today?\".")
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
                 }

@@ -90,6 +90,7 @@ final class PushNotificationService {
         do {
             try await db.collection("users").document(uid).setData([
                 "friendShiftAlerts": SmartNotifier.shared.friendShiftNotificationsEnabled,
+                "leaderboardAlerts": SmartNotifier.shared.leaderboardAlertsEnabled,
                 "pushSettingsUpdatedAt": FieldValue.serverTimestamp()
             ], merge: true)
         } catch {
@@ -126,6 +127,7 @@ final class PushNotificationService {
                 ], merge: true)
             try await db.collection("users").document(uid).setData([
                 "friendShiftAlerts": SmartNotifier.shared.friendShiftNotificationsEnabled,
+                "leaderboardAlerts": SmartNotifier.shared.leaderboardAlertsEnabled,
                 "pushSettingsUpdatedAt": FieldValue.serverTimestamp()
             ], merge: true)
             #if DEBUG

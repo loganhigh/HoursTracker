@@ -127,6 +127,24 @@ class SmartNotifier: ObservableObject {
         }
     }
     
+    /// Alert when someone passes you on the global leaderboard. Sent by the
+    /// server's scheduled leaderboard rebuild, so the preference is mirrored
+    /// to Firestore rather than scheduled locally.
+    var leaderboardAlertsEnabled: Bool {
+        get {
+            let savedValue = UserDefaults.standard.object(forKey: "notifications_leaderboard_enabled")
+            if let boolValue = savedValue as? Bool { return boolValue }
+            return true
+        }
+        set {
+            objectWillChange.send()
+            UserDefaults.standard.set(newValue, forKey: "notifications_leaderboard_enabled")
+            Task { @MainActor in
+                await PushNotificationService.shared.syncAlertPreferenceToCloud()
+            }
+        }
+    }
+
     private let notificationManager = NotificationManager.shared
     private static let friendShiftPrefix = "friend_shift_"
     
