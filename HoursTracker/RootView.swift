@@ -14,9 +14,27 @@ struct RootView: View {
     @State private var showingDisplayNamePrompt = false
     @State private var showingCountryFlagPrompt = false
     @State private var showingCountryFlagPicker = false
+    /// Root-level so the celebration overlays every tab, not just Home
+    /// (the trigger lives in HoursHomeView's level ratchet).
+    @StateObject private var levelUpCoordinator = LevelUpCoordinator()
+    /// Dev-only: presents the prestige celebration for the LEVELUP_DEMO hook.
+    @State private var demoPrestige = false
 
     var body: some View {
         AppTabView()
+        .environmentObject(levelUpCoordinator)
+        // Above everything, including the country prompt: reaching a new
+        // level should never render underneath another overlay.
+        .overlay {
+            if let celebration = levelUpCoordinator.current,
+               let player = levelUpCoordinator.animationPlayer {
+                LevelUpCelebrationView(
+                    celebration: celebration,
+                    animationPlayer: player,
+                    onContinue: { levelUpCoordinator.dismiss() }
+                )
+            }
+        }
         .onChange(of: store.entries.count) { _, newCount in
             if newCount >= 5 && !hasPromptedRateAfter5 {
                 hasPromptedRateAfter5 = true
@@ -64,6 +82,30 @@ struct RootView: View {
         .onAppear { scheduleCountryFlagPromptIfNeeded() }
         .onChange(of: authService.user?.uid) { _, _ in
             scheduleCountryFlagPromptIfNeeded()
+        }
+        .task {
+            // Dev-only rehearsal: `SIMCTL_CHILD_LEVELUP_DEMO=1 simctl launch …`
+            // plays the level-up celebration with the real profile without
+            // waiting for an actual level threshold ("prestige" rehearses the
+            // prestige flow instead). Inert unless the launch environment
+            // carries the variable, which production never does.
+            guard let demo = ProcessInfo.processInfo.environment["LEVELUP_DEMO"] else { return }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if demo == "prestige" {
+                demoPrestige = true
+            } else {
+                let profile = store.displayedGamificationProfile()
+                levelUpCoordinator.presentLevelUp(
+                    fromLevel: max(1, profile.level - 1),
+                    profile: profile
+                )
+            }
+        }
+        .fullScreenCover(isPresented: $demoPrestige) {
+            PrestigeCelebrationView(
+                prestige: max(1, store.displayedGamificationProfile().prestige + 1),
+                onDismiss: { demoPrestige = false }
+            )
         }
     }
 
@@ -206,6 +248,7 @@ struct HoursHomeView: View {
     @ObservedObject private var friendsService = FriendsService.shared
     @ObservedObject private var statsListener = StatsListenerService.shared
     @ObservedObject private var topTrackers = TopTrackersService.shared
+    @EnvironmentObject private var levelUpCoordinator: LevelUpCoordinator
 
     @State private var showingAdd = false
     @State private var editingEntry: WorkEntry?
@@ -359,8 +402,13 @@ struct HoursHomeView: View {
             return
         }
         guard displayed > celebratedLevelHWM else { return }
+        let previousHWM = celebratedLevelHWM
         celebratedLevelHWM = displayed
-        // Level-up popup and sound removed — ratchet still advances silently.
+        guard celebrate else { return }
+        levelUpCoordinator.presentLevelUp(
+            fromLevel: max(1, previousHWM),
+            profile: store.displayedGamificationProfile()
+        )
     }
 
     // MARK: - Friends subscriptions

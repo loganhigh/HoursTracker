@@ -130,24 +130,14 @@ struct LevelView: View {
 
     private var emblemHero: some View {
         VStack(spacing: AppSpacing.md) {
-            ZStack {
-                LevelHexagon(cornerRadius: 14)
-                    .fill(tierColor.opacity(0.12))
-                LevelHexagon(cornerRadius: 14)
-                    .stroke(tierColor.opacity(0.45), lineWidth: 1.5)
-                VStack(spacing: 0) {
-                    Text("Level")
-                        .appText(.eyebrow)
-                        .foregroundStyle(tierColor)
-                    Text("\(profile.level)")
-                        .font(AppTypography.heroNumber)
-                        .foregroundStyle(AppColors.text)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .padding(.horizontal, AppSpacing.lg)
-                }
+            // The same badge identity the level-up celebration animates, so
+            // the emblem the user levels up into is the one they see here.
+            LevelBadgeView(tier: PrestigeTheme.tier(for: profile.prestige), width: 150) {
+                LevelBadgeNumber(
+                    level: profile.level,
+                    tier: PrestigeTheme.tier(for: profile.prestige)
+                )
             }
-            .frame(width: 150, height: 166)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Level \(profile.level), \(rankTitle)")
 

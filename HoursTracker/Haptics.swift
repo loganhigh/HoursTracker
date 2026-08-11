@@ -19,6 +19,15 @@ enum Haptics {
         g.impactOccurred()
     }
 
+    /// Heavy tap — the strongest impact; reserved for celebration peaks
+    /// (level-up energy build, prestige transformation).
+    static func heavyTap() {
+        guard HapticsManager.shared.isEnabled else { return }
+        let g = UIImpactFeedbackGenerator(style: .heavy)
+        g.prepare()
+        g.impactOccurred()
+    }
+
     /// Success — use after saving a shift, unlocking badge.
     static func success() {
         guard HapticsManager.shared.isEnabled else { return }

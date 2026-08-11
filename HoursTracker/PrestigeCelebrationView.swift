@@ -18,7 +18,20 @@ struct PrestigeCelebrationView: View {
     @State private var confettiActive = false
     @State private var buttonVisible = false
     @State private var dismissing = false
-    @State private var player: AVAudioPlayer?
+    /// The Higgsfield transformation clip (silver shell cracking open to
+    /// gold). Plays once as the centerpiece before the emblem reveal; when the
+    /// asset is missing or Reduce Motion is on, the flow is the pre-cinematic
+    /// one, unchanged.
+    @StateObject private var cinematicPlayer: LevelAnimationPlayer
+    @State private var showingCinematic = false
+
+    init(prestige: Int, onDismiss: @escaping () -> Void) {
+        self.prestige = prestige
+        self.onDismiss = onDismiss
+        _cinematicPlayer = StateObject(wrappedValue: LevelAnimationPlayer(
+            cinematic: .prestige(tier: PrestigeTheme.tier(for: prestige))
+        ))
+    }
 
     private var tier: PrestigeTheme.Tier { PrestigeTheme.tier(for: prestige) }
     private var previousTier: PrestigeTheme.Tier { PrestigeTheme.tier(for: max(0, prestige - 1)) }
@@ -69,9 +82,20 @@ struct PrestigeCelebrationView: View {
                         .opacity(headerVisible ? 1 : 0)
                         .offset(y: headerVisible ? 0 : 12)
 
-                    prestigeEmblem
-                        .scaleEffect(emblemScale)
-                        .opacity(emblemOpacity)
+                    ZStack {
+                        if showingCinematic {
+                            CinematicVideoSurface(player: cinematicPlayer.player)
+                                .frame(width: 250, height: 276)
+                                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                                .transition(.opacity)
+                        } else {
+                            prestigeEmblem
+                                .scaleEffect(emblemScale)
+                                .opacity(emblemOpacity)
+                                .transition(.opacity)
+                        }
+                    }
+                    .frame(minHeight: 150)
 
                     VStack(spacing: 8) {
                         Text(tier.name)
@@ -140,13 +164,56 @@ struct PrestigeCelebrationView: View {
                 .offset(y: buttonVisible ? 0 : 24)
             }
 
-            if !reduceMotion {
+            // Not mounted until the cinematic ends: inactive pieces rest just
+            // above the top edge, and the cinematic keeps the screen still
+            // long enough for them to be visible there.
+            if !reduceMotion && !showingCinematic {
                 ConfettiLayer(active: confettiActive, palette: tier.confettiColors, pieceCount: 64)
                     .allowsHitTesting(false)
             }
         }
         .onAppear {
             playCelebrationSound()
+            if !reduceMotion && cinematicPlayer.hasAsset {
+                runCinematicOpening()
+            } else {
+                runCelebrationSequence()
+            }
+        }
+        .onChange(of: cinematicPlayer.didFinish) { _, finished in
+            guard finished, showingCinematic else { return }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showingCinematic = false
+            }
+            cinematicPlayer.teardown()
+            runCelebrationSequence()
+        }
+        .onDisappear { cinematicPlayer.teardown() }
+    }
+
+    /// Cinematic-first opening: dim the backdrop, play the transformation
+    /// clip once with escalating haptics, then hand off to the standard
+    /// reveal sequence. A watchdog keeps a stalled decode from stranding the
+    /// celebration on a frozen frame.
+    private func runCinematicOpening() {
+        showingCinematic = true
+        Haptics.mediumTap()
+        withAnimation(.easeOut(duration: 0.25)) {
+            backdropOpacity = 0.82
+        }
+        withAnimation(AppMotion.Spring.smooth.delay(0.12)) {
+            headerVisible = true
+        }
+        cinematicPlayer.play()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            if showingCinematic { Haptics.heavyTap() }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
+            guard showingCinematic else { return }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showingCinematic = false
+            }
+            cinematicPlayer.teardown()
             runCelebrationSequence()
         }
     }
@@ -307,10 +374,9 @@ struct PrestigeCelebrationView: View {
     }
 
     private func playCelebrationSound() {
-        guard let url = Bundle.main.url(forResource: "level_up", withExtension: "caf") else { return }
-        player = try? AVAudioPlayer(contentsOf: url)
-        player?.volume = 1.0
-        player?.play()
+        // Falls back to the bundled level_up.caf until a dedicated
+        // prestige.wav is added to the project.
+        CelebrationAudio.shared.play(.prestige)
     }
 
     private static func tagline(for prestige: Int) -> String {
