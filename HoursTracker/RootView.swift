@@ -461,58 +461,6 @@ struct HoursHomeView: View {
                 HomeStatTriplet(store: store)
                     .cardAppear(index: 2)
 
-                VStack(spacing: 10) {
-                    // Quiet primary action: flat accent fill, hairline-free,
-                    // no glow — the hero card owns this screen's one glow.
-                    Button {
-                        Haptics.lightTap()
-                        logShiftBurst &+= 1
-                        showingAdd = true
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "plus")
-                                .font(.system(.callout, weight: .bold))
-                            Text("Add Shift")
-                                .font(.system(.callout, design: .rounded, weight: .bold))
-                        }
-                        .foregroundStyle(AppColors.textOnAccent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(
-                            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                                .fill(AppColors.accent)
-                        )
-                    }
-                    .buttonStyle(TapBurstButtonStyle())
-                    .tapBurst(trigger: logShiftBurst)
-                    HStack(spacing: 10) {
-                        minimalActionTile(
-                            title: "Off day",
-                            systemImage: "xmark.circle.fill",
-                            tint: AppColors.offDayAction
-                        ) {
-                            Haptics.lightTap()
-                            offDayBurst &+= 1
-                            logOffDayForToday()
-                        }
-                        .tapBurst(trigger: offDayBurst)
-
-                        minimalActionTile(
-                            title: "Holiday",
-                            systemImage: "airplane",
-                            tint: AppColors.holidayAction
-                        ) {
-                            Haptics.lightTap()
-                            holidayBurst &+= 1
-                            holidayStartDate = Calendar.current.startOfDay(for: Date())
-                            holidayDayCount = 1
-                            showingHolidayPicker = true
-                        }
-                        .tapBurst(trigger: holidayBurst)
-                    }
-                }
-                .cardAppear(index: 3)
-
                 RecentShiftsSection(
                     store: store,
                     hasAnyShifts: hasAnyShifts,
@@ -533,10 +481,10 @@ struct HoursHomeView: View {
                         showTrackingHint = true
                     }
                 )
-                .cardAppear(index: 4)
+                .cardAppear(index: 3)
 
                 YearlyOverviewSection(store: store)
-                    .cardAppear(index: 5)
+                    .cardAppear(index: 4)
 
                 if !premium.isPremium {
                     BannerAdView()
@@ -553,11 +501,11 @@ struct HoursHomeView: View {
                             tabRouter.selection = .friends
                         }
                     )
-                    .cardAppear(index: 6)
+                    .cardAppear(index: 5)
 
                     // Global leaderboard — social surface, hidden with Friends.
                     homeTopTrackersSection
-                        .cardAppear(index: 7)
+                        .cardAppear(index: 6)
                 }
 
                 Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
