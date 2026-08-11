@@ -27,10 +27,15 @@ struct WelcomeBackView: View {
             AppColors.bg.ignoresSafeArea()
 
             VStack(spacing: AppSpacing.sm) {
-                Image(systemName: "hourglass")
-                    .font(.system(size: 34, weight: .regular))
-                    .foregroundStyle(AppColors.accent)
+                // The app logo, matching the onboarding welcome — the generic
+                // SF hourglass here read as a system placeholder rather than
+                // Hour Tracker.
+                Image("AppLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 120, height: 120)
                     .padding(.bottom, AppSpacing.xs)
+                    .accessibilityHidden(true)
 
                 Text(greeting)
                     .appText(.title)
