@@ -123,7 +123,7 @@ struct GlobalLeaderboardView: View {
                     Divider()
                         .overlay(AppColors.stroke)
                         .opacity(0.5)
-                        .padding(.leading, 74)
+                        .padding(.leading, GlobalLeaderboardMetrics.nameColumnInset)
                 }
             }
         }

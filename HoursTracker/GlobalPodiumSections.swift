@@ -147,15 +147,33 @@ struct YouChip: View {
 
 // MARK: - Ranked list
 
+/// Shared column geometry, so the caption row and the ranked rows below it
+/// can't drift out of alignment.
+enum GlobalLeaderboardMetrics {
+    static let rankColumnWidth: CGFloat = 34
+    static let avatarSize: CGFloat = 36
+    /// Where the name column starts, measured from the row's leading edge —
+    /// used to inset the dividers.
+    static var nameColumnInset: CGFloat {
+        AppSpacing.sm + rankColumnWidth + AppSpacing.sm + avatarSize + AppSpacing.sm
+    }
+}
+
 /// Column captions above the ranked rows.
 struct GlobalListHeader: View {
     var body: some View {
         HStack(spacing: AppSpacing.sm) {
             Text("Rank")
-                .frame(width: 26, alignment: .leading)
+                // The eyebrow style's wide letter-spacing pushes "RANK" past
+                // the rank column's width, so it has to be told not to wrap.
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(width: GlobalLeaderboardMetrics.rankColumnWidth, alignment: .leading)
             Text("Tracker")
+                .lineLimit(1)
             Spacer(minLength: AppSpacing.xs)
             Text("All time hours")
+                .lineLimit(1)
         }
         .appText(.eyebrow)
         .foregroundStyle(AppColors.faint)
@@ -177,11 +195,11 @@ struct GlobalTrackerRow: View {
                 .font(.system(size: 14, weight: .heavy, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(isMe ? AppColors.accent : AppColors.subtext)
-                .frame(width: 26, alignment: .leading)
+                .frame(width: GlobalLeaderboardMetrics.rankColumnWidth, alignment: .leading)
 
             ProfileAvatarView(
                 name: tracker.name,
-                size: 36,
+                size: GlobalLeaderboardMetrics.avatarSize,
                 photoURL: tracker.photoURL,
                 uid: tracker.uid
             )

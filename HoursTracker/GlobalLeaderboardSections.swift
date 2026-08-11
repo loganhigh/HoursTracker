@@ -93,51 +93,38 @@ struct GlobalRankHeroCard: View {
     let hours: Double
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            // The globe bleeds off the card's trailing edge, so it is drawn
-            // first and clipped by the card shape below.
-            GlobalGlobeArt()
-                .frame(width: 260, height: 260)
-                .offset(x: 78, y: -46)
-                .allowsHitTesting(false)
+        VStack(spacing: 0) {
+            Text("Your global rank")
+                .appText(.eyebrow)
+                .foregroundStyle(AppColors.accent)
 
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Your global rank")
-                    .appText(.eyebrow)
-                    .foregroundStyle(AppColors.accent)
-
-                HStack(alignment: .center, spacing: AppSpacing.xs) {
-                    Text(rank.map { "#\($0)" } ?? "—")
-                        .font(.system(size: 52, weight: .heavy, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(AppColors.text)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-
-                    if rank == 1 {
-                        Image(systemName: "crown.fill")
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundStyle(AppColors.rankGold)
-                    }
-                }
-                .padding(.top, 6)
-
-                Text("All time hours")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppColors.subtext)
-                    .padding(.top, 10)
-
-                Text(GlobalHoursFormat.hours(hours))
-                    .font(.system(size: 34, weight: .heavy, design: .rounded))
+            HStack(alignment: .center, spacing: AppSpacing.xs) {
+                Text(rank.map { "#\($0)" } ?? "—")
+                    .font(.system(size: 56, weight: .heavy, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(AppColors.accent)
+                    .foregroundStyle(AppColors.text)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .padding(.top, 2)
+                    .minimumScaleFactor(0.5)
+
+                if rank == 1 {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 26, weight: .bold))
+                        .foregroundStyle(AppColors.rankGold)
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(AppSpacing.md)
+            .padding(.top, 4)
+
+            Text(GlobalHoursFormat.hours(hours))
+                .font(.system(size: 30, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(AppColors.accent)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .padding(.top, 4)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, AppSpacing.lg)
+        .padding(.horizontal, AppSpacing.md)
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
@@ -156,7 +143,6 @@ struct GlobalRankHeroCard: View {
                     )
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
                 .stroke(
@@ -172,63 +158,6 @@ struct GlobalRankHeroCard: View {
                     lineWidth: 1
                 )
         )
-    }
-}
-
-// MARK: - Globe artwork
-
-/// A wireframe globe drawn from plain shapes — no image asset, and it retints
-/// with the user's prestige accent like the rest of the card.
-struct GlobalGlobeArt: View {
-    /// Latitudes as a fraction of the radius, north to south.
-    private let latitudes: [CGFloat] = [-0.72, -0.42, -0.14, 0.14, 0.42, 0.72]
-    /// Longitudes as a fraction of the full width.
-    private let longitudes: [CGFloat] = [0.22, 0.55, 0.85]
-
-    var body: some View {
-        GeometryReader { geo in
-            let radius = min(geo.size.width, geo.size.height) / 2
-
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                AppColors.accent.opacity(0.45),
-                                AppColors.accent.opacity(0.10),
-                                Color.clear
-                            ],
-                            center: UnitPoint(x: 0.36, y: 0.30),
-                            startRadius: 0,
-                            endRadius: radius * 1.15
-                        )
-                    )
-
-                Circle()
-                    .stroke(AppColors.accent.opacity(0.55), lineWidth: 1.5)
-
-                // Parallels: a horizontal slice of a sphere at height y has
-                // half-width sqrt(r² - y²), which is what keeps these reading
-                // as a globe rather than a stack of equal rings.
-                ForEach(latitudes, id: \.self) { fraction in
-                    let y = radius * fraction
-                    let width = 2 * sqrt(max(radius * radius - y * y, 0))
-                    Ellipse()
-                        .stroke(AppColors.accent.opacity(0.30), lineWidth: 1)
-                        .frame(width: width, height: max(8, width * 0.20))
-                        .offset(y: y)
-                }
-
-                // Meridians: nested ellipses of full height, narrowing toward
-                // the sphere's edge.
-                ForEach(longitudes, id: \.self) { fraction in
-                    Ellipse()
-                        .stroke(AppColors.accent.opacity(0.30), lineWidth: 1)
-                        .frame(width: radius * 2 * fraction, height: radius * 2)
-                }
-            }
-            .frame(width: geo.size.width, height: geo.size.height)
-        }
     }
 }
 
