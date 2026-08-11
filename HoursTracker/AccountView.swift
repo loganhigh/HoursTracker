@@ -26,6 +26,9 @@ struct AccountView: View {
     @State private var deleteAccountError: String?
     @State private var photoPickerItem: PhotosPickerItem?
     @State private var isUpdatingPhoto = false
+    /// The raw picked photo, awaiting the crop step. Non-nil drives the crop
+    /// sheet's presentation.
+    @State private var pendingCropImage: UIImage?
     @ObservedObject private var photoManager = ProfilePhotoManager.shared
 
     // MARK: - Identity data
@@ -83,6 +86,7 @@ struct AccountView: View {
                     versionFooter
                 }
                 .padding(.horizontal, AppSpacing.md)
+                .padding(.top, AppSpacing.xs)
                 .padding(.bottom, AppSpacing.xl)
             }
             .scrollContentBackground(.hidden)
@@ -92,6 +96,21 @@ struct AccountView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView(store: store, settings: $store.paySettings)
                 .environmentObject(authService)
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { pendingCropImage != nil },
+            set: { if !$0 { pendingCropImage = nil } }
+        )) {
+            if let pendingCropImage {
+                ProfilePhotoCropView(
+                    image: pendingCropImage,
+                    onCancel: { self.pendingCropImage = nil },
+                    onConfirm: { cropped in
+                        self.pendingCropImage = nil
+                        Task { await saveCroppedPhoto(cropped) }
+                    }
+                )
+            }
         }
         .onAppear {
             // Same recovery hook as CareerView: guarantees the server-stats
@@ -145,17 +164,23 @@ struct AccountView: View {
 
         return VStack(spacing: AppSpacing.xs) {
             PhotosPicker(selection: $photoPickerItem, matching: .images) {
+                // The ring is 5pt wider than the avatar on every edge. Reserving
+                // that overflow in the button's own frame (rather than letting
+                // the ring bleed past a 96x96 layout size via a bare overlay)
+                // keeps the ring fully inside this view's bounds — it can no
+                // longer be sliced by an ancestor's clipping (the ScrollView
+                // this sits at the top of, in particular) regardless of scroll
+                // position or spacing above it.
                 ZStack(alignment: .bottomTrailing) {
                     ProfileAvatarView(
                         name: displayName,
                         size: 96,
                         uid: avatarUID
                     )
-                    // Thin prestige-tier ring (accent at P0).
+                    .padding(5)
                     .overlay(
                         Circle()
                             .stroke(ringColor.opacity(0.7), lineWidth: 2)
-                            .padding(-5)
                     )
 
                     if isSignedIn {
@@ -167,7 +192,7 @@ struct AccountView: View {
             .disabled(!isSignedIn || isUpdatingPhoto)
             .onChange(of: photoPickerItem) { _, item in
                 guard let item else { return }
-                Task { await updateProfilePhoto(from: item) }
+                Task { await loadImageForCropping(item) }
             }
             .padding(.bottom, AppSpacing.xxs)
 
@@ -211,7 +236,12 @@ struct AccountView: View {
             }
         }
         .overlay(Circle().stroke(AppColors.bg, lineWidth: 2))
-        .offset(x: 2, y: 2)
+        // Was (2, 2) against the avatar's own 96x96 frame. The avatar now
+        // carries 5pt of padding so the ring can fit inside its own bounds
+        // (see the PhotosPicker label above), which grew the ZStack's
+        // bottom-trailing anchor by that same 5pt — subtracted back out here
+        // so the badge still sits snug against the photo's actual corner.
+        .offset(x: -3, y: -3)
     }
 
     // MARK: - Lifetime stats
@@ -427,16 +457,21 @@ struct AccountView: View {
         }
     }
 
-    private func updateProfilePhoto(from item: PhotosPickerItem) async {
+    /// Loads the picked photo's data and hands it to the crop step — nothing
+    /// is saved yet. `photoPickerItem` is cleared immediately so re-picking
+    /// the same photo later still fires `onChange`.
+    private func loadImageForCropping(_ item: PhotosPickerItem) async {
+        defer { photoPickerItem = nil }
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else { return }
+        pendingCropImage = image
+    }
+
+    private func saveCroppedPhoto(_ image: UIImage) async {
         guard authService.isSignedIn else { return }
         isUpdatingPhoto = true
-        defer {
-            isUpdatingPhoto = false
-            photoPickerItem = nil
-        }
+        defer { isUpdatingPhoto = false }
         do {
-            guard let data = try await item.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data) else { return }
             try await photoManager.setPhoto(image)
             store.syncProfileSnapshotToCloud()
             Haptics.success()
