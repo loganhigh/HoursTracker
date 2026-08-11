@@ -1,9 +1,13 @@
 import SwiftUI
 
-// MARK: - Friends hub (Phase 6)
+// MARK: - Friends hub
 //
-// Friend-code card, pending requests, then the friends list. Rows and cards
-// live in FriendsSections.swift.
+// A competitive board: header, weekly podium, metric switcher, ranked rows
+// (the signed-in user among their friends), then the crew summary. Adding a
+// friend moved into a sheet behind the header's + button so the board owns the
+// screen. Board types live in FriendsLeaderboardModel.swift, the podium in
+// FriendsPodiumSections.swift, rows in FriendsLeaderboardSections.swift, and
+// the friend-code card and request rows remain in FriendsSections.swift.
 
 struct FriendsView: View {
     @ObservedObject var store: HoursStore
@@ -22,9 +26,72 @@ struct FriendsView: View {
     @State private var nudgeTarget: FriendProfile?
     @State private var isSendingNudge = false
     @State private var nudgeResultMessage: String?
+    @State private var metric: LeaderboardMetric = .thisWeek
+    @State private var showingSearch = false
+    @State private var searchText = ""
+    @State private var showingAddFriend = false
 
     private var myName: String {
         UserDefaults.standard.string(forKey: "profile_display_name") ?? "Worker"
+    }
+
+    // MARK: - Board
+
+    /// The signed-in user plus every friend, ranked by the selected metric.
+    /// Construction lives on `LeaderboardEntry` — see FriendsLeaderboardModel.
+    private var board: [LeaderboardEntry] {
+        LeaderboardEntry.board(
+            myUid: authService.user?.uid,
+            myName: myName,
+            myProfile: store.displayedGamificationProfile(),
+            myWeeklyHours: WeeklyStatsCalculator.weeklyHours(store.entries),
+            myPhotoURL: ProfilePhotoManager.shared.remotePhotoURL,
+            friends: friendsService.friends,
+            metric: metric
+        )
+    }
+
+    /// You can't nudge yourself, so your own row gets no nudge action at all
+    /// rather than a disabled one.
+    private func nudgeAction(for entry: LeaderboardEntry) -> (() -> Void)? {
+        guard !entry.isMe else { return nil }
+        return { nudgeTarget = friendsService.friends.first { $0.uid == entry.id } }
+    }
+
+    private func visibleEntries(from entries: [LeaderboardEntry]) -> [LeaderboardEntry] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return entries }
+        return entries.filter { $0.isMe || $0.name.localizedCaseInsensitiveContains(query) }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: AppSpacing.xs) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppColors.faint)
+            TextField("Search friends", text: $searchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(AppColors.text)
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15))
+                        .foregroundStyle(AppColors.faint)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, AppSpacing.sm)
+        .padding(.vertical, 11)
+        .background(
+            Capsule()
+                .fill(AppColors.card.opacity(0.55))
+                .overlay(Capsule().stroke(AppColors.stroke, lineWidth: 0.5))
+        )
     }
 
     var body: some View {
@@ -36,8 +103,9 @@ struct FriendsView: View {
             }
         }
         .background(AppColors.bg.ignoresSafeArea())
-        .navigationTitle("Friends")
-        .navigationBarTitleDisplayMode(.inline)
+        // The screen draws its own large "Friends" header, so the nav bar's
+        // would be a second copy of the same word.
+        .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             if let uid = authService.user?.uid {
                 friendsService.startListening(uid: uid)
@@ -66,6 +134,39 @@ struct FriendsView: View {
                     await removeFriend(friend)
                 }
             )
+        }
+        .sheet(isPresented: $showingAddFriend) {
+            NavigationStack {
+                ScrollView {
+                    VStack(spacing: AppSpacing.md) {
+                        FriendCodeCard(
+                            code: friendsService.myFriendCode,
+                            codeInput: $codeInput,
+                            isSending: isSending,
+                            copyConfirmation: copyConfirmation,
+                            onCopy: { copyCode() },
+                            onAdd: { Task { await sendRequest() } }
+                        )
+                        notifyCaption
+                        if let actionMessage {
+                            Text(actionMessage)
+                                .appText(.caption)
+                                .foregroundStyle(actionMessageIsError ? AppColors.negative : AppColors.accent)
+                                .multilineTextAlignment(.center)
+                        }
+                    }
+                    .padding(AppSpacing.md)
+                }
+                .background(AppColors.bg.ignoresSafeArea())
+                .navigationTitle("Add a friend")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showingAddFriend = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
         }
         .sheet(item: $nudgeTarget) { friend in
             FriendShiftNudgePicker(
@@ -133,19 +234,34 @@ struct FriendsView: View {
     // MARK: - Content
 
     private var friendsContent: some View {
-        ScrollView {
+        // Bound once: `board` sorts the full list and reads the rank snapshot,
+        // and the body touches it four times. Recomputing per access also risks
+        // two call sites disagreeing mid-render.
+        let entries = board
+        let visible = visibleEntries(from: entries)
+        return ScrollView {
             VStack(spacing: AppSpacing.md) {
-                FriendCodeCard(
-                    code: friendsService.myFriendCode,
-                    codeInput: $codeInput,
-                    isSending: isSending,
-                    copyConfirmation: copyConfirmation,
-                    onCopy: { copyCode() },
-                    onAdd: { Task { await sendRequest() } }
+                FriendsHeroHeader(
+                    onSearch: {
+                        withAnimation { showingSearch.toggle() }
+                        if !showingSearch { searchText = "" }
+                    },
+                    onAddFriend: { showingAddFriend = true }
                 )
 
-                notifyCaption
-                    .frame(maxWidth: .infinity)
+                if showingSearch {
+                    searchField
+                }
+
+                if !entries.isEmpty {
+                    WeeklyPodiumCard(
+                        entries: entries,
+                        metric: metric,
+                        resetsAt: WeeklyStatsCalculator.currentWeekInterval().end
+                    )
+
+                    LeaderboardMetricPicker(selection: $metric)
+                }
 
                 if let actionMessage {
                     Text(actionMessage)
@@ -188,8 +304,12 @@ struct FriendsView: View {
                     }
                 }
 
-                friendsList
+                friendsList(visible)
                     .padding(.top, AppSpacing.xxs)
+
+                if entries.count > 1 {
+                    CrewSummaryCard(entries: entries, onOpen: nil)
+                }
             }
             .padding(.horizontal, AppSpacing.md)
             .padding(.vertical, AppSpacing.md)
@@ -204,25 +324,28 @@ struct FriendsView: View {
 
     // MARK: - Friends list
 
-    private var friendsList: some View {
-        let maxWeekly = friendsService.friends
-            .filter { $0.privacy.shareHours }
-            .map(\.weeklyHours)
-            .max() ?? 0
-
-        return VStack(spacing: AppSpacing.sm) {
+    private func friendsList(_ visible: [LeaderboardEntry]) -> some View {
+        VStack(spacing: AppSpacing.xs) {
             if !friendsService.friends.isEmpty {
-                ForEach(friendsService.friends) { friend in
-                    FriendStatsRow(
-                        friend: friend,
-                        maxWeeklyHours: maxWeekly,
-                        onOpenProfile: {
-                            profileFriendUid = friend.uid
+                ForEach(visible) { entry in
+                    LeaderboardRankRow(
+                        entry: entry,
+                        metric: metric,
+                        onOpen: {
+                            // Tapping your own row has nowhere useful to go —
+                            // the You tab already is your profile.
+                            guard !entry.isMe else { return }
+                            profileFriendUid = entry.id
                         },
-                        onNudge: {
-                            nudgeTarget = friend
-                        }
+                        onNudge: nudgeAction(for: entry)
                     )
+                }
+                if visible.isEmpty {
+                    Text("No one matches \u{201C}\(searchText)\u{201D}")
+                        .appText(.caption)
+                        .foregroundStyle(AppColors.subtext)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, AppSpacing.lg)
                 }
             } else if friendsService.isLoading {
                 AppLoadingState(message: "Loading friends…")
