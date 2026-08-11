@@ -159,27 +159,22 @@ enum GlobalLeaderboardMetrics {
     }
 }
 
-/// Column captions above the ranked rows. Just "Rank" and "All time hours" —
-/// the name column needs no caption of its own.
+/// A single caption over the hours column. The rank and name columns are
+/// self-evident and carry no label of their own.
 struct GlobalListHeader: View {
     var body: some View {
-        HStack(spacing: AppSpacing.sm) {
-            Text("Rank")
-                // A smaller, un-fixed size so it actually shrinks to fit the
-                // rank column instead of overflowing into the next column —
-                // fixedSize previously reported "RANK"'s full width past the
-                // 34pt frame, which the frame doesn't clip, so it visually
-                // ran straight into "Tracker".
-                .font(.system(size: 10, weight: .heavy, design: .rounded))
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .frame(width: GlobalLeaderboardMetrics.rankColumnWidth, alignment: .leading)
-            Spacer(minLength: AppSpacing.xs)
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
             Text("All time hours")
+                // Smaller and less loosely tracked than the eyebrow style, so
+                // it stays a quiet caption sitting close over the figures it
+                // labels rather than spanning half the card.
+                .font(.system(size: 9, weight: .heavy, design: .rounded))
+                .tracking(1)
+                .textCase(.uppercase)
                 .lineLimit(1)
+                .foregroundStyle(AppColors.faint)
         }
-        .appText(.eyebrow)
-        .foregroundStyle(AppColors.faint)
         .padding(.horizontal, AppSpacing.sm)
         .padding(.top, AppSpacing.sm)
         .padding(.bottom, 6)
