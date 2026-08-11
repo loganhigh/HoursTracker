@@ -71,26 +71,27 @@ struct AccountView: View {
     // MARK: - Body
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Outside the ScrollView so settings stays reachable from anywhere
-            // on the page rather than scrolling away with the hero.
-            settingsBar
-
-            ScrollView {
-                VStack(spacing: AppSpacing.xl) {
+        ScrollView {
+            VStack(spacing: AppSpacing.xl) {
+                // Inside the ScrollView, so it sits at the top-right of the
+                // page and scrolls away with the content rather than floating
+                // over it. Grouped with the hero at zero spacing so the gear
+                // reads as part of that header block.
+                VStack(spacing: 0) {
+                    settingsBar
                     identityHero
-                    ProfileXPCapsule(store: store)
-                    lifetimeStatsSection
-                    navigationCard
-                    accountSection
-                    versionFooter
                 }
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.top, AppSpacing.xs)
-                .padding(.bottom, AppSpacing.xl)
+                ProfileXPCapsule(store: store)
+                lifetimeStatsSection
+                navigationCard
+                accountSection
+                versionFooter
             }
-            .scrollContentBackground(.hidden)
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, AppSpacing.xs)
+            .padding(.bottom, AppSpacing.xl)
         }
+        .scrollContentBackground(.hidden)
         .background(AppColors.bg.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showingSettings) {
@@ -147,7 +148,8 @@ struct AccountView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
         }
-        .padding(.horizontal, AppSpacing.md)
+        // No horizontal padding of its own — it now sits inside the scroll
+        // content, which already applies the page margin.
         .padding(.bottom, AppSpacing.xs)
     }
 
