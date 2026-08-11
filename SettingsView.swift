@@ -13,8 +13,6 @@ struct SettingsView: View {
     @State private var showingCutoffPicker = false
     @State private var showingNotificationsSheet = false
     @State private var showingDataExportSheet = false
-    @State private var showingProfessionalReportsSheet = false
-    @State private var showingReportsUpgrade = false
     @State private var showingRestoreBackupConfirm = false
     @State private var showBackupSavedAlert = false
     @State private var showRestoreSuccessAlert = false
@@ -217,29 +215,13 @@ struct SettingsView: View {
                         )
                     }
 
-                    NavigationLink {
-                        ShiftTemplatesSettingsView(store: store)
-                    } label: {
-                        HStack(spacing: AppSpacing.sm) {
-                            SettingsRowLabel(
-                                icon: "square.on.square",
-                                title: "Shift Templates",
-                                subtitle: store.shiftTemplates.isEmpty
-                                    ? "Log your usual shift in one tap"
-                                    : "\(store.shiftTemplates.count) saved"
-                            )
-                            Spacer(minLength: AppSpacing.xs)
-                            if !premium.isPremium {
-                                Image(systemName: "crown.fill")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(AppColors.accent)
-                            }
-                        }
-                    }
+                    // Shift Templates removed from Settings for now — revisit
+                    // later. ShiftTemplatesSettingsView and store.shiftTemplates
+                    // are untouched; restore the row to re-enable.
                 } header: {
-                    SectionEyebrow("Locations & Templates")
+                    SectionEyebrow("Job Sites")
                 } footer: {
-                    Text("Saved locations and templates appear when you add a shift. Stored on this device.")
+                    Text("Saved locations appear when you add a shift. Stored on this device.")
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
                 }
@@ -312,25 +294,10 @@ struct SettingsView: View {
                         }
                     }
 
-                    Button {
-                        if premium.isPremium {
-                            showingProfessionalReportsSheet = true
-                        } else {
-                            Haptics.lightTap()
-                            showingReportsUpgrade = true
-                        }
-                    } label: {
-                        HStack(spacing: AppSpacing.sm) {
-                            SettingsRowLabel(icon: "chart.bar.doc.horizontal", title: "Professional Reports")
-                            Spacer(minLength: AppSpacing.xs)
-                            if !premium.isPremium {
-                                Image(systemName: "crown.fill")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(AppColors.accent)
-                            }
-                            SettingsChevron()
-                        }
-                    }
+                    // Professional Reports removed from Settings for now —
+                    // revisit later. ProfessionalReportsSheet and the upgrade
+                    // paywall it gated are untouched; restore the row to
+                    // re-enable.
                 } header: {
                     SectionEyebrow("Data & Backup")
                 } footer: {
@@ -446,12 +413,6 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingDataExportSheet) {
                 DataExportSheet(store: store)
-            }
-            .sheet(isPresented: $showingProfessionalReportsSheet) {
-                ProfessionalReportsSheet(store: store)
-            }
-            .sheet(isPresented: $showingReportsUpgrade) {
-                PremiumUpgradeView()
             }
             .sheet(isPresented: $showingPremiumSheet) {
                 PremiumUpgradeView()
