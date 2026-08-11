@@ -1,0 +1,81 @@
+name: Build
+
+# Compile-only CI. Unlike the TestFlight workflow this needs no secrets and no
+# signing identity — it exists purely to catch Swift compile errors on every
+# push, including from environments that have no Xcode of their own.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # Only the newest commit on a branch is worth compiling.
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest installed Xcode
+        run: |
+          set -euo pipefail
+          newest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using $newest"
+          sudo xcode-select -s "$newest/Contents/Developer"
+          xcodebuild -version
+
+      - name: Cache Swift package dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Resolve Swift package dependencies
+        run: |
+          set -euo pipefail
+          xcodebuild -resolvePackageDependencies \
+            -project HoursTracker.xcodeproj \
+            -scheme HoursTracker
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          # Simulator destination + CODE_SIGNING_ALLOWED=NO keeps this free of
+          # certificates and provisioning profiles; the point is the compiler,
+          # not a shippable binary.
+          set -o pipefail && xcodebuild build \
+            -project HoursTracker.xcodeproj \
+            -scheme HoursTracker \
+            -configuration Debug \
+            -destination "generic/platform=iOS Simulator" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            | tee "$RUNNER_TEMP/build.log"
+
+      - name: Summarize failures
+        if: failure()
+        run: |
+          {
+            echo "### Build failed"
+            echo ""
+            echo '```'
+            grep -E "error:|warning: .*(unused|never used)" "$RUNNER_TEMP/build.log" | head -60 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ${{ runner.temp }}/build.log
+          retention-days: 7
+          if-no-files-found: ignore
