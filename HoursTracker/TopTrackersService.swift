@@ -5,15 +5,29 @@ import SwiftUI
 import os
 
 /// A single ranked entry on the global hour trackers leaderboard.
-/// Only a first name, lifetime hours, and country flag are ever exposed publicly.
+/// Only a first name, lifetime hours, country flag, and the progression figures
+/// the profile already publishes (photo, level, prestige, streak) are exposed.
 struct TopTracker: Identifiable, Equatable {
     let uid: String
     let name: String
     let hours: Double
     let countryCode: String
     let rank: Int
+    /// Defaulted so older profile docs — written before these fields existed —
+    /// still rank rather than dropping off the board.
+    var photoURL: String? = nil
+    var level: Int = 0
+    var prestige: Int = 0
+    var streak: Int = 0
 
     var id: String { uid }
+
+    /// "Level 16" / "Level 14 • P1". Empty when the profile predates levels,
+    /// so the row collapses to just a name instead of reading "Level 0".
+    var levelLine: String {
+        guard level > 0 else { return "" }
+        return prestige > 0 ? "Level \(level) • P\(prestige)" : "Level \(level)"
+    }
 }
 
 /// Converts an ISO 3166-1 alpha-2 country code (e.g. "US") to its flag emoji,
@@ -223,14 +237,28 @@ final class TopTrackersService: ObservableObject {
             let displayName = (data["displayName"] as? String) ?? ""
             let name = firstNameOnly(displayName)
             let countryCode = (data["countryCode"] as? String) ?? ""
+            let photo = (data["profilePhotoURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
             return TopTracker(
                 uid: doc.documentID,
                 name: name.isEmpty ? "Tracker" : name,
                 hours: hours,
                 countryCode: countryCode,
-                rank: rank
+                rank: rank,
+                photoURL: (photo?.isEmpty ?? true) ? nil : photo,
+                level: intValue(data["level"]),
+                prestige: intValue(data["prestige"]),
+                streak: intValue(data["currentStreak"])
             )
         }
+    }
+
+    /// Firestore hands numbers back as Int, Double, or NSNumber depending on how
+    /// they were written; normalize rather than guessing one type.
+    private static func intValue(_ raw: Any?) -> Int {
+        if let v = raw as? Int { return v }
+        if let v = raw as? Double { return Int(v) }
+        if let v = raw as? NSNumber { return v.intValue }
+        return 0
     }
 
     private static func firstNameOnly(_ displayName: String) -> String {
