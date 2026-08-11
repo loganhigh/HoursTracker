@@ -159,27 +159,9 @@ enum GlobalLeaderboardMetrics {
     }
 }
 
-/// A single caption over the hours column. The rank and name columns are
-/// self-evident and carry no label of their own.
-struct GlobalListHeader: View {
-    var body: some View {
-        HStack(spacing: 0) {
-            Spacer(minLength: 0)
-            Text("All time hours")
-                // Smaller and less loosely tracked than the eyebrow style, so
-                // it stays a quiet caption sitting close over the figures it
-                // labels rather than spanning half the card.
-                .font(.system(size: 9, weight: .heavy, design: .rounded))
-                .tracking(1)
-                .textCase(.uppercase)
-                .lineLimit(1)
-                .foregroundStyle(AppColors.faint)
-        }
-        .padding(.horizontal, AppSpacing.sm)
-        .padding(.top, AppSpacing.sm)
-        .padding(.bottom, 6)
-    }
-}
+// The ranked list carries no column captions — rank, name, and hours all read
+// for themselves, and the screen's own subtitle already says the board is
+// ranked on all-time hours.
 
 struct GlobalTrackerRow: View {
     let tracker: TopTracker

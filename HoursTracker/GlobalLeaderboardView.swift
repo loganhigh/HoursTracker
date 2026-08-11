@@ -96,8 +96,6 @@ struct GlobalLeaderboardView: View {
 
     private var rankedList: some View {
         VStack(spacing: 0) {
-            GlobalListHeader()
-
             ForEach(listTrackers) { tracker in
                 GlobalTrackerRow(tracker: tracker, currentUid: myUid)
                 if tracker.id != listTrackers.last?.id {
