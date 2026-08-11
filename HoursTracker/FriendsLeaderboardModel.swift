@@ -1,67 +1,10 @@
 import SwiftUI
 
-// MARK: - Friends leaderboard (redesign)
+// MARK: - Friends leaderboard model
 //
-// The Friends hub as a competitive board: podium, metric switcher, ranked
-// rows, crew summary. Everything here renders from data the app already
-// publishes — weekly hours, level/prestige, streaks — so no card shows a
-// number the app cannot actually source.
-
-// MARK: - Metric
-
-/// Which column the board ranks on. Each case has to supply its own units,
-/// because the podium and the "you're N behind" line both read as nonsense if
-/// hours phrasing is reused for levels or streak days.
-enum LeaderboardMetric: String, CaseIterable, Identifiable {
-    case thisWeek
-    case levels
-    case streaks
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .thisWeek: return "This Week"
-        case .levels: return "Levels"
-        case .streaks: return "Streaks"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .thisWeek: return "chart.bar.fill"
-        case .levels: return "star.fill"
-        case .streaks: return "flame.fill"
-        }
-    }
-
-    func value(_ entry: LeaderboardEntry) -> Double {
-        switch self {
-        case .thisWeek: return entry.weeklyHours
-        // Prestige dominates level, so a P1 L16 outranks a P0 L24 the same way
-        // the profile header presents them.
-        case .levels: return Double(entry.prestige * 1000 + entry.level)
-        case .streaks: return Double(entry.streak)
-        }
-    }
-
-    func display(_ entry: LeaderboardEntry) -> String {
-        switch self {
-        case .thisWeek: return AppTheme.Format.hours(entry.weeklyHours)
-        case .levels: return "Lv \(entry.level)"
-        case .streaks: return "\(entry.streak)d"
-        }
-    }
-
-    /// Gap wording for the "you vs the person above you" line.
-    func gapPhrase(_ gap: Double) -> String {
-        switch self {
-        case .thisWeek: return AppTheme.Format.hours(gap)
-        case .levels: return gap == 1 ? "1 level" : "\(Int(gap)) levels"
-        case .streaks: return Int(gap) == 1 ? "1 day" : "\(Int(gap)) days"
-        }
-    }
-}
+// The board ranks on hours logged in the current pay period, not a fixed
+// Mon–Sun week: someone paid bi-weekly should see a bi-weekly board. Types
+// here are shared by FriendsPodiumSections and FriendsLeaderboardSections.
 
 // MARK: - Entry
 
@@ -74,9 +17,16 @@ struct LeaderboardEntry: Identifiable, Equatable {
     let level: Int
     let prestige: Int
     let streak: Int
-    let weeklyHours: Double
+    /// Hours in this person's current pay period.
+    ///
+    /// Each friend publishes their own cheque window, so a friend on a weekly
+    /// cycle contributes a week while a bi-weekly viewer sees a fortnight. That
+    /// is the honest limit of what friends broadcast — their raw shifts are
+    /// never shared, only the aggregate — and it beats the previous behavior of
+    /// forcing a Mon–Sun week on everyone regardless of how they are paid.
+    let payPeriodHours: Double
     let photoURL: String?
-    /// Friend opted out of sharing hours; their weekly figure is not real.
+    /// Friend opted out of sharing hours; their figure is not real.
     let hoursHidden: Bool
 
     var rank: Int = 0
@@ -97,40 +47,33 @@ struct LeaderboardEntry: Identifiable, Equatable {
 
 /// Remembers yesterday's ranking so rows can show movement.
 ///
-/// Snapshots are taken at most once per calendar day, per metric. Comparing
-/// against the live board instead would make every row read "—", since the
-/// baseline would update in the same breath as the value it is compared to.
+/// Snapshots are taken at most once per calendar day. Comparing against the
+/// live board instead would make every row read "—", since the baseline would
+/// update in the same breath as the value it is compared to.
 enum LeaderboardRankMemory {
     private static let defaults = UserDefaults.standard
-
-    private static func key(_ metric: LeaderboardMetric) -> String {
-        "leaderboard_ranks_\(metric.rawValue)"
-    }
-
-    private static func dayKey(_ metric: LeaderboardMetric) -> String {
-        "leaderboard_ranks_day_\(metric.rawValue)"
-    }
+    private static let ranksKey = "leaderboard_ranks_payPeriod"
+    private static let dayKey = "leaderboard_ranks_day_payPeriod"
 
     /// Applies movement to `entries` and rolls the stored snapshot forward
     /// once the calendar day changes.
-    static func annotate(_ entries: [LeaderboardEntry], metric: LeaderboardMetric) -> [LeaderboardEntry] {
-        let stored = defaults.dictionary(forKey: key(metric)) as? [String: Int] ?? [:]
-        let storedDay = defaults.string(forKey: dayKey(metric))
+    static func annotate(_ entries: [LeaderboardEntry]) -> [LeaderboardEntry] {
+        let stored = defaults.dictionary(forKey: ranksKey) as? [String: Int] ?? [:]
+        let storedDay = defaults.string(forKey: dayKey)
         let today = todayStamp()
 
         var annotated = entries
         if !stored.isEmpty {
             for index in annotated.indices {
                 guard let previous = stored[annotated[index].id] else { continue }
-                let delta = previous - annotated[index].rank
-                annotated[index].movement = delta == 0 ? 0 : delta
+                annotated[index].movement = previous - annotated[index].rank
             }
         }
 
         if storedDay != today {
             let snapshot = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0.rank) })
-            defaults.set(snapshot, forKey: key(metric))
-            defaults.set(today, forKey: dayKey(metric))
+            defaults.set(snapshot, forKey: ranksKey)
+            defaults.set(today, forKey: dayKey)
         }
         return annotated
     }
@@ -149,18 +92,17 @@ extension LeaderboardEntry {
     /// Builds the ranked board: the signed-in user plus every friend.
     ///
     /// The user is a row like anyone else rather than a separate card — where
-    /// they place among their friends is the point of the screen. Their figures
-    /// come from the local store rather than their own published profile, so
+    /// they place among their friends is the point of the screen. Their figure
+    /// comes from the local store rather than their own published profile, so
     /// the board is correct the moment they log a shift instead of after a
     /// server recompute.
     static func board(
         myUid: String?,
         myName: String,
         myProfile: GamificationProfile,
-        myWeeklyHours: Double,
+        myPayPeriodHours: Double,
         myPhotoURL: String?,
-        friends: [FriendProfile],
-        metric: LeaderboardMetric
+        friends: [FriendProfile]
     ) -> [LeaderboardEntry] {
         var entries: [LeaderboardEntry] = [
             LeaderboardEntry(
@@ -170,7 +112,7 @@ extension LeaderboardEntry {
                 level: myProfile.level,
                 prestige: myProfile.prestige,
                 streak: myProfile.currentStreak,
-                weeklyHours: myWeeklyHours,
+                payPeriodHours: myPayPeriodHours,
                 photoURL: myPhotoURL,
                 hoursHidden: false
             )
@@ -187,22 +129,21 @@ extension LeaderboardEntry {
                 // A friend who hides hours publishes 0. Ranking that as a real
                 // zero is the only honest position for a value the app is not
                 // allowed to see, but the row renders "—" rather than "0h".
-                weeklyHours: friend.privacy.shareHours ? friend.weeklyHours : 0,
+                payPeriodHours: friend.privacy.shareHours ? friend.chequeHours : 0,
                 photoURL: friend.profilePhotoURL,
                 hoursHidden: !friend.privacy.shareHours
             )
         }
 
         let sorted = entries.sorted { lhs, rhs in
-            let l = metric.value(lhs), r = metric.value(rhs)
             // Stable tiebreak, so equal values don't reshuffle between renders
             // and make the movement arrows lie.
-            return l == r
+            lhs.payPeriodHours == rhs.payPeriodHours
                 ? lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-                : l > r
+                : lhs.payPeriodHours > rhs.payPeriodHours
         }
         var ranked = sorted
         for index in ranked.indices { ranked[index].rank = index + 1 }
-        return LeaderboardRankMemory.annotate(ranked, metric: metric)
+        return LeaderboardRankMemory.annotate(ranked)
     }
 }

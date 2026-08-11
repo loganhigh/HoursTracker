@@ -3,7 +3,7 @@ import SwiftUI
 // Combine's, not SwiftUI's.
 import Combine
 
-// MARK: - Friends leaderboard: header, podium, metric switcher
+// MARK: - Friends leaderboard: header + pay-period podium
 //
 // The upper half of the Friends hub. Data types live in
 // FriendsLeaderboardModel.swift; the ranked rows in
@@ -12,58 +12,39 @@ import Combine
 // MARK: - Header
 
 struct FriendsHeroHeader: View {
-    let onSearch: () -> Void
     let onAddFriend: () -> Void
 
     var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Friends")
-                    .font(.system(size: 34, weight: .heavy, design: .rounded))
-                    .foregroundStyle(AppColors.text)
-                HStack(spacing: 0) {
-                    Text("Work hard. Track time. ")
-                        .foregroundStyle(AppColors.subtext)
-                    Text("Beat your crew.")
-                        .foregroundStyle(AppColors.streak)
-                }
-                .font(.system(size: 14, weight: .semibold))
-            }
+        HStack(alignment: .center) {
+            Text("Friends")
+                .font(.system(size: 34, weight: .heavy, design: .rounded))
+                .foregroundStyle(AppColors.text)
 
             Spacer(minLength: AppSpacing.xs)
 
-            circleButton(icon: "magnifyingglass", filled: false, action: onSearch)
-                .accessibilityLabel("Search friends")
-            circleButton(icon: "person.badge.plus", filled: true, action: onAddFriend)
-                .accessibilityLabel("Add a friend")
+            Button {
+                Haptics.lightTap()
+                onAddFriend()
+            } label: {
+                Image(systemName: "person.badge.plus")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(AppColors.textOnAccent)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(AppColors.accent))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add a friend")
         }
-    }
-
-    private func circleButton(icon: String, filled: Bool, action: @escaping () -> Void) -> some View {
-        Button {
-            Haptics.lightTap()
-            action()
-        } label: {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(filled ? AppColors.textOnAccent : AppColors.text)
-                .frame(width: 44, height: 44)
-                .background(
-                    Circle().fill(filled ? AppColors.accent : AppColors.card.opacity(0.8))
-                )
-                .overlay(
-                    Circle().stroke(filled ? Color.clear : AppColors.stroke, lineWidth: 0.5)
-                )
-        }
-        .buttonStyle(.plain)
     }
 }
 
 // MARK: - Podium
 
-struct WeeklyPodiumCard: View {
+struct PayPeriodPodiumCard: View {
     let entries: [LeaderboardEntry]
-    let metric: LeaderboardMetric
+    /// The viewer's own cheque window, e.g. "Aug 4 – Aug 17". Shown instead of
+    /// a fixed "Mon → Sun" so a bi-weekly cycle reads as one.
+    let periodSubtitle: String
     let resetsAt: Date?
 
     /// Ticks the countdown. Driven by a timer rather than recomputed on render
@@ -106,11 +87,11 @@ struct WeeklyPodiumCard: View {
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(AppColors.accent)
             VStack(alignment: .leading, spacing: 1) {
-                Text("WEEKLY PODIUM")
+                Text("PAY PERIOD PODIUM")
                     .font(.system(size: 12, weight: .heavy, design: .rounded))
                     .foregroundStyle(AppColors.text)
                     .tracking(0.8)
-                Text("Mon → Sun")
+                Text(periodSubtitle)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppColors.faint)
             }
@@ -186,7 +167,7 @@ struct WeeklyPodiumCard: View {
                     .foregroundStyle(AppColors.text)
                     .lineLimit(1)
 
-                Text(metric.display(entry))
+                Text(AppTheme.Format.hours(entry.payPeriodHours))
                     .font(.system(size: isWinner ? 22 : 18, weight: .heavy, design: .rounded))
                     .foregroundStyle(color)
                     .monospacedDigit()
@@ -252,59 +233,19 @@ struct WeeklyPodiumCard: View {
     }
 
     private func gapText(for me: LeaderboardEntry) -> (label: String, progress: Double)? {
-        let mine = metric.value(me)
+        let mine = me.payPeriodHours
         guard me.rank > 1 else {
             // Leading: show the cushion over second place instead of a gap.
             guard let second = entries.first(where: { $0.rank == 2 }) else { return nil }
-            let lead = mine - metric.value(second)
+            let lead = mine - second.payPeriodHours
             guard lead > 0 else { return ("You're in the lead", 1) }
-            return ("You're \(metric.gapPhrase(lead)) ahead", 1)
+            return ("You're \(AppTheme.Format.hours(lead)) ahead", 1)
         }
         guard let above = entries.first(where: { $0.rank == me.rank - 1 }) else { return nil }
-        let theirs = metric.value(above)
+        let theirs = above.payPeriodHours
         let gap = theirs - mine
         guard gap > 0, theirs > 0 else { return nil }
-        return ("You're \(metric.gapPhrase(gap)) behind \(above.isMe ? "you" : above.firstName)",
+        return ("You're \(AppTheme.Format.hours(gap)) behind \(above.firstName)",
                 min(max(mine / theirs, 0), 1))
-    }
-}
-
-// MARK: - Metric picker
-
-struct LeaderboardMetricPicker: View {
-    @Binding var selection: LeaderboardMetric
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(LeaderboardMetric.allCases) { metric in
-                let isSelected = metric == selection
-                Button {
-                    Haptics.lightTap()
-                    selection = metric
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: metric.icon)
-                            .font(.system(size: 12, weight: .bold))
-                        Text(metric.title)
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    }
-                    .foregroundStyle(isSelected ? AppColors.textOnAccent : AppColors.subtext)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
-                    .background(
-                        Capsule().fill(isSelected ? AppColors.accent : Color.clear)
-                    )
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(4)
-        .background(
-            Capsule()
-                .fill(AppColors.card.opacity(0.55))
-                .overlay(Capsule().stroke(AppColors.stroke, lineWidth: 0.5))
-        )
-        .accessibilityElement(children: .contain)
     }
 }

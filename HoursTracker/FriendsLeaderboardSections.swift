@@ -9,7 +9,6 @@ import SwiftUI
 
 struct LeaderboardRankRow: View {
     let entry: LeaderboardEntry
-    let metric: LeaderboardMetric
     let onOpen: () -> Void
     let onNudge: (() -> Void)?
 
@@ -52,7 +51,7 @@ struct LeaderboardRankRow: View {
 
             movementBadge
 
-            Text(entry.hoursHidden && metric == .thisWeek ? "—" : metric.display(entry))
+            Text(entry.hoursHidden ? "—" : AppTheme.Format.hours(entry.payPeriodHours))
                 .font(.system(size: 16, weight: .heavy, design: .rounded))
                 .foregroundStyle(AppColors.text)
                 .monospacedDigit()
@@ -102,7 +101,7 @@ struct LeaderboardRankRow: View {
             onOpen()
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(entry.isMe ? "You" : entry.name), rank \(entry.rank), \(metric.display(entry))")
+        .accessibilityLabel("\(entry.isMe ? "You" : entry.name), rank \(entry.rank), \(AppTheme.Format.hours(entry.payPeriodHours))")
         .accessibilityAction(named: "Nudge") { onNudge?() }
     }
 
@@ -133,9 +132,9 @@ struct CrewSummaryCard: View {
     let entries: [LeaderboardEntry]
     let onOpen: (() -> Void)?
 
-    /// Everyone's shared weekly hours added together.
+    /// Everyone's shared pay-period hours added together.
     private var crewHours: Double {
-        entries.filter { !$0.hoursHidden }.reduce(0) { $0 + $1.weeklyHours }
+        entries.filter { !$0.hoursHidden }.reduce(0) { $0 + $1.payPeriodHours }
     }
 
     /// The next 100-hour milestone above the crew's current total. Derived
@@ -146,7 +145,7 @@ struct CrewSummaryCard: View {
     }
 
     private var topPerformer: LeaderboardEntry? {
-        entries.filter { !$0.hoursHidden }.max { $0.weeklyHours < $1.weeklyHours }
+        entries.filter { !$0.hoursHidden }.max { $0.payPeriodHours < $1.payPeriodHours }
     }
 
     var body: some View {
@@ -201,7 +200,7 @@ struct CrewSummaryCard: View {
                             .lineLimit(1)
                         if topPerformer.streak > 0 { Text("🔥").font(.system(size: 12)) }
                     }
-                    Text("\(AppTheme.Format.hours(topPerformer.weeklyHours)) this week")
+                    Text("\(AppTheme.Format.hours(topPerformer.payPeriodHours)) this period")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(AppColors.faint)
                         .lineLimit(1)
