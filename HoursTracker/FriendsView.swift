@@ -28,6 +28,7 @@ struct FriendsView: View {
     @State private var isSendingNudge = false
     @State private var nudgeResultMessage: String?
     @State private var showingAddFriend = false
+    @State private var showingScanner = false
 
     private var myName: String {
         UserDefaults.standard.string(forKey: "profile_display_name") ?? "Worker"
@@ -116,7 +117,8 @@ struct FriendsView: View {
                             isSending: isSending,
                             copyConfirmation: copyConfirmation,
                             onCopy: { copyCode() },
-                            onAdd: { Task { await sendRequest() } }
+                            onAdd: { Task { await sendRequest() } },
+                            onScan: { showingScanner = true }
                         )
                         notifyCaption
                         if let actionMessage {
@@ -140,6 +142,19 @@ struct FriendsView: View {
             // .medium cut off the notify caption below the QR card once the
             // QR block was added — .large gives the taller content room.
             .presentationDetents([.large])
+            // Presented from inside the Add-a-friend sheet, so it hangs off
+            // that sheet's own content rather than the Friends screen.
+            .fullScreenCover(isPresented: $showingScanner) {
+                FriendQRScannerView(
+                    onCancel: { showingScanner = false },
+                    onScan: { code in
+                        showingScanner = false
+                        // Fills the field rather than sending outright — the
+                        // user still confirms with Add, same as typing it.
+                        codeInput = code
+                    }
+                )
+            }
         }
         .sheet(item: $nudgeTarget) { friend in
             FriendShiftNudgePicker(

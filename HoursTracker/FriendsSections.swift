@@ -81,6 +81,7 @@ struct FriendCodeCard: View {
     let copyConfirmation: Bool
     let onCopy: () -> Void
     let onAdd: () -> Void
+    let onScan: () -> Void
 
     var body: some View {
         VStack(spacing: AppSpacing.md) {
@@ -123,6 +124,27 @@ struct FriendCodeCard: View {
                 .frame(height: 1)
 
             addFriendRow
+
+            Button(action: onScan) {
+                HStack(spacing: AppSpacing.xs) {
+                    Image(systemName: "qrcode.viewfinder")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Scan their QR code")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                }
+                .foregroundStyle(AppColors.accent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(AppColors.accent.opacity(0.12))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(AppColors.accent.opacity(0.25), lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(PremiumPressStyle())
         }
         .padding(AppSpacing.lg)
         .background(
