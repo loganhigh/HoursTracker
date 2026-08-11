@@ -75,53 +75,76 @@ struct ProfilePhotoCropView: View {
     }
 
     private var header: some View {
-        HStack {
-            Button("Cancel") {
+        HStack(spacing: AppSpacing.sm) {
+            Button {
                 Haptics.lightTap()
                 onCancel()
+            } label: {
+                Text("Cancel")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
             }
-            .foregroundStyle(.white)
+            .buttonStyle(.plain)
 
-            Spacer(minLength: AppSpacing.sm)
+            Spacer(minLength: 0)
 
             Text("Move and Scale")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.white)
+                .lineLimit(1)
 
-            Spacer(minLength: AppSpacing.sm)
+            Spacer(minLength: 0)
 
-            Button("Choose") {
+            Button {
                 Haptics.success()
                 onConfirm(renderCroppedImage())
+            } label: {
+                // Filled pill: the confirm action shouldn't read as a passive
+                // label on a black screen.
+                Text("Choose")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.textOnAccent)
+                    .lineLimit(1)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Capsule(style: .continuous).fill(AppColors.accent))
             }
-            .fontWeight(.bold)
-            .foregroundStyle(AppColors.accent)
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, AppSpacing.md)
         .padding(.top, AppSpacing.sm)
+        .padding(.bottom, AppSpacing.xs)
     }
 
     // MARK: Interactive stage
 
     private var imageStage: some View {
-        ZStack {
-            Image(uiImage: image)
-                .resizable()
-                .frame(width: displayedImageSize.width, height: displayedImageSize.height)
-                .offset(liveOffset)
-
-            CircularCropScrim(viewportSize: viewportSize)
-                .allowsHitTesting(false)
-
-            Circle()
-                .stroke(Color.white.opacity(0.9), lineWidth: 1.5)
-                .frame(width: viewportSize, height: viewportSize)
-                .allowsHitTesting(false)
-        }
-        .contentShape(Rectangle())
-        .clipped()
-        .gesture(dragGesture)
-        .simultaneousGesture(magnifyGesture)
+        // Color.black is the size-setting layer here, with the photo layered
+        // over it. An overlay never grows its parent, whereas putting the
+        // photo directly in a ZStack made the stack take the photo's full
+        // scaled size — which for any real photo is far wider than the
+        // screen. `.clipped()` only clips drawing, not layout, so that width
+        // propagated up the VStack and pushed Cancel/Choose off both edges.
+        Color.black
+            .overlay {
+                Image(uiImage: image)
+                    .resizable()
+                    .frame(width: displayedImageSize.width, height: displayedImageSize.height)
+                    .offset(liveOffset)
+            }
+            .overlay {
+                CircularCropScrim(viewportSize: viewportSize)
+            }
+            .overlay {
+                Circle()
+                    .stroke(Color.white.opacity(0.9), lineWidth: 1.5)
+                    .frame(width: viewportSize, height: viewportSize)
+            }
+            .clipped()
+            .contentShape(Rectangle())
+            .gesture(dragGesture)
+            .simultaneousGesture(magnifyGesture)
     }
 
     private var dragGesture: some Gesture {
