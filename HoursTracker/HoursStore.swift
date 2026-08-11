@@ -629,12 +629,13 @@ final class HoursStore: ObservableObject {
     }
 
     /// Title shown on profile cards — admin override wins when set.
+    /// Both branches strip wrapping quotes; see `strippingWrappingQuotes`.
     var displayedEquippedTitle: String {
-        if let admin = adminEquippedTitleOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+        if let admin = adminEquippedTitleOverride?.strippingWrappingQuotes,
            !admin.isEmpty {
             return admin
         }
-        return gamificationProfile.equippedTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return gamificationProfile.equippedTitle?.strippingWrappingQuotes ?? ""
     }
 
     /// Per-component XP breakdown for the server's XP-migration shadow logs.
@@ -2687,5 +2688,31 @@ private enum GamificationEngine {
             }
         }
         return best
+    }
+}
+
+extension String {
+    /// Removes wrapping double quotes, straight or curly, from a free-text
+    /// value.
+    ///
+    /// Equipped titles are typed into the admin panel, and iOS smart
+    /// punctuation silently rewrites a typed `"` as `\u{201C}`/`\u{201D}`. A
+    /// title entered as "Owner of Hour Tracker" is therefore stored with the
+    /// quotes baked into the value, and since the UI renders titles bare they
+    /// surface as literal characters. Stripping on display repairs titles
+    /// already saved that way without a data migration.
+    ///
+    /// Only double quotes are stripped. Apostrophes are left alone — they are
+    /// far more likely to be part of the title than to be wrapping it.
+    var strippingWrappingQuotes: String {
+        var value = trimmingCharacters(in: .whitespacesAndNewlines)
+        let quotes: Set<Character> = ["\"", "\u{201C}", "\u{201D}"]
+        while value.count >= 2,
+              let first = value.first, let last = value.last,
+              quotes.contains(first), quotes.contains(last) {
+            value = String(value.dropFirst().dropLast())
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return value
     }
 }

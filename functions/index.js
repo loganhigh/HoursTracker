@@ -17,6 +17,7 @@ const {
   buildSnapshotsForPrestige,
   deriveProgressionFromEntryXP,
   levelStateFromXP,
+  stripWrappingQuotes,
 } = require("./src/stats/recompute");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
@@ -1596,7 +1597,10 @@ exports.adminSetUserProgression = onCall(
     if (rawTitle === null) {
       update.adminEquippedTitle = FieldValue.delete();
     } else if (rawTitle !== undefined) {
-      const title = String(rawTitle).trim();
+      // Strip on the way in so a quoted title is never stored in the first
+      // place. The publish path strips too, which repairs values saved before
+      // this; both are needed since only this one stops it recurring.
+      const title = stripWrappingQuotes(rawTitle);
       if (!title) {
         update.adminEquippedTitle = FieldValue.delete();
       } else if (title.length > 40) {

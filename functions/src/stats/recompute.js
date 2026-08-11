@@ -24,7 +24,28 @@ const LEGACY_INVALID_EQUIPPED_TITLES = new Set([
 
 function sanitizedEquippedTitle(rawTitle) {
   if (!rawTitle || LEGACY_INVALID_EQUIPPED_TITLES.has(rawTitle)) return "";
-  return rawTitle;
+  return stripWrappingQuotes(rawTitle);
+}
+
+/**
+ * Removes wrapping double quotes, straight or curly, from a free-text value.
+ *
+ * Admin-set titles are typed on an iOS keyboard, where smart punctuation
+ * rewrites a typed `"` as U+201C/U+201D — so a title entered as "Owner of Hour
+ * Tracker" is stored with the quotes in the value. The UI renders titles bare,
+ * so they surface as literal characters. Stripping on publish repairs titles
+ * already stored that way on the next recompute, with no data migration.
+ *
+ * Apostrophes are deliberately left alone: far more likely to be part of a
+ * title than to be wrapping it.
+ */
+function stripWrappingQuotes(value) {
+  let s = String(value == null ? "" : value).trim();
+  const quotes = new Set(['"', "“", "”"]);
+  while (s.length >= 2 && quotes.has(s[0]) && quotes.has(s[s.length - 1])) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
 }
 
 function paidHours(entry) {
@@ -879,7 +900,13 @@ async function recomputeUserStats(db, uid, options = {}) {
     currentStreak: privacy.shareHours ? streak : 0,
     lastShiftLoggedAt: privacy.shareHours && lastShiftMs > 0 ? Timestamp.fromMillis(lastShiftMs) : null,
     countryCode: String(userData.countryCode || "").trim().toUpperCase(),
-    equippedTitle: userData.adminEquippedTitle || sanitizedEquippedTitle(userData.equippedTitle) || "",
+    // The admin override took the raw value straight through before — it never
+    // reached sanitizedEquippedTitle, which is why a quoted admin title was the
+    // one kind that survived to the UI.
+    equippedTitle:
+      stripWrappingQuotes(userData.adminEquippedTitle) ||
+      sanitizedEquippedTitle(userData.equippedTitle) ||
+      "",
     profilePhotoURL: userData.profilePhotoURL || null,
     privacy: userData.privacy || {},
     acceptInvites: userData.acceptInvites !== false,
@@ -1285,6 +1312,7 @@ async function updateGlobalLeaderboard(db) {
 
 module.exports = {
   recomputeUserStats,
+  stripWrappingQuotes,
   updateGlobalLeaderboard,
   applyLeaderboardDeltaForUser,
   entryDerivedXP,

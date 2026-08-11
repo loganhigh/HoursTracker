@@ -199,7 +199,7 @@ struct FriendProfileDetailView: View {
             )
 
             if !friend.equippedTitle.isEmpty, friend.privacy.shareBadges {
-                Text(friend.equippedTitle)
+                Text(friend.equippedTitle.strippingWrappingQuotes)
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(AppColors.subtext)
                     .multilineTextAlignment(.center)
