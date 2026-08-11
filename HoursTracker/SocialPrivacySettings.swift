@@ -11,13 +11,21 @@ import Combine
 /// is surfaced clearly in Settings so the user can clamp the experience down to
 /// a minimal stats-only mode at any time.
 struct SocialPrivacyFlags: Equatable, Hashable {
+    /// Governs what *friends* see: weekly + lifetime hours on the friends
+    /// leaderboard and profile. Independent of the public board below.
     var shareHours: Bool
+    /// Governs whether the user is ranked on the public Top Hour Trackers
+    /// board, which anyone signed in can see — a strictly wider audience than
+    /// friends. Split from `shareHours` so someone can compete with friends
+    /// without appearing in a global ranking of strangers.
+    var showOnGlobalLeaderboard: Bool
     var shareBadges: Bool
     var shareActivity: Bool
     var acceptInvites: Bool
 
     static let `default` = SocialPrivacyFlags(
         shareHours: true,
+        showOnGlobalLeaderboard: true,
         shareBadges: true,
         shareActivity: true,
         acceptInvites: true
@@ -25,15 +33,21 @@ struct SocialPrivacyFlags: Equatable, Hashable {
 
     static let restrictive = SocialPrivacyFlags(
         shareHours: false,
+        showOnGlobalLeaderboard: false,
         shareBadges: false,
         shareActivity: false,
         acceptInvites: false
     )
 
+    /// The global board ranks by hours, so it can only show someone who is
+    /// sharing hours in the first place. Both switches must be on.
+    var appearsOnGlobalLeaderboard: Bool { shareHours && showOnGlobalLeaderboard }
+
     /// Serializes to the Firestore payload nested under `privacy` on a user doc.
     var firestorePayload: [String: Any] {
         [
             "shareHours": shareHours,
+            "showOnGlobalLeaderboard": showOnGlobalLeaderboard,
             "shareBadges": shareBadges,
             "shareActivity": shareActivity,
             "acceptInvites": acceptInvites
@@ -42,10 +56,16 @@ struct SocialPrivacyFlags: Equatable, Hashable {
 
     /// Parses a Firestore `privacy` dictionary, falling back to defaults for
     /// any missing keys (so older profile snapshots stay friendly).
+    ///
+    /// `showOnGlobalLeaderboard` defaults to `true` for the same reason as the
+    /// rest: every profile written before this flag existed was already being
+    /// ranked globally, so defaulting it off would silently drop the entire
+    /// existing board the first time each user's profile was re-read.
     static func from(firestore data: [String: Any]?) -> SocialPrivacyFlags {
         guard let data else { return .default }
         return SocialPrivacyFlags(
             shareHours: data["shareHours"] as? Bool ?? true,
+            showOnGlobalLeaderboard: data["showOnGlobalLeaderboard"] as? Bool ?? true,
             shareBadges: data["shareBadges"] as? Bool ?? true,
             shareActivity: data["shareActivity"] as? Bool ?? true,
             acceptInvites: data["acceptInvites"] as? Bool ?? true
@@ -64,6 +84,7 @@ final class SocialPrivacyStore: ObservableObject {
     // Storage keys are namespaced under `social_privacy_*` so they can never
     // collide with existing PaySettings or generic preference keys.
     @AppStorage("social_privacy_share_hours")    private var storedShareHours: Bool = true
+    @AppStorage("social_privacy_global_board")   private var storedShowOnGlobalBoard: Bool = true
     @AppStorage("social_privacy_share_badges")   private var storedShareBadges: Bool = true
     @AppStorage("social_privacy_share_activity") private var storedShareActivity: Bool = true
     @AppStorage("social_privacy_accept_invites") private var storedAcceptInvites: Bool = true
@@ -75,6 +96,7 @@ final class SocialPrivacyStore: ObservableObject {
         // are read here once; subsequent writes go through `update(...)`.
         flags = SocialPrivacyFlags(
             shareHours: UserDefaults.standard.object(forKey: "social_privacy_share_hours") as? Bool ?? true,
+            showOnGlobalLeaderboard: UserDefaults.standard.object(forKey: "social_privacy_global_board") as? Bool ?? true,
             shareBadges: UserDefaults.standard.object(forKey: "social_privacy_share_badges") as? Bool ?? true,
             shareActivity: UserDefaults.standard.object(forKey: "social_privacy_share_activity") as? Bool ?? true,
             acceptInvites: UserDefaults.standard.object(forKey: "social_privacy_accept_invites") as? Bool ?? true
@@ -89,6 +111,7 @@ final class SocialPrivacyStore: ObservableObject {
         guard next != flags else { return }
         flags = next
         storedShareHours = next.shareHours
+        storedShowOnGlobalBoard = next.showOnGlobalLeaderboard
         storedShareBadges = next.shareBadges
         storedShareActivity = next.shareActivity
         storedAcceptInvites = next.acceptInvites

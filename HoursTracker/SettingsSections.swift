@@ -108,10 +108,23 @@ struct FriendsPrivacySettingsView: View {
                     SettingsRowLabel(
                         icon: "clock.fill",
                         title: "Show hours to friends",
-                        subtitle: "Weekly + total hours on the leaderboard"
+                        subtitle: "Weekly + total hours on the friends leaderboard"
                     )
                 }
                 .tint(AppColors.accent)
+                Toggle(isOn: showOnGlobalLeaderboardBinding) {
+                    SettingsRowLabel(
+                        icon: "globe",
+                        title: "Show on global leaderboard",
+                        subtitle: "Rank publicly on Top Hour Trackers"
+                    )
+                }
+                .tint(AppColors.accent)
+                // The global board ranks by hours, so with hours sharing off
+                // there is nothing to rank either way. Disabling rather than
+                // hiding keeps the pairing visible: it reads as "this depends
+                // on the switch above" instead of a row that vanished.
+                .disabled(!socialPrivacy.flags.shareHours)
                 NavigationLink {
                     CountryFlagPickerView(store: store)
                 } label: {
@@ -155,7 +168,7 @@ struct FriendsPrivacySettingsView: View {
             } header: {
                 SectionEyebrow("Sharing")
             } footer: {
-                Text("Friends only see what you share. Your country flag appears on the public Top 5 board when hours sharing is on.")
+                Text(sharingFooter)
                     .appText(.caption)
                     .foregroundStyle(AppColors.subtext)
             }
@@ -168,12 +181,36 @@ struct FriendsPrivacySettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    /// Spells out the current combination, because "hours on but global board
+    /// off" is the whole point of splitting the two and is otherwise invisible.
+    private var sharingFooter: String {
+        let flags = socialPrivacy.flags
+        if !flags.shareHours {
+            return "Friends only see what you share. With hours sharing off you don't appear on the friends leaderboard or the public Top Hour Trackers board."
+        }
+        if flags.showOnGlobalLeaderboard {
+            return "Friends only see what you share. Your hours and country flag also appear on the public Top Hour Trackers board, which anyone signed in can see."
+        }
+        return "Friends only see what you share. Your hours stay on the friends leaderboard only — you won't be ranked on the public Top Hour Trackers board."
+    }
+
     private var shareHoursBinding: Binding<Bool> {
         Binding(
             get: { socialPrivacy.flags.shareHours },
             set: { newValue in
                 Haptics.lightTap()
                 socialPrivacy.update { $0.shareHours = newValue }
+                store.syncProfileSnapshotToCloud()
+            }
+        )
+    }
+
+    private var showOnGlobalLeaderboardBinding: Binding<Bool> {
+        Binding(
+            get: { socialPrivacy.flags.showOnGlobalLeaderboard },
+            set: { newValue in
+                Haptics.lightTap()
+                socialPrivacy.update { $0.showOnGlobalLeaderboard = newValue }
                 store.syncProfileSnapshotToCloud()
             }
         )

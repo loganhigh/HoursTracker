@@ -565,6 +565,10 @@ function privacyFlags(userData) {
   const privacy = userData?.privacy || {};
   return {
     shareHours: privacy.shareHours !== false,
+    // Absent means true: every profile written before this flag existed was
+    // already ranked on the public board, so defaulting it off would empty
+    // the board on the first recompute after deploy.
+    showOnGlobalLeaderboard: privacy.showOnGlobalLeaderboard !== false,
     shareBadges: privacy.shareBadges !== false,
     shareActivity: privacy.shareActivity !== false,
   };
@@ -858,6 +862,13 @@ async function recomputeUserStats(db, uid, options = {}) {
     prestige,
     totalXP,
     totalHours: privacy.shareHours ? totalHours : 0,
+    // Whether this profile may be ranked on the public Top Hour Trackers
+    // board. Deliberately a top-level boolean rather than only living inside
+    // the `privacy` map below: the leaderboard builders read it on every
+    // profile they page through, and a flat field keeps that a plain property
+    // read. Defaults to true when absent so profiles written before this flag
+    // existed — which were all being ranked already — stay on the board.
+    showOnGlobalLeaderboard: privacy.shareHours && privacy.showOnGlobalLeaderboard,
     chequeHours: privacy.shareHours ? payPeriod.hours : 0,
     weeklyHours: privacy.shareHours ? week.hours : 0,
     weeklyShiftsLogged: privacy.shareHours ? week.shifts : 0,
@@ -1119,9 +1130,13 @@ async function applyLeaderboardDeltaForUser(db, uid) {
     const hours = profile
       ? Math.round((Number(profile.totalHours) || 0) * 100) / 100
       : 0;
+    // Honored here as well as in the full rebuild — otherwise a user who opted
+    // out would be silently patched back onto the board by their next shift
+    // write and stay there until the 15-minute refresh removed them again.
+    const optedOut = profile ? profile.showOnGlobalLeaderboard === false : false;
     const idx = all.findIndex((e) => e && e.uid === uid);
 
-    if (hours <= 0) {
+    if (hours <= 0 || optedOut) {
       if (idx === -1) return { action: "absent" }; // not on the board, nothing to change
       all.splice(idx, 1);
     } else {
@@ -1164,7 +1179,11 @@ async function applyLeaderboardDeltaForUser(db, uid) {
       { merge: true }
     );
     const newRank = trimmed.find((e) => e.uid === uid)?.rank ?? null;
-    return { action: hours <= 0 ? "removed" : "patched", hours, rank: newRank };
+    return {
+      action: (hours <= 0 || optedOut) ? "removed" : "patched",
+      hours,
+      rank: newRank,
+    };
   });
   // Observability: pairs with the recomputeUserStats commit line so board
   // movement (or the reason it didn't move) is visible per shift write.
@@ -1203,6 +1222,9 @@ async function updateGlobalLeaderboard(db) {
       const data = doc.data() || {};
       const hours = Number(data.totalHours) || 0;
       if (hours <= 0) continue;
+      // Opted out of the public board. They keep their hours on publicProfiles
+      // so friends still see them — only the global ranking excludes them.
+      if (data.showOnGlobalLeaderboard === false) continue;
       all.push({
         rank: all.length + 1,
         uid: doc.id,

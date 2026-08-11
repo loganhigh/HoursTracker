@@ -213,6 +213,12 @@ final class TopTrackersService: ObservableObject {
                 return 0
             }()
             guard hours > 0 else { return nil }
+            // Mirrors the server's rebuild filter. This paged query is the
+            // fallback for rankings deeper than the broadcast doc carries, so
+            // without it an opted-out user would be absent from the visible
+            // board but reappear once the list paged past the cutoff. Absent
+            // means true, matching profiles written before the flag existed.
+            guard data["showOnGlobalLeaderboard"] as? Bool ?? true else { return nil }
             rank += 1
             let displayName = (data["displayName"] as? String) ?? ""
             let name = firstNameOnly(displayName)

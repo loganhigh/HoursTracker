@@ -1695,6 +1695,7 @@ private struct ChequeDaySnapshot: Sendable {
 private struct ProfileSnapshotInputs {
     let displayName: String
     let shareHours: Bool
+    let showOnGlobalLeaderboard: Bool
     let shareBadges: Bool
     let shareActivity: Bool
     let acceptInvites: Bool
@@ -1782,6 +1783,7 @@ private struct ProfileSnapshotInputs {
         return ProfileSnapshotInputs(
             displayName: displayName,
             shareHours: privacy.shareHours,
+            showOnGlobalLeaderboard: privacy.showOnGlobalLeaderboard,
             shareBadges: privacy.shareBadges,
             shareActivity: privacy.shareActivity,
             acceptInvites: privacy.acceptInvites,
@@ -1811,6 +1813,7 @@ private struct ProfileSnapshotInputs {
             "equippedTitle": publishedEquippedTitle,
             "privacy": [
                 "shareHours": shareHours,
+                "showOnGlobalLeaderboard": showOnGlobalLeaderboard,
                 "shareBadges": shareBadges,
                 "shareActivity": shareActivity,
                 "acceptInvites": acceptInvites
