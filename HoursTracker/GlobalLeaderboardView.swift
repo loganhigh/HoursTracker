@@ -31,14 +31,6 @@ struct GlobalLeaderboardView: View {
         topTrackers.allTrackers.reduce(0) { $0 + $1.hours }
     }
 
-    /// The viewer's standing as a percentile, rounded up so rank 1 reads
-    /// "Top 1%" rather than "Top 0%".
-    private var myPercentile: Int? {
-        guard let myTracker, !topTrackers.allTrackers.isEmpty else { return nil }
-        let fraction = Double(myTracker.rank) / Double(topTrackers.allTrackers.count)
-        return max(1, Int(ceil(fraction * 100)))
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             GlobalLeaderboardHeader(onBack: { dismiss() })
@@ -72,8 +64,7 @@ struct GlobalLeaderboardView: View {
 
                     GlobalStatsStrip(
                         trackerCount: topTrackers.allTrackers.count,
-                        totalHours: totalRankedHours,
-                        percentile: myPercentile
+                        totalHours: totalRankedHours
                     )
 
                     if showsPodium {

@@ -127,33 +127,57 @@ struct GlobalRankHeroCard: View {
     }
 }
 
+// MARK: - Live pulse dot
+
+/// A small "live" indicator: a solid dot with a ring expanding and fading out
+/// behind it, on a loop. The SwiftUI equivalent of the reference component's
+/// `animate-ping` span. Holds still under Reduce Motion.
+struct LivePulseDot: View {
+    var color: Color = AppColors.positive
+    var size: CGFloat = 9
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pinging = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(color)
+                .frame(width: size, height: size)
+                .scaleEffect(pinging ? 2.6 : 1)
+                .opacity(pinging ? 0 : 0.75)
+
+            Circle()
+                .fill(color)
+                .frame(width: size, height: size)
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
+                pinging = true
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Stats strip
 
 struct GlobalStatsStrip: View {
     let trackerCount: Int
     let totalHours: Double
-    /// The viewer's standing as a percentile, e.g. 3 for "Top 3%".
-    /// `nil` when they aren't ranked yet.
-    let percentile: Int?
 
     var body: some View {
         HStack(spacing: 0) {
-            tile(
-                icon: "person.2.fill",
-                value: "\(trackerCount)",
-                label: "Total Trackers"
-            )
+            // The old "Total Trackers" tile carried this same count, so the
+            // live treatment lands here rather than adding a third tile that
+            // would print the same number twice.
+            activeUsersTile
             divider
             tile(
                 icon: "clock.fill",
                 value: GlobalHoursFormat.hours(totalHours),
                 label: "Total Hours"
-            )
-            divider
-            tile(
-                icon: "chart.line.uptrend.xyaxis",
-                value: percentile.map { "Top \($0)%" } ?? "—",
-                label: "Your standing"
             )
         }
         .padding(.vertical, AppSpacing.sm)
@@ -166,6 +190,36 @@ struct GlobalStatsStrip: View {
                         .stroke(AppColors.stroke, lineWidth: 0.5)
                 )
         )
+    }
+
+    /// Live-counter treatment: a pulsing dot in place of the icon square, and
+    /// a count that rolls its digits when the board's listener delivers a new
+    /// total.
+    private var activeUsersTile: some View {
+        HStack(spacing: 8) {
+            LivePulseDot()
+                .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(trackerCount, format: .number.grouping(.automatic))
+                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.snappy, value: trackerCount)
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text("Active Users")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AppColors.faint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 6)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(trackerCount) active users")
     }
 
     private var divider: some View {
