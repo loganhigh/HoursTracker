@@ -72,6 +72,17 @@ struct OnboardingView: View {
         .onChange(of: authService.isSignedIn) { _, _ in advanceIfReady() }
         .onChange(of: authService.isSigningIn) { _, _ in advanceIfReady() }
         .onAppear { advanceIfReady() }
+        .task {
+            // Dev-only rehearsal, same pattern as LEVELUP_DEMO: auto-walks the
+            // pager so onboarding can be reviewed in the Simulator without
+            // touch input. Inert unless the launch environment carries the
+            // variable, which production never does.
+            guard ProcessInfo.processInfo.environment["ONBOARDING_DEMO"] != nil else { return }
+            while page < signInPageIndex {
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                withAnimation(AppMotion.Spring.smooth) { page += 1 }
+            }
+        }
     }
 
     /// Accent bloom behind the hero, fading out well before the copy starts.
