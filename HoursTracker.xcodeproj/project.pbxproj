@@ -559,14 +559,14 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = HoursTracker/HoursTracker.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = 3649Y4UC9W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = HoursTracker/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Hour Tracker";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to scan friend QR codes, certificates, and award documents.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Used to upload certificate, award, and profile photos.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -601,7 +601,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = HoursTracker/HoursTrackerRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 3649Y4UC9W;
 				ENABLE_PREVIEWS = NO;
@@ -610,7 +610,7 @@
 				INFOPLIST_FILE = HoursTracker/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Hour Tracker";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to scan friend QR codes, certificates, and award documents.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Used to upload certificate, award, and profile photos.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
