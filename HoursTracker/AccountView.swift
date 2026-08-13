@@ -21,6 +21,7 @@ struct AccountView: View {
     @AppStorage("profile_display_name") private var storedDisplayName: String = ""
 
     @State private var showingSettings = false
+    @State private var showingNameEditor = false
     @State private var showingDeleteAccountConfirm = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError: String?
@@ -97,6 +98,10 @@ struct AccountView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView(store: store, settings: $store.paySettings)
                 .environmentObject(authService)
+        }
+        .sheet(isPresented: $showingNameEditor) {
+            DisplayNameEditorSheet(store: store)
+                .presentationDetents([.medium])
         }
         .fullScreenCover(isPresented: Binding(
             get: { pendingCropImage != nil },
@@ -198,10 +203,25 @@ struct AccountView: View {
             }
             .padding(.bottom, AppSpacing.xxs)
 
-            Text(displayName)
-                .appText(.title)
-                .foregroundStyle(AppColors.text)
-                .multilineTextAlignment(.center)
+            Button {
+                Haptics.lightTap()
+                showingNameEditor = true
+            } label: {
+                HStack(spacing: 6) {
+                    Text(displayName)
+                        .appText(.title)
+                        .foregroundStyle(AppColors.text)
+                        .multilineTextAlignment(.center)
+                    // The pencil is what makes the name discoverable as
+                    // editable — a bare tappable name looks like a label.
+                    Image(systemName: "pencil")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColors.faint)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Edit display name")
 
             HStack(spacing: 6) {
                 Image(systemName: tier.icon)

@@ -183,3 +183,90 @@ struct AccountRowHairline: View {
             .padding(.leading, AppSpacing.md + 30 + AppSpacing.sm)
     }
 }
+
+// MARK: - Display name editor
+
+/// Edits the display name from the You tab — the only place the name can be
+/// changed after sign-in. Saves locally and pushes the profile snapshot
+/// immediately, so friends and the leaderboards pick the new name up now
+/// rather than on the next app open.
+struct DisplayNameEditorSheet: View {
+    @ObservedObject var store: HoursStore
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("profile_display_name") private var storedDisplayName: String = ""
+
+    @State private var draft: String = ""
+    @FocusState private var fieldFocused: Bool
+
+    /// Same cap the friend-nudge rules enforce on names elsewhere.
+    private static let maxLength = 40
+
+    private var trimmedDraft: String {
+        String(draft.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxLength))
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: AppSpacing.lg) {
+                Text("Your name appears on your profile, to friends, and on the leaderboards.")
+                    .appText(.subheadline)
+                    .foregroundStyle(AppColors.subtext)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, AppSpacing.xl)
+
+                TextField("Your name", text: $draft)
+                    .font(.system(.title3, design: .rounded, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                    .multilineTextAlignment(.center)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .focused($fieldFocused)
+                    .onSubmit { save() }
+                    .padding(.horizontal, AppSpacing.lg)
+                    .padding(.vertical, 14)
+                    .background(
+                        RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                            .fill(AppColors.card2.opacity(0.6))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                                    .stroke(AppColors.stroke.opacity(0.5), lineWidth: 1)
+                            )
+                    )
+                    .padding(.horizontal, AppSpacing.xl)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.top, AppSpacing.xl)
+            .background(AppColors.bg.ignoresSafeArea())
+            .navigationTitle("Display name")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .fontWeight(.bold)
+                        .disabled(trimmedDraft.isEmpty)
+                }
+            }
+            .onAppear {
+                draft = storedDisplayName
+                fieldFocused = true
+            }
+        }
+    }
+
+    private func save() {
+        let name = trimmedDraft
+        guard !name.isEmpty else { return }
+        storedDisplayName = name
+        // Push now — the snapshot sync is what rewrites users/{uid} and
+        // publicProfiles, so the new name reaches friends without waiting
+        // for the next app open.
+        store.syncProfileSnapshotToCloud()
+        Haptics.success()
+        dismiss()
+    }
+}
