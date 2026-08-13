@@ -241,12 +241,15 @@ struct OnboardingView: View {
     // MARK: - Screen 4 — display name
 
     private var namePage: some View {
-        ScrollView {
+        // Vertically centered like the hero pages — a short form pinned to the
+        // top left the lower two-thirds of the screen empty.
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
             VStack(spacing: AppSpacing.lg) {
                 Image(systemName: "person.crop.circle.badge.checkmark")
                     .font(.system(size: 40, weight: .medium))
                     .foregroundStyle(AppColors.accent)
-                    .padding(.top, AppSpacing.xs)
 
                 VStack(spacing: AppSpacing.sm) {
                     Text("What should we call you?")
@@ -296,8 +299,9 @@ struct OnboardingView: View {
                 .opacity(trimmedNameDraft.isEmpty ? 0.6 : 1)
             }
             .padding(.horizontal, AppSpacing.xl)
+
+            Spacer(minLength: 0)
         }
-        .scrollDismissesKeyboard(.interactively)
         .onChange(of: nameDraft) { _, _ in nameValidationMessage = nil }
     }
 
