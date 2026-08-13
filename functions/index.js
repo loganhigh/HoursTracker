@@ -18,6 +18,7 @@ const {
   deriveProgressionFromEntryXP,
   levelStateFromXP,
   stripWrappingQuotes,
+  sanitizeDisplayName,
 } = require("./src/stats/recompute");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
@@ -92,9 +93,12 @@ async function resolveDisplayName(uid) {
       db.collection("publicProfiles").doc(uid).get(),
       db.collection("users").doc(uid).get(),
     ]);
-    const fromProfile = String(profileSnap.data()?.displayName || "").trim();
+    // Sanitized on read: profiles published before the moderation deploy
+    // (and the raw users doc, which clients write freely) may still carry a
+    // name the publication filter would have replaced.
+    const fromProfile = sanitizeDisplayName(profileSnap.data()?.displayName, "");
     if (fromProfile) return fromProfile;
-    return String(userSnap.data()?.displayName || "").trim();
+    return sanitizeDisplayName(userSnap.data()?.displayName, "");
   } catch (err) {
     console.warn(`resolveDisplayName uid=${uid} failed:`, err?.message || err);
     return "";
@@ -270,7 +274,7 @@ exports.notifyFriendsOnShiftLogged = onDocumentCreated(
     // the user sets one). Falling straight through to "A friend" is what made
     // every alert anonymous, so look the name up before giving up on it.
     const authorName =
-      String(data.authorDisplayName || "").trim() ||
+      sanitizeDisplayName(data.authorDisplayName, "") ||
       (await resolveDisplayName(authorUid)) ||
       "A friend";
     const body = data.body || "logged a shift";

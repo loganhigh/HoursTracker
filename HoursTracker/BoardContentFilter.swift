@@ -27,10 +27,6 @@ enum BoardContentFilter {
         }
     }
 
-    private static let blockedWords: Set<String> = [
-        "fuck", "shit", "bitch", "asshole", "cunt", "nigger", "faggot", "retard"
-    ]
-
     static func initials(from name: String) -> String {
         let parts = name.split(separator: " ").prefix(2).compactMap { $0.first }.map(String.init)
         let joined = parts.joined().uppercased()
@@ -53,8 +49,11 @@ enum BoardContentFilter {
         guard !trimmed.isEmpty else { throw ValidationError.empty }
         guard trimmed.count <= maxLength else { throw ValidationError.tooLong(max: maxLength) }
 
-        let lowered = trimmed.lowercased()
-        for word in blockedWords where lowered.contains(word) {
+        // Shared moderation — same categories as display names minus the
+        // reserved-name tier (posts may say "admin"), and word-aware where
+        // the old substring set here would have blocked real names embedded
+        // in posts ("Ishita" contains "shit").
+        if !BroadContentFilter.shared.validatePostText(trimmed).isAllowed {
             throw ValidationError.blockedContent
         }
 

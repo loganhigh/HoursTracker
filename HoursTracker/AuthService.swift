@@ -104,6 +104,11 @@ final class AuthService: NSObject, ObservableObject {
             if displayName.isEmpty {
                 displayName = UserDefaults.standard.string(forKey: "profile_display_name") ?? "Worker"
             }
+            // Provider account names arrive unmoderated — someone's Apple ID
+            // name can be anything. Same filter as the in-app editor.
+            if !BroadContentFilter.shared.validate(displayName).isAllowed {
+                displayName = "Worker"
+            }
 
             if !displayName.isEmpty {
                 UserDefaults.standard.set(displayName, forKey: "profile_display_name")
@@ -282,6 +287,11 @@ final class AuthService: NSObject, ObservableObject {
             displayName = String(prefix)
         }
         if displayName.isEmpty {
+            displayName = "Worker"
+        }
+        // Same moderation as the Apple path — provider and email-derived
+        // names are unvetted input.
+        if !BroadContentFilter.shared.validate(displayName).isAllowed {
             displayName = "Worker"
         }
 

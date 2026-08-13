@@ -48,6 +48,98 @@ function stripWrappingQuotes(value) {
   return s;
 }
 
+// ---------------------------------------------------------------------------
+// Display-name moderation (server-side authority).
+//
+// A port of the client's BroadContentFilter, applied where names become
+// visible to OTHER users: the publicProfiles publication below, the
+// leaderboard rebuild, and push-notification name resolution. Clients can
+// write anything to their own users/{uid} doc — a modified client bypasses
+// the in-app filter trivially — but everything cross-user is published by
+// these functions, so a profane name is replaced with the fallback before
+// anyone else ever reads it. Same tier design as the client: substring for
+// distinctive terms, whole-token for terms that occur inside real names
+// ("Ishita", "Hancock", "therapist"), exact for short ambiguous strings.
+// ---------------------------------------------------------------------------
+
+const NAME_LEET = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "@": "a", "$": "s", "!": "i", "+": "t" };
+
+const NAME_BLOCKED_SUBSTRINGS = [
+  "nigger", "nigga", "faggot", "wetback", "retard", "raghead", "towelhead",
+  "killyourself", "killurself", "suicide", "murder",
+  "porn", "sexy", "blowjob", "handjob", "rimjob", "dildo", "hentai",
+  "onlyfans", "masturbat", "orgasm", "fellatio", "penis", "deepthroat", "gangbang",
+  "vagina", "bukkake", "milf",
+  "fuck", "fuk", "cunt", "asshole", "arsehole", "bitch", "pussy", "whore",
+  "wanker", "bastard", "motherfuck", "dickhead", "cocksuck", "bollock",
+  "jackass", "dumbass", "bullshit", "dipshit", "horseshit", "douche",
+  "shithead", "fucc", "phuck",
+  "hourtracker", "hourstracker",
+];
+
+const NAME_BLOCKED_TOKENS = new Set([
+  "fag", "fags", "dyke", "coon", "coons", "spic", "spics", "kike", "kikes",
+  "chink", "chinks", "gook", "gooks", "beaner", "beaners", "tranny",
+  "trannies", "nazi", "nazis", "hitler",
+  "rape", "raped", "rapes", "rapist", "rapists", "molester", "pedophile", "pedo",
+  "sex", "nude", "nudes", "naked", "semen", "cum", "cums",
+  "cumming", "jizz", "anal", "tits", "boobs", "boobies", "titties",
+  "hoe", "hoes", "thot", "thots", "clit", "smut",
+  "shit", "shits", "shitty", "ass", "arse", "piss", "pissed", "cock",
+  "cocks", "twat", "twats", "wank", "prick", "pricks", "slut", "sluts", "skank",
+  "admin", "admins", "administrator", "administrators", "moderator",
+  "moderators", "modteam", "support", "official", "staff", "developer",
+  "developers", "system", "sysadmin", "helpdesk",
+]);
+
+const NAME_BLOCKED_EXACT = new Set(["kys", "xxx", "mod", "mods", "dev", "devs"]);
+
+function squeezeRuns(s) {
+  let out = "";
+  let last = null;
+  for (const ch of s) {
+    if (ch !== last) out += ch;
+    last = ch;
+  }
+  return out;
+}
+
+function nameIsBlocked(raw) {
+  const lowered = String(raw || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, ""); // strip combining accents
+  let mapped = "";
+  for (const ch of lowered) mapped += NAME_LEET[ch] || ch;
+
+  const collapsed = mapped.replace(/[^a-z]/g, "");
+  for (const term of NAME_BLOCKED_SUBSTRINGS) {
+    if (collapsed.includes(term)) return true;
+  }
+  const squeezed = squeezeRuns(collapsed);
+  if (squeezed !== collapsed) {
+    for (const term of NAME_BLOCKED_SUBSTRINGS) {
+      if (squeezed.includes(squeezeRuns(term))) return true;
+    }
+  }
+  const tokens = mapped.split(/[^a-z]+/).filter(Boolean);
+  for (const token of tokens) {
+    if (NAME_BLOCKED_TOKENS.has(token)) return true;
+    // Long same-letter runs are an evasion signal ("shiiit").
+    if (/(.)\1\1/.test(token) && NAME_BLOCKED_TOKENS.has(squeezeRuns(token))) return true;
+  }
+  if (NAME_BLOCKED_EXACT.has(collapsed)) return true;
+  return false;
+}
+
+/** The display name as other users may see it: fallback when moderated. */
+function sanitizeDisplayName(raw, fallback) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return fallback;
+  return nameIsBlocked(trimmed) ? fallback : trimmed;
+}
+
 function paidHours(entry) {
   if (entry.isOffDay) return 0;
   const startMs = toMs(entry.start);
@@ -877,7 +969,9 @@ async function recomputeUserStats(db, uid, options = {}) {
   // friend never reads the private users/{uid} doc or recomputes anything. The
   // server (Admin SDK) is the sole writer; clients are denied by security rules.
   const publicProfile = {
-    displayName: userData.displayName || "Friend",
+    // Server-side moderation: whatever the client wrote to its own users doc,
+    // the name every OTHER user reads is sanitized here.
+    displayName: sanitizeDisplayName(userData.displayName, "Friend"),
     friendCode: userData.friendCode || null,
     level,
     prestige,
@@ -1169,7 +1263,7 @@ async function applyLeaderboardDeltaForUser(db, uid) {
     } else {
       const entry = {
         uid,
-        name: firstNameOnly(profile.displayName),
+        name: firstNameOnly(sanitizeDisplayName(profile.displayName, "Tracker")),
         hours,
         countryCode: String(profile.countryCode || "").trim().toUpperCase(),
       };
@@ -1255,7 +1349,7 @@ async function updateGlobalLeaderboard(db) {
       all.push({
         rank: all.length + 1,
         uid: doc.id,
-        name: firstNameOnly(data.displayName),
+        name: firstNameOnly(sanitizeDisplayName(data.displayName, "Tracker")),
         hours: Math.round(hours * 100) / 100,
         countryCode: data.countryCode || "",
       });
@@ -1313,6 +1407,7 @@ async function updateGlobalLeaderboard(db) {
 module.exports = {
   recomputeUserStats,
   stripWrappingQuotes,
+  sanitizeDisplayName,
   updateGlobalLeaderboard,
   applyLeaderboardDeltaForUser,
   entryDerivedXP,

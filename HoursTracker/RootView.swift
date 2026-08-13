@@ -174,7 +174,12 @@ private struct CountryFlagPromptOverlay: View {
 private struct DisplayNamePromptSheet: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("profile_display_name") private var displayName: String = ""
-    
+
+    // Edits land in a draft and are moderated on Done — binding the field
+    // straight to @AppStorage stored whatever was typed, unchecked.
+    @State private var draft: String = ""
+    @State private var validationMessage: String?
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
@@ -186,8 +191,8 @@ private struct DisplayNamePromptSheet: View {
                     .font(.system(.callout))
                     .foregroundStyle(AppTheme.Colors.subtext)
                     .multilineTextAlignment(.center)
-                
-                TextField("Your name", text: $displayName)
+
+                TextField("Your name", text: $draft)
                     .font(.system(.body, weight: .medium))
                     .foregroundStyle(AppTheme.Colors.text)
                     .multilineTextAlignment(.center)
@@ -202,7 +207,15 @@ private struct DisplayNamePromptSheet: View {
                             )
                     )
                     .padding(.horizontal, 32)
-                
+
+                if let validationMessage {
+                    Text(validationMessage)
+                        .font(.system(.footnote))
+                        .foregroundStyle(AppTheme.Colors.danger)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+
                 Spacer(minLength: 20)
             }
             .padding(.top, 40)
@@ -212,11 +225,22 @@ private struct DisplayNamePromptSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
+                        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            guard BroadContentFilter.shared.validate(trimmed).isAllowed else {
+                                validationMessage = BroadContentFilter.blockedNameMessage
+                                Haptics.error()
+                                return
+                            }
+                            displayName = String(trimmed.prefix(40))
+                        }
                         Haptics.lightTap()
                         dismiss()
                     }
                 }
             }
+            .onAppear { draft = displayName }
+            .onChange(of: draft) { _, _ in validationMessage = nil }
         }
     }
 }

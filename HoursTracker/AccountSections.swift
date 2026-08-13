@@ -196,6 +196,7 @@ struct DisplayNameEditorSheet: View {
     @AppStorage("profile_display_name") private var storedDisplayName: String = ""
 
     @State private var draft: String = ""
+    @State private var validationMessage: String?
     @FocusState private var fieldFocused: Bool
 
     /// Same cap the friend-nudge rules enforce on names elsewhere.
@@ -235,6 +236,14 @@ struct DisplayNameEditorSheet: View {
                     )
                     .padding(.horizontal, AppSpacing.xl)
 
+                if let validationMessage {
+                    Text(validationMessage)
+                        .appText(.caption)
+                        .foregroundStyle(AppColors.negative)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, AppSpacing.xl)
+                }
+
                 Spacer(minLength: 0)
             }
             .padding(.top, AppSpacing.xl)
@@ -255,12 +264,22 @@ struct DisplayNameEditorSheet: View {
                 draft = storedDisplayName
                 fieldFocused = true
             }
+            .onChange(of: draft) { _, _ in
+                validationMessage = nil
+            }
         }
     }
 
     private func save() {
         let name = trimmedDraft
         guard !name.isEmpty else { return }
+        guard BroadContentFilter.shared.validate(name).isAllowed else {
+            // Deliberately generic — naming the matched term teaches the
+            // bypass. The reason enum exists for analytics, not for users.
+            validationMessage = BroadContentFilter.blockedNameMessage
+            Haptics.error()
+            return
+        }
         storedDisplayName = name
         // Push now — the snapshot sync is what rewrites users/{uid} and
         // publicProfiles, so the new name reaches friends without waiting
