@@ -166,19 +166,25 @@ struct LivePulseDot: View {
 struct GlobalStatsStrip: View {
     let trackerCount: Int
     let totalHours: Double
+    /// Signed-in users on the app right now, from PresenceService's
+    /// aggregation count. `nil` until the first count resolves.
+    let activeNow: Int?
 
     var body: some View {
         HStack(spacing: 0) {
-            // The old "Total Trackers" tile carried this same count, so the
-            // live treatment lands here rather than adding a third tile that
-            // would print the same number twice.
-            activeUsersTile
+            tile(
+                icon: "person.2.fill",
+                value: "\(trackerCount)",
+                label: "Total Trackers"
+            )
             divider
             tile(
                 icon: "clock.fill",
                 value: GlobalHoursFormat.hours(totalHours),
                 label: "Total Hours"
             )
+            divider
+            activeUsersTile
         }
         .padding(.vertical, AppSpacing.sm)
         .padding(.horizontal, AppSpacing.xs)
@@ -193,22 +199,27 @@ struct GlobalStatsStrip: View {
     }
 
     /// Live-counter treatment: a pulsing dot in place of the icon square, and
-    /// a count that rolls its digits when the board's listener delivers a new
-    /// total.
+    /// a count that rolls its digits when a refreshed count lands.
     private var activeUsersTile: some View {
         HStack(spacing: 8) {
             LivePulseDot()
                 .frame(width: 28, height: 28)
 
             VStack(alignment: .leading, spacing: 0) {
-                Text(trackerCount, format: .number.grouping(.automatic))
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .animation(.snappy, value: trackerCount)
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                Group {
+                    if let activeNow {
+                        Text(activeNow, format: .number.grouping(.automatic))
+                            .contentTransition(.numericText())
+                            .animation(.snappy, value: activeNow)
+                    } else {
+                        Text("—")
+                    }
+                }
+                .font(.system(size: 15, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
                 Text("Active Users")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(AppColors.faint)
@@ -219,7 +230,7 @@ struct GlobalStatsStrip: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 6)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(trackerCount) active users")
+        .accessibilityLabel(activeNow.map { "\($0) active users" } ?? "Active users loading")
     }
 
     private var divider: some View {

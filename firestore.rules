@@ -70,6 +70,17 @@ service cloud.firestore {
       }
     }
 
+    // Presence heartbeats behind the leaderboard's "Active Users" count.
+    // Reads are needed for the client-side aggregation count; the doc holds
+    // nothing but a timestamp. Writes are owner-only and shape-checked so a
+    // client can't stash arbitrary data in its own presence doc.
+    match /presence/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['lastActiveAt']);
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
+
     // Public read-only "Top 5 Hour Trackers" board. Written only by Cloud
     // Functions (Admin SDK bypasses these rules).
     match /leaderboards/{doc} {

@@ -62,6 +62,7 @@ enum AccountDeletionService {
         await deleteSubcollection(db: db, uid: uid, name: "gamification")
         try? await db.collection("users").document(uid).delete()
         try? await db.collection("publicProfiles").document(uid).delete()
+        try? await db.collection("presence").document(uid).delete()
 
         store.deleteAllData()
 

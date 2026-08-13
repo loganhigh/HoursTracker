@@ -98,8 +98,10 @@ struct HoursTrackerApp: App {
         .onChange(of: scenePhase) { _, newPhase in
             if case .active = newPhase {
                 startMonetizationIfNeeded()
+                PresenceService.shared.startHeartbeating()
             }
             if case .background = newPhase {
+                PresenceService.shared.stopHeartbeating()
                 sessionManager.resetSession(reason: .background)
                 WidgetDataManager.shared.updateWidgetData(
                     entries: store.entries,

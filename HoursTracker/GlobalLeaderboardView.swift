@@ -10,6 +10,7 @@ import SwiftUI
 
 struct GlobalLeaderboardView: View {
     @ObservedObject private var topTrackers = TopTrackersService.shared
+    @ObservedObject private var presence = PresenceService.shared
     @EnvironmentObject private var authService: AuthService
     @Environment(\.dismiss) private var dismiss
 
@@ -44,6 +45,14 @@ struct GlobalLeaderboardView: View {
         .task {
             await topTrackers.ensureFullLeaderboardLoaded()
         }
+        .task {
+            // Refresh the Active Users count while this screen is up. .task
+            // cancels on disappear, so the loop dies with the screen.
+            while !Task.isCancelled {
+                await presence.refreshActiveCount()
+                try? await Task.sleep(nanoseconds: 45_000_000_000)
+            }
+        }
     }
 
     @ViewBuilder
@@ -64,7 +73,8 @@ struct GlobalLeaderboardView: View {
 
                     GlobalStatsStrip(
                         trackerCount: topTrackers.allTrackers.count,
-                        totalHours: totalRankedHours
+                        totalHours: totalRankedHours,
+                        activeNow: presence.activeNowCount
                     )
 
                     if showsPodium {

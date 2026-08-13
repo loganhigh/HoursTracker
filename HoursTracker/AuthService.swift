@@ -233,6 +233,10 @@ final class AuthService: NSObject, ObservableObject {
         try Auth.auth().signOut()
         user = nil
         onSignedOut?()
+        // No presence cleanup here: a delete after sign-out has no auth token
+        // and the rules would reject it. The heartbeat's own stamp writes
+        // no-op once signed out, and the last stamp ages out of the active
+        // window on its own.
     }
 
     // MARK: - Profile doc
