@@ -47,6 +47,10 @@ struct GlobalPodiumRow: View {
                         .font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundStyle(AppColors.text)
                         .lineLimit(1)
+                    if VerifiedTracker.isVerified(hours: entry.hours) {
+                        // Only three of these on screen, so they can shimmer.
+                        VerifiedBadgeView(variant: .shimmer, size: 14)
+                    }
                     if let flag = flagEmoji(for: entry) {
                         Text(flag).font(.system(size: 13))
                     }
@@ -190,6 +194,11 @@ struct GlobalTrackerRow: View {
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(AppColors.text)
                         .lineLimit(1)
+                    if VerifiedTracker.isVerified(hours: tracker.hours) {
+                        // Static in the list: the board scrolls hundreds of
+                        // rows, and a shimmer each would be one clock per row.
+                        VerifiedBadgeView(variant: .static, size: 13)
+                    }
                     if let flag = CountryFlag.emoji(
                         for: CountryFlag.leaderboardCode(
                             trackerUid: tracker.uid,

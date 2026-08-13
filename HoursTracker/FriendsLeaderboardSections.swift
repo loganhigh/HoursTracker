@@ -42,10 +42,15 @@ struct LeaderboardRankRow: View {
             )
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(entry.isMe ? "You" : entry.name)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(entry.isMe ? AppColors.accent : AppColors.text)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(entry.isMe ? "You" : entry.name)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(entry.isMe ? AppColors.accent : AppColors.text)
+                        .lineLimit(1)
+                    if VerifiedTracker.isVerified(hours: entry.lifetimeHours) {
+                        VerifiedBadgeView(variant: .static, size: 13)
+                    }
+                }
                 Text(entry.levelLine)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.subtext)

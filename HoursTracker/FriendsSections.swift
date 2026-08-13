@@ -245,10 +245,16 @@ struct FriendStatsRow: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(friend.displayName)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(friend.displayName)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+                    if friend.privacy.shareHours,
+                       VerifiedTracker.isVerified(hours: friend.totalHours) {
+                        VerifiedBadgeView(variant: .static, size: 14)
+                    }
+                }
                 Text(friend.levelDisplayLine)
                     .appText(.caption)
                     .foregroundStyle(AppColors.subtext)

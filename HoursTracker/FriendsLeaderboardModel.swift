@@ -25,6 +25,10 @@ struct LeaderboardEntry: Identifiable, Equatable {
     /// never shared, only the aggregate — and it beats the previous behavior of
     /// forcing a Mon–Sun week on everyone regardless of how they are paid.
     let payPeriodHours: Double
+    /// Lifetime hours, used only for the verified-tracker milestone. Ranking
+    /// still runs on `payPeriodHours`; this is 0 for anyone hiding hours, so
+    /// they simply go unbadged.
+    var lifetimeHours: Double = 0
     let photoURL: String?
     /// Friend opted out of sharing hours; their figure is not real.
     let hoursHidden: Bool
@@ -101,6 +105,7 @@ extension LeaderboardEntry {
         myName: String,
         myProfile: GamificationProfile,
         myPayPeriodHours: Double,
+        myLifetimeHours: Double,
         myPhotoURL: String?,
         friends: [FriendProfile]
     ) -> [LeaderboardEntry] {
@@ -113,6 +118,7 @@ extension LeaderboardEntry {
                 prestige: myProfile.prestige,
                 streak: myProfile.currentStreak,
                 payPeriodHours: myPayPeriodHours,
+                lifetimeHours: myLifetimeHours,
                 photoURL: myPhotoURL,
                 hoursHidden: false
             )
@@ -130,6 +136,7 @@ extension LeaderboardEntry {
                 // zero is the only honest position for a value the app is not
                 // allowed to see, but the row renders "—" rather than "0h".
                 payPeriodHours: friend.privacy.shareHours ? friend.chequeHours : 0,
+                lifetimeHours: friend.privacy.shareHours ? friend.totalHours : 0,
                 photoURL: friend.profilePhotoURL,
                 hoursHidden: !friend.privacy.shareHours
             )
