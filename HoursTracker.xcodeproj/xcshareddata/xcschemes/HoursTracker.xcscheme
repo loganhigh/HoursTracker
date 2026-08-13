@@ -44,7 +44,7 @@
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "NO">
       <StoreKitConfigurationFileReference
-         identifier = "../../../HoursTracker/HourTrackerPro.storekit">
+         identifier = "../../HoursTracker/HourTrackerPro.storekit">
       </StoreKitConfigurationFileReference>
       <Testables>
          <TestableReference
@@ -71,7 +71,7 @@
       debugServiceExtension = "internal"
       allowLocationSimulation = "YES">
       <StoreKitConfigurationFileReference
-         identifier = "../../../HoursTracker/HourTrackerPro.storekit">
+         identifier = "../../HoursTracker/HourTrackerPro.storekit">
       </StoreKitConfigurationFileReference>
       <BuildableProductRunnable
          runnableDebuggingMode = "0">
