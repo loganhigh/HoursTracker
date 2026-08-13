@@ -78,6 +78,43 @@ final class PresenceService: ObservableObject {
 
     // MARK: Count (everyone's stamps)
 
+    /// Friend uids whose presence stamp is inside the active window. Drives
+    /// the green dot beside names on the Friends board.
+    @Published private(set) var onlineFriendUids: Set<String> = []
+
+    /// Looks up which of the given uids are active right now. Unlike the
+    /// aggregate count this reads the actual docs, but only the friends' own —
+    /// a friends list is dozens of docs at most. Timestamps are compared
+    /// client-side so the `in` query needs no composite index.
+    func refreshOnlineFriends(uids: [String]) async {
+        guard Auth.auth().currentUser != nil else { return }
+        guard !uids.isEmpty else {
+            onlineFriendUids = []
+            return
+        }
+        let cutoff = Date().addingTimeInterval(-Self.activeWindow)
+        var online: Set<String> = []
+        // Firestore caps documentID `in` filters at 30 values per query.
+        for chunk in stride(from: 0, to: uids.count, by: 30).map({ Array(uids[$0..<min($0 + 30, uids.count)]) }) {
+            do {
+                let snap = try await db.collection("presence")
+                    .whereField(FieldPath.documentID(), in: chunk)
+                    .getDocuments()
+                for doc in snap.documents {
+                    if let stamp = doc.data()["lastActiveAt"] as? Timestamp,
+                       stamp.dateValue() > cutoff {
+                        online.insert(doc.documentID)
+                    }
+                }
+            } catch {
+                // A failed chunk leaves those friends undotted this round;
+                // the next refresh repairs it.
+                AppLogger.leaderboard.info("presence friends lookup failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        onlineFriendUids = online
+    }
+
     /// Re-counts recent stamps via a server aggregation — the collection's
     /// documents are never downloaded.
     func refreshActiveCount() async {

@@ -20,6 +20,7 @@ struct FriendsView: View {
     // Server lifetime total drives the verified milestone; observe so the
     // badge appears as soon as the snapshot lands.
     @ObservedObject private var statsListener = StatsListenerService.shared
+    @ObservedObject private var presence = PresenceService.shared
     @State private var codeInput = ""
     @State private var actionMessage: String?
     @State private var actionMessageIsError = false
@@ -97,6 +98,15 @@ struct FriendsView: View {
             }
             store.syncProfileSnapshotToCloud()
             consumePendingFriendCodeIfNeeded()
+        }
+        .task {
+            // Online dots for the board. Re-reads the current friends list
+            // each round, so friends added while the screen is up get dotted
+            // on the next tick; .task cancels with the screen.
+            while !Task.isCancelled {
+                await presence.refreshOnlineFriends(uids: friendsService.friends.map(\.uid))
+                try? await Task.sleep(nanoseconds: 45_000_000_000)
+            }
         }
         .onChange(of: friendsService.pendingFriendCode) { _, _ in
             consumePendingFriendCodeIfNeeded()
@@ -313,6 +323,8 @@ struct FriendsView: View {
                 ForEach(entries) { entry in
                     LeaderboardRankRow(
                         entry: entry,
+                        // Own row skips the dot — you're by definition here.
+                        isOnline: !entry.isMe && presence.onlineFriendUids.contains(entry.id),
                         onOpen: {
                             // Tapping your own row has nowhere useful to go —
                             // the You tab already is your profile.
