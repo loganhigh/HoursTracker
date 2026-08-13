@@ -164,10 +164,10 @@ struct PrestigeCelebrationView: View {
                 .offset(y: buttonVisible ? 0 : 24)
             }
 
-            // Not mounted until the cinematic ends: inactive pieces rest just
-            // above the top edge, and the cinematic keeps the screen still
-            // long enough for them to be visible there.
-            if !reduceMotion && !showingCinematic {
+            // Safe to mount for the whole celebration: the layer draws nothing
+            // until its burst starts, so there are no resting pieces to hide
+            // behind the cinematic any more.
+            if !reduceMotion {
                 ConfettiLayer(active: confettiActive, palette: tier.confettiColors, pieceCount: 64)
                     .allowsHitTesting(false)
             }
