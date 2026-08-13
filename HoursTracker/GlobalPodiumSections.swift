@@ -12,6 +12,8 @@ import SwiftUI
 struct GlobalPodiumRow: View {
     let entries: [TopTracker]
     let currentUid: String?
+    /// Uids with a fresh presence stamp — podium names get the online dot.
+    var onlineUids: Set<String> = []
 
     private var podium: [TopTracker] { Array(entries.prefix(3)) }
 
@@ -50,6 +52,12 @@ struct GlobalPodiumRow: View {
                     if VerifiedTracker.isVerified(hours: entry.hours) {
                         // Only three of these on screen, so they can shimmer.
                         VerifiedBadgeView(variant: .shimmer, size: 14)
+                    }
+                    if entry.uid != currentUid && onlineUids.contains(entry.uid) {
+                        Circle()
+                            .fill(AppColors.positive)
+                            .frame(width: 7, height: 7)
+                            .accessibilityLabel("Online now")
                     }
                     if let flag = flagEmoji(for: entry) {
                         Text(flag).font(.system(size: 13))
@@ -170,6 +178,8 @@ enum GlobalLeaderboardMetrics {
 struct GlobalTrackerRow: View {
     let tracker: TopTracker
     let currentUid: String?
+    /// Tracker is on the app right now (their presence stamp is fresh).
+    var isOnline: Bool = false
 
     private var isMe: Bool { tracker.uid == currentUid }
 
@@ -198,6 +208,12 @@ struct GlobalTrackerRow: View {
                         // Static in the list: the board scrolls hundreds of
                         // rows, and a shimmer each would be one clock per row.
                         VerifiedBadgeView(variant: .static, size: 13)
+                    }
+                    if isOnline {
+                        Circle()
+                            .fill(AppColors.positive)
+                            .frame(width: 7, height: 7)
+                            .accessibilityLabel("Online now")
                     }
                     if let flag = CountryFlag.emoji(
                         for: CountryFlag.leaderboardCode(

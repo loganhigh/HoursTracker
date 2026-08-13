@@ -100,11 +100,9 @@ struct FriendsView: View {
             consumePendingFriendCodeIfNeeded()
         }
         .task {
-            // Online dots for the board. Re-reads the current friends list
-            // each round, so friends added while the screen is up get dotted
-            // on the next tick; .task cancels with the screen.
+            // Online dots for the board; .task cancels with the screen.
             while !Task.isCancelled {
-                await presence.refreshOnlineFriends(uids: friendsService.friends.map(\.uid))
+                await presence.refreshOnlineUids()
                 try? await Task.sleep(nanoseconds: 45_000_000_000)
             }
         }
@@ -324,7 +322,7 @@ struct FriendsView: View {
                     LeaderboardRankRow(
                         entry: entry,
                         // Own row skips the dot — you're by definition here.
-                        isOnline: !entry.isMe && presence.onlineFriendUids.contains(entry.id),
+                        isOnline: !entry.isMe && presence.onlineUids.contains(entry.id),
                         onOpen: {
                             // Tapping your own row has nowhere useful to go —
                             // the You tab already is your profile.

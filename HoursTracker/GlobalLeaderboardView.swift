@@ -46,10 +46,12 @@ struct GlobalLeaderboardView: View {
             await topTrackers.ensureFullLeaderboardLoaded()
         }
         .task {
-            // Refresh the Active Users count while this screen is up. .task
-            // cancels on disappear, so the loop dies with the screen.
+            // Refresh the Active Users count and the online dots while this
+            // screen is up. .task cancels on disappear, so the loop dies
+            // with the screen.
             while !Task.isCancelled {
                 await presence.refreshActiveCount()
+                await presence.refreshOnlineUids()
                 try? await Task.sleep(nanoseconds: 45_000_000_000)
             }
         }
@@ -80,7 +82,8 @@ struct GlobalLeaderboardView: View {
                     if showsPodium {
                         GlobalPodiumRow(
                             entries: topTrackers.allTrackers,
-                            currentUid: myUid
+                            currentUid: myUid,
+                            onlineUids: presence.onlineUids
                         )
                         .padding(.top, AppSpacing.xs)
                     }
@@ -98,7 +101,12 @@ struct GlobalLeaderboardView: View {
     private var rankedList: some View {
         VStack(spacing: 0) {
             ForEach(listTrackers) { tracker in
-                GlobalTrackerRow(tracker: tracker, currentUid: myUid)
+                GlobalTrackerRow(
+                    tracker: tracker,
+                    currentUid: myUid,
+                    // Own row skips the dot — you're by definition here.
+                    isOnline: tracker.uid != myUid && presence.onlineUids.contains(tracker.uid)
+                )
                 if tracker.id != listTrackers.last?.id {
                     Divider()
                         .overlay(AppColors.stroke)
