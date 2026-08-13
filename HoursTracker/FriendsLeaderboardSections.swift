@@ -42,6 +42,7 @@ struct LeaderboardRankRow: View {
                 photoURL: entry.photoURL,
                 uid: entry.id
             )
+            .avatarOnlineDot(isOnline, avatarSize: 42)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
@@ -51,15 +52,6 @@ struct LeaderboardRankRow: View {
                         .lineLimit(1)
                     if VerifiedTracker.isVerified(hours: entry.lifetimeHours) {
                         VerifiedBadgeView(variant: .static, size: 13)
-                    }
-                    if isOnline {
-                        // Static green marker — the pulsing dot would put one
-                        // timeline in every row, and next to a name it reads
-                        // better still.
-                        Circle()
-                            .fill(AppColors.positive)
-                            .frame(width: 7, height: 7)
-                            .accessibilityLabel("Online now")
                     }
                 }
                 Text(entry.levelLine)

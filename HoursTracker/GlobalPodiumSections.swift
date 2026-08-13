@@ -42,6 +42,10 @@ struct GlobalPodiumRow: View {
                     uid: entry.uid
                 )
                 .overlay(Circle().stroke(metal, lineWidth: isWinner ? 3 : 2))
+                .avatarOnlineDot(
+                    entry.uid != currentUid && onlineUids.contains(entry.uid),
+                    avatarSize: avatarSize
+                )
                 .padding(.top, isWinner ? 4 : 0)
 
                 HStack(spacing: 4) {
@@ -52,12 +56,6 @@ struct GlobalPodiumRow: View {
                     if VerifiedTracker.isVerified(hours: entry.hours) {
                         // Only three of these on screen, so they can shimmer.
                         VerifiedBadgeView(variant: .shimmer, size: 14)
-                    }
-                    if entry.uid != currentUid && onlineUids.contains(entry.uid) {
-                        Circle()
-                            .fill(AppColors.positive)
-                            .frame(width: 7, height: 7)
-                            .accessibilityLabel("Online now")
                     }
                     if let flag = flagEmoji(for: entry) {
                         Text(flag).font(.system(size: 13))
@@ -197,6 +195,7 @@ struct GlobalTrackerRow: View {
                 photoURL: tracker.photoURL,
                 uid: tracker.uid
             )
+            .avatarOnlineDot(isOnline, avatarSize: GlobalLeaderboardMetrics.avatarSize)
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
@@ -208,12 +207,6 @@ struct GlobalTrackerRow: View {
                         // Static in the list: the board scrolls hundreds of
                         // rows, and a shimmer each would be one clock per row.
                         VerifiedBadgeView(variant: .static, size: 13)
-                    }
-                    if isOnline {
-                        Circle()
-                            .fill(AppColors.positive)
-                            .frame(width: 7, height: 7)
-                            .accessibilityLabel("Online now")
                     }
                     if let flag = CountryFlag.emoji(
                         for: CountryFlag.leaderboardCode(

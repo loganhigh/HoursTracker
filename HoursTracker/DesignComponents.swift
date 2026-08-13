@@ -255,3 +255,25 @@ struct SectionEyebrow: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 }
+
+// MARK: - Avatar online dot
+
+extension View {
+    /// Presence badge on an avatar's bottom-right corner: a green dot with a
+    /// background-colored ring so it reads as punched out of the photo.
+    /// Sized relative to the avatar so podium heroes and list rows stay
+    /// proportionate. Renders nothing when `isOnline` is false.
+    @ViewBuilder
+    func avatarOnlineDot(_ isOnline: Bool, avatarSize: CGFloat) -> some View {
+        overlay(alignment: .bottomTrailing) {
+            if isOnline {
+                let dot = min(max(avatarSize * 0.28, 10), 18)
+                Circle()
+                    .fill(AppColors.positive)
+                    .frame(width: dot, height: dot)
+                    .overlay(Circle().stroke(AppColors.bg, lineWidth: max(2, dot * 0.16)))
+                    .accessibilityLabel("Online now")
+            }
+        }
+    }
+}

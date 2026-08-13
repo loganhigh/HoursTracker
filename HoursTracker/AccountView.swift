@@ -355,20 +355,6 @@ struct AccountView: View {
 
                     AccountRowHairline()
 
-                    Button {
-                        try? authService.signOut()
-                    } label: {
-                        AccountNavRow(
-                            icon: "rectangle.portrait.and.arrow.right",
-                            title: "Sign Out",
-                            titleTint: AppColors.accent,
-                            showsChevron: false
-                        )
-                    }
-                    .buttonStyle(PremiumPressStyle())
-
-                    AccountRowHairline()
-
                     // Legal links continue the same list rather than sitting
                     // in their own tile pair below it. LegalLinksSection (the
                     // two-tile layout) is still what the paywall uses.
@@ -392,10 +378,25 @@ struct AccountView: View {
 
                     AccountRowHairline()
 
-                    // Last row in the card: destructive actions belong at the
-                    // bottom, past everything routine. Account deletion is
-                    // required by App Store Review Guideline 5.1.1(v); the
-                    // confirmation flow is unchanged.
+                    // The two account actions sit together at the foot of the
+                    // card, past everything routine, ordered least to most
+                    // destructive.
+                    Button {
+                        try? authService.signOut()
+                    } label: {
+                        AccountNavRow(
+                            icon: "rectangle.portrait.and.arrow.right",
+                            title: "Sign Out",
+                            titleTint: AppColors.accent,
+                            showsChevron: false
+                        )
+                    }
+                    .buttonStyle(PremiumPressStyle())
+
+                    AccountRowHairline()
+
+                    // Account deletion is required by App Store Review
+                    // Guideline 5.1.1(v); the confirmation flow is unchanged.
                     deleteAccountRow
                 }
             } else {
