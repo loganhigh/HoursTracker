@@ -343,6 +343,8 @@ struct HoursHomeView: View {
     @ObservedObject private var statsListener = StatsListenerService.shared
     @ObservedObject private var topTrackers = TopTrackersService.shared
     @ObservedObject private var notificationRouter = NotificationRouter.shared
+    @ObservedObject private var verifiedStatus = VerifiedStatusService.shared
+    @State private var showingVerifiedProofSheet = false
     @EnvironmentObject private var levelUpCoordinator: LevelUpCoordinator
 
     @State private var showingAdd = false
@@ -666,6 +668,11 @@ struct HoursHomeView: View {
                     .cardAppear(index: 7)
                 }
 
+                // Same tappable review line as the global leaderboard and You.
+                VerifiedReviewNote(isVerified: verifiedStatus.isVerified) {
+                    showingVerifiedProofSheet = true
+                }
+
                 Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                     .font(.system(.caption, design: .rounded, weight: .bold))
                     .foregroundStyle(AppTheme.Colors.subtext.opacity(0.4))
@@ -775,6 +782,13 @@ struct HoursHomeView: View {
         }
         .sheet(isPresented: $showingAdminPanel) {
             AdminPanelView()
+        }
+        .sheet(isPresented: $showingVerifiedProofSheet) {
+            VerifiedReviewProofSheet(
+                isVerified: verifiedStatus.isVerified,
+                accountName: UserDefaults.standard.string(forKey: "profile_display_name") ?? "",
+                accountUid: authService.user?.uid
+            )
         }
         .sheet(isPresented: $showingPrestigeInfoFromHeroCard) {
             PrestigeInfoSheet(currentPrestige: store.displayedGamificationProfile().prestige)

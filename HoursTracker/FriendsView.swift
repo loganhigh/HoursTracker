@@ -22,6 +22,7 @@ struct FriendsView: View {
     @ObservedObject private var statsListener = StatsListenerService.shared
     @ObservedObject private var presence = PresenceService.shared
     @ObservedObject private var verifiedStatus = VerifiedStatusService.shared
+    @State private var showingVerifiedProofSheet = false
     @State private var codeInput = ""
     @State private var actionMessage: String?
     @State private var actionMessageIsError = false
@@ -118,6 +119,13 @@ struct FriendsView: View {
                 onRemoveFriend: { friend in
                     await removeFriend(friend)
                 }
+            )
+        }
+        .sheet(isPresented: $showingVerifiedProofSheet) {
+            VerifiedReviewProofSheet(
+                isVerified: verifiedStatus.isVerified,
+                accountName: UserDefaults.standard.string(forKey: "profile_display_name") ?? "",
+                accountUid: authService.user?.uid
             )
         }
         .sheet(isPresented: $showingAddFriend) {
@@ -293,6 +301,12 @@ struct FriendsView: View {
                 friendsList(entries)
                     .padding(.top, AppSpacing.xxs)
                     .cardAppear(index: 2, group: "friends")
+
+                // Same tappable review line as the global leaderboard and You.
+                VerifiedReviewNote(isVerified: verifiedStatus.isVerified) {
+                    showingVerifiedProofSheet = true
+                }
+                .cardAppear(index: 3, group: "friends")
             }
             .padding(.horizontal, AppSpacing.md)
             .padding(.vertical, AppSpacing.md)
