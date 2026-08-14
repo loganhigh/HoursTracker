@@ -304,11 +304,16 @@ struct HomeStatTriplet: View {
 
     private var weekHours: Double { hoursInWeek(containing: Date()) }
 
-    // MARK: Cheque sums
+    // MARK: Cheque days
 
-    private var chequeHours: Double {
-        PayCycleEngine.entries(store.entries, in: store.currentPayCycle())
-            .reduce(0) { $0 + $1.paidHours }
+    /// Distinct calendar days with a worked (non-off-day) entry in the live
+    /// pay period — two shifts on one day count once.
+    private var chequeDaysWorked: Int {
+        let cal = Calendar.current
+        let days = PayCycleEngine.entries(store.entries, in: store.currentPayCycle())
+            .filter { !$0.isOffDay }
+            .map { cal.startOfDay(for: $0.date) }
+        return Set(days).count
     }
 
     // MARK: Month sums
@@ -317,9 +322,12 @@ struct HomeStatTriplet: View {
 
     var body: some View {
         HStack(spacing: AppSpacing.xs + 2) {
-            HomeStatTile(label: "This Week", hours: weekHours)
-            HomeStatTile(label: "This Cheque", hours: chequeHours)
-            HomeStatTile(label: "This Month", hours: monthHours)
+            HomeStatTile(label: "This Week", value: AppTheme.Format.hours(weekHours))
+            // Hours this cheque already lead the hero card directly above —
+            // repeating them here said nothing new. Days worked answers the
+            // other question a pay period raises.
+            HomeStatTile(label: "Days Worked", value: "\(chequeDaysWorked)")
+            HomeStatTile(label: "This Month", value: AppTheme.Format.hours(monthHours))
         }
     }
 }
@@ -328,7 +336,8 @@ struct HomeStatTriplet: View {
 /// max — nothing else.
 struct HomeStatTile: View {
     let label: String
-    let hours: Double
+    /// Pre-formatted display value — "72.63h" or a bare day count.
+    let value: String
 
     var body: some View {
         VStack(spacing: AppSpacing.xxs) {
@@ -338,7 +347,7 @@ struct HomeStatTile: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6) // three tiles abreast at AX sizes
 
-            Text(AppTheme.Format.hours(hours))
+            Text(value)
                 .font(AppTypography.metricValue)
                 .foregroundStyle(AppColors.text)
                 .lineLimit(1)
