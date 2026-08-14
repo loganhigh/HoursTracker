@@ -56,6 +56,10 @@ struct OnboardingView: View {
     @State private var usesCutoffDraft = false
     @State private var cutoffDraft = OnboardingView.defaultPayday()
 
+    /// The scroll view's own height, used as the content's minimum so short
+    /// content centers and tall content still scrolls.
+    @State private var signInPageMinHeight: CGFloat = 0
+
     // Setup first, sign-in last: the account is the final step, so the pager
     // ends on it and auth completion ends onboarding.
     private let pageCount = 5
@@ -211,13 +215,17 @@ struct OnboardingView: View {
     // MARK: - Screen 3 — sign in
 
     private var signInPage: some View {
+        // Centered like the name and pay pages. Still a ScrollView, because
+        // this page's content is tall enough to need scrolling on small
+        // devices and with the keyboard up — the minHeight frame is what
+        // centers it when there is room to spare.
         ScrollView {
-            VStack(spacing: AppSpacing.lg) {
-                Image(systemName: "hourglass")
-                    .font(.system(size: 40, weight: .medium))
-                    .foregroundStyle(AppColors.accent)
-                    .padding(.top, AppSpacing.xs)
+            VStack(spacing: AppSpacing.md) {
+                Spacer(minLength: 0)
 
+                // No logo here. The welcome page already opens on it, and at
+                // any size that read as a logo it pushed the form into the
+                // page indicator — the form is the whole point of this page.
                 VStack(spacing: AppSpacing.sm) {
                     Text("Start tracking")
                         .appText(.title)
@@ -251,11 +259,18 @@ struct OnboardingView: View {
                         .appText(.caption)
                 }
                 .foregroundStyle(AppColors.faint)
-                .padding(.bottom, AppSpacing.sm)
+
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, AppSpacing.xl)
+            .frame(maxWidth: .infinity, minHeight: signInPageMinHeight)
         }
         .scrollDismissesKeyboard(.interactively)
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { height in
+            signInPageMinHeight = height
+        }
     }
 
     // MARK: - Screen 4 — display name
