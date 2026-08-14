@@ -1,5 +1,4 @@
 import SwiftUI
-import PhotosUI
 
 struct CompanyProfileView: View {
     var store: HoursStore? = nil
@@ -12,19 +11,10 @@ struct CompanyProfileView: View {
 
     @State private var startDate: Date = Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date()
 
-    // MARK: - Logo (Pro-gated)
-    @ObservedObject private var premium = PremiumManager.shared
-    @ObservedObject private var logoManager = CompanyLogoManager.shared
-    @State private var logoPickerItem: PhotosPickerItem?
-    @State private var isUpdatingLogo = false
-    @State private var logoError: String?
-    @State private var showingLogoUpgrade = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                logoCard
-
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Company Details")
                         .font(.system(size: 16, weight: .bold, design: .rounded))
@@ -107,156 +97,6 @@ struct CompanyProfileView: View {
         }
         .onDisappear {
             store?.syncProfileSnapshotToCloud()
-        }
-        .sheet(isPresented: $showingLogoUpgrade) {
-            PremiumUpgradeView()
-        }
-        .alert("Couldn't update logo", isPresented: Binding(
-            get: { logoError != nil },
-            set: { if !$0 { logoError = nil } }
-        )) {
-            Button("OK", role: .cancel) { logoError = nil }
-        } message: {
-            Text(logoError ?? "")
-        }
-    }
-
-    // MARK: - Logo card
-
-    private var logoCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Text("Company Logo")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.text)
-                if !premium.isPremium {
-                    Image(systemName: "crown.fill")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(AppColors.accent)
-                }
-                Spacer(minLength: 0)
-            }
-
-            HStack(spacing: AppSpacing.md) {
-                logoTapTarget
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(premium.isPremium
-                         ? "Shown in the header of your branded PDF reports."
-                         : "Hour Tracker Pro adds your logo to branded PDF reports.")
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(AppTheme.Colors.subtext)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if premium.isPremium && logoManager.localImage != nil {
-                        Button(role: .destructive) {
-                            removeLogo()
-                        } label: {
-                            Text("Remove Logo")
-                                .font(.system(size: 13, weight: .semibold))
-                        }
-                        .disabled(isUpdatingLogo)
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-        }
-        .padding(16)
-        .background(cardBackground)
-    }
-
-    @ViewBuilder
-    private var logoTapTarget: some View {
-        if premium.isPremium {
-            PhotosPicker(selection: $logoPickerItem, matching: .images) {
-                logoThumbnail
-            }
-            .buttonStyle(.plain)
-            .disabled(isUpdatingLogo)
-            .onChange(of: logoPickerItem) { _, item in
-                guard let item else { return }
-                Task { await updateLogo(from: item) }
-            }
-        } else {
-            Button {
-                Haptics.lightTap()
-                showingLogoUpgrade = true
-            } label: {
-                logoThumbnail
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private var logoThumbnail: some View {
-        ZStack(alignment: .bottomTrailing) {
-            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-                .frame(width: 72, height: 72)
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                        .stroke(AppTheme.Colors.stroke, lineWidth: 1)
-                )
-                .overlay {
-                    if let image = logoManager.localImage {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 72, height: 72)
-                            .clipShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
-                    } else if isUpdatingLogo {
-                        ProgressView()
-                    } else {
-                        Image(systemName: premium.isPremium ? "building.2.crop.circle" : "lock.fill")
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(AppTheme.Colors.subtext)
-                    }
-                }
-
-            ZStack {
-                Circle().fill(AppColors.card).frame(width: 24, height: 24)
-                if isUpdatingLogo {
-                    ProgressView().controlSize(.mini)
-                } else {
-                    Image(systemName: premium.isPremium ? "camera.fill" : "crown.fill")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(AppColors.accent)
-                }
-            }
-            .overlay(Circle().stroke(AppColors.bg, lineWidth: 2))
-            .offset(x: 4, y: 4)
-        }
-    }
-
-    private func updateLogo(from item: PhotosPickerItem) async {
-        isUpdatingLogo = true
-        defer {
-            isUpdatingLogo = false
-            logoPickerItem = nil
-        }
-        do {
-            guard let data = try await item.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data) else { return }
-            try await logoManager.setLogo(image)
-            Haptics.success()
-        } catch {
-            Haptics.error()
-            logoError = error.localizedDescription
-        }
-    }
-
-    private func removeLogo() {
-        Haptics.warning()
-        Task {
-            isUpdatingLogo = true
-            defer { isUpdatingLogo = false }
-            do {
-                try await logoManager.setLogo(nil)
-                Haptics.success()
-            } catch {
-                Haptics.error()
-                logoError = error.localizedDescription
-            }
         }
     }
 

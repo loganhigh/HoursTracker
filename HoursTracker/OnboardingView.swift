@@ -20,10 +20,11 @@ enum AppTutorialStorage {
 
 // MARK: - OnboardingView
 //
-// Five paged screens: Welcome → Leaderboard → Display name → Pay cycle →
-// Sign in. Setup comes before the account, so the last thing a new user does
-// is authenticate; the moment Firebase confirms the session, onboarding ends
-// and they land on Home. (Company details still live in Settings.)
+// Six paged screens: Welcome → Leaderboard → Display name → Pay cycle →
+// Company → Sign in. Setup comes before the account, so the last thing a new
+// user does is authenticate; the moment Firebase confirms the session,
+// onboarding ends and they land on Home. (Company details remain editable in
+// Settings afterwards, and are optional here.)
 //
 // Auto-advance is LEVEL-triggered, not edge-triggered. The old
 // AppTutorialView only listened for the isSignedIn false→true edge and
@@ -56,16 +57,25 @@ struct OnboardingView: View {
     @State private var usesCutoffDraft = false
     @State private var cutoffDraft = OnboardingView.defaultPayday()
 
+    @State private var companyNameDraft = ""
+    @State private var occupationDraft = ""
+    @State private var hasStartDateDraft = false
+    @State private var startDateDraft = Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date()
+    @FocusState private var companyFieldFocused: CompanyField?
+
+    private enum CompanyField { case name, occupation }
+
     /// The scroll view's own height, used as the content's minimum so short
     /// content centers and tall content still scrolls.
     @State private var signInPageMinHeight: CGFloat = 0
 
     // Setup first, sign-in last: the account is the final step, so the pager
     // ends on it and auth completion ends onboarding.
-    private let pageCount = 5
+    private let pageCount = 6
     private let namePageIndex = 2
     private let payPageIndex = 3
-    private let signInPageIndex = 4
+    private let companyPageIndex = 4
+    private let signInPageIndex = 5
 
     /// Seeds the payday picker with the next Friday — the most common payday,
     /// and a date the user is more likely to adjust than to type from scratch.
@@ -110,8 +120,9 @@ struct OnboardingView: View {
             guard let demo = ProcessInfo.processInfo.environment["ONBOARDING_DEMO"] else { return }
             let lastPage: Int
             switch demo {
-            case "name": lastPage = namePageIndex
-            case "pay":  lastPage = payPageIndex
+            case "name":    lastPage = namePageIndex
+            case "pay":     lastPage = payPageIndex
+            case "company": lastPage = companyPageIndex
             default:     lastPage = signInPageIndex
             }
             while page < lastPage {
@@ -163,6 +174,9 @@ struct OnboardingView: View {
 
             payPage
                 .tag(payPageIndex)
+
+            companyPage
+                .tag(companyPageIndex)
 
             signInPage
                 .tag(signInPageIndex)
@@ -453,6 +467,136 @@ struct OnboardingView: View {
             ? Calendar.current.startOfDay(for: cutoffDraft)
             : nil
         store.persist()
+        Haptics.success()
+        withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
+            page = companyPageIndex
+        }
+    }
+
+    // MARK: - Screen 5 — company
+
+    /// Optional by design: plenty of people track hours without wanting to name
+    /// their employer, and blocking the account behind it would cost more
+    /// sign-ups than the field is worth. Continue always proceeds; empty fields
+    /// simply write nothing.
+    private var companyPage: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+
+                VStack(spacing: AppSpacing.lg) {
+                    Image(systemName: "building.2")
+                        .font(.system(size: 40, weight: .medium))
+                        .foregroundStyle(AppColors.accent)
+
+                    VStack(spacing: AppSpacing.sm) {
+                        Text("Where do you work?")
+                            .appText(.title)
+                            .foregroundStyle(AppColors.text)
+                            .multilineTextAlignment(.center)
+
+                        Text("Shown on your profile and used for your work anniversary. All optional — you can add or change it later in Settings.")
+                            .appText(.subheadline)
+                            .foregroundStyle(AppColors.subtext)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    VStack(spacing: 0) {
+                        TextField("Company name", text: $companyNameDraft)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .submitLabel(.next)
+                            .focused($companyFieldFocused, equals: .name)
+                            .onSubmit { companyFieldFocused = .occupation }
+                            .padding(.horizontal, AppSpacing.md)
+                            .padding(.vertical, 14)
+
+                        Divider().overlay(AppColors.stroke)
+
+                        TextField("Job title", text: $occupationDraft)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .submitLabel(.done)
+                            .focused($companyFieldFocused, equals: .occupation)
+                            .onSubmit { companyFieldFocused = nil }
+                            .padding(.horizontal, AppSpacing.md)
+                            .padding(.vertical, 14)
+
+                        Divider().overlay(AppColors.stroke)
+
+                        Toggle(isOn: $hasStartDateDraft.animation(
+                            AppMotion.animation(AppMotion.Spring.snappy, reduceMotion: reduceMotion)
+                        )) {
+                            Text("I know my start date")
+                                .appText(.body)
+                                .foregroundStyle(AppColors.text)
+                        }
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.vertical, 6)
+
+                        if hasStartDateDraft {
+                            Divider().overlay(AppColors.stroke)
+
+                            DatePicker(
+                                "Start date",
+                                selection: $startDateDraft,
+                                in: ...Date(),
+                                displayedComponents: .date
+                            )
+                            .datePickerStyle(.compact)
+                            .padding(.horizontal, AppSpacing.md)
+                            .padding(.vertical, 12)
+                        }
+                    }
+                    .tint(AppColors.accent)
+                    .foregroundStyle(AppColors.text)
+                    .background(
+                        RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                            .fill(AppColors.card2.opacity(0.6))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                                    .stroke(AppColors.stroke.opacity(0.5), lineWidth: 1)
+                            )
+                    )
+
+                    Button("Continue") {
+                        saveCompanyAndContinue()
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                }
+                .padding(.horizontal, AppSpacing.xl)
+
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: signInPageMinHeight)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+            signInPageMinHeight = height
+        }
+    }
+
+    /// Writes to the same @AppStorage keys CompanyProfileView edits, so what's
+    /// entered here shows up in Settings and syncs with the next profile push.
+    private func saveCompanyAndContinue() {
+        companyFieldFocused = nil
+        let name = companyNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let role = occupationDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Moderated on the same rules as a display name: these are published to
+        // publicProfiles and read by other users.
+        if !name.isEmpty, BroadContentFilter.shared.validate(name).isAllowed {
+            UserDefaults.standard.set(String(name.prefix(80)), forKey: "company_name")
+        }
+        if !role.isEmpty, BroadContentFilter.shared.validate(role).isAllowed {
+            UserDefaults.standard.set(String(role.prefix(80)), forKey: "company_occupation")
+        }
+        if hasStartDateDraft {
+            UserDefaults.standard.set(
+                Calendar.current.startOfDay(for: startDateDraft).timeIntervalSince1970,
+                forKey: "company_start_date_ts"
+            )
+        }
         Haptics.success()
         withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
             page = signInPageIndex
