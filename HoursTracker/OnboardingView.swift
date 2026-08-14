@@ -39,6 +39,7 @@ struct OnboardingView: View {
     var onComplete: (() -> Void)? = nil
 
     @EnvironmentObject private var authService: AuthService
+    @EnvironmentObject private var store: HoursStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var page = 0
@@ -49,9 +50,25 @@ struct OnboardingView: View {
     @State private var nameValidationMessage: String?
     @FocusState private var nameFieldFocused: Bool
 
-    private let pageCount = 4
+    @State private var payPeriodDraft: PayPeriodType = .biWeekly
+    @State private var paydayDraft = OnboardingView.defaultPayday()
+
+    private let pageCount = 5
     private let signInPageIndex = 2
     private let namePageIndex = 3
+    private let payPageIndex = 4
+
+    /// Seeds the payday picker with the next Friday — the most common payday,
+    /// and a date the user is more likely to adjust than to type from scratch.
+    private static func defaultPayday() -> Date {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return calendar.nextDate(
+            after: today,
+            matching: DateComponents(weekday: 6), // 1 = Sunday, so 6 = Friday
+            matchingPolicy: .nextTime
+        ) ?? today
+    }
 
     var body: some View {
         ZStack {
@@ -72,10 +89,10 @@ struct OnboardingView: View {
         }
         .onChange(of: page) { _, newPage in
             Haptics.lightTap()
-            // The pager is swipeable; the name page is only reachable once
+            // The pager is swipeable; the setup pages are only reachable once
             // signed in, so a forward swipe past sign-in snaps back. The
             // rehearsal hook may bypass the gate — it never runs in production.
-            if newPage == namePageIndex && !authService.isSignedIn
+            if newPage > signInPageIndex && !authService.isSignedIn
                 && ProcessInfo.processInfo.environment["ONBOARDING_DEMO"] == nil {
                 page = signInPageIndex
                 return
@@ -94,9 +111,15 @@ struct OnboardingView: View {
             // touch input. Inert unless the launch environment carries the
             // variable, which production never does.
             guard let demo = ProcessInfo.processInfo.environment["ONBOARDING_DEMO"] else { return }
-            // "name" walks through to the display-name page (which real users
-            // only reach after signing in); anything else stops at sign-in.
-            let lastPage = demo == "name" ? namePageIndex : signInPageIndex
+            // "name" and "pay" walk into the post-sign-in setup pages (which
+            // real users only reach authenticated); anything else stops at
+            // sign-in.
+            let lastPage: Int
+            switch demo {
+            case "name": lastPage = namePageIndex
+            case "pay":  lastPage = payPageIndex
+            default:     lastPage = signInPageIndex
+            }
             while page < lastPage {
                 try? await Task.sleep(nanoseconds: 2_500_000_000)
                 withAnimation(AppMotion.Spring.smooth) { page += 1 }
@@ -146,6 +169,9 @@ struct OnboardingView: View {
 
             namePage
                 .tag(namePageIndex)
+
+            payPage
+                .tag(payPageIndex)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .animation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion), value: page)
@@ -339,6 +365,76 @@ struct OnboardingView: View {
                 )
             }
         }
+        Haptics.success()
+        withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
+            page = payPageIndex
+        }
+    }
+
+    // MARK: - Screen 5 — pay cycle
+
+    private var payPage: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            VStack(spacing: AppSpacing.lg) {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 40, weight: .medium))
+                    .foregroundStyle(AppColors.accent)
+
+                VStack(spacing: AppSpacing.sm) {
+                    Text("When do you get paid?")
+                        .appText(.title)
+                        .foregroundStyle(AppColors.text)
+                        .multilineTextAlignment(.center)
+
+                    Text("This sets your pay period so your hours and cheque totals line up. You can change it any time in Settings.")
+                        .appText(.subheadline)
+                        .foregroundStyle(AppColors.subtext)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Picker("Pay period", selection: $payPeriodDraft) {
+                    ForEach(PayPeriodType.allCases, id: \.self) { type in
+                        Text(type.displayName).tag(type)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                DatePicker(
+                    "Next payday",
+                    selection: $paydayDraft,
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.compact)
+                .tint(AppColors.accent)
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                        .fill(AppColors.card2.opacity(0.6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                                .stroke(AppColors.stroke.opacity(0.5), lineWidth: 1)
+                        )
+                )
+
+                Button("Continue") {
+                    savePayCycleAndFinish()
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+            .padding(.horizontal, AppSpacing.xl)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func savePayCycleAndFinish() {
+        store.paySettings.payPeriodType = payPeriodDraft
+        store.paySettings.nextPayday = Calendar.current.startOfDay(for: paydayDraft)
+        store.persist()
         Haptics.success()
         finishOnboarding()
     }
