@@ -97,15 +97,16 @@ struct AccountView: View {
                     .cardAppear(index: 3, group: "you")
                 accountSection
                     .cardAppear(index: 4, group: "you")
-                // Same tappable line as the global leaderboard's — one more
-                // door into the review flow, sitting quietly above the
-                // version number.
-                VerifiedReviewNote(isVerified: verifiedStatus.isVerified) {
-                    showingVerifiedProofSheet = true
+                // Note + version as one tight, centred footer group — the
+                // review line belongs to the version it sits over.
+                VStack(spacing: 2) {
+                    VerifiedReviewNote(isVerified: verifiedStatus.isVerified) {
+                        showingVerifiedProofSheet = true
+                    }
+                    versionFooter
                 }
+                .frame(maxWidth: .infinity)
                 .cardAppear(index: 5, group: "you")
-                versionFooter
-                    .cardAppear(index: 6, group: "you")
             }
             .padding(.horizontal, AppSpacing.md)
             .padding(.top, AppSpacing.xs)
@@ -535,7 +536,6 @@ struct AccountView: View {
             .font(AppTypography.eyebrow)
             .tracking(AppTypography.eyebrowTracking)
             .foregroundStyle(AppColors.subtext.opacity(0.4))
-            .padding(.top, AppSpacing.xs)
     }
 
     // MARK: - Formatting

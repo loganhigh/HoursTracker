@@ -668,17 +668,20 @@ struct HoursHomeView: View {
                     .cardAppear(index: 7)
                 }
 
-                // Same tappable review line as the global leaderboard and You.
-                VerifiedReviewNote(isVerified: verifiedStatus.isVerified) {
-                    showingVerifiedProofSheet = true
+                // Note + version travel as one tight, centred footer group —
+                // the review line belongs to the version it sits over, not
+                // floating midway down the gap.
+                VStack(spacing: 2) {
+                    VerifiedReviewNote(isVerified: verifiedStatus.isVerified) {
+                        showingVerifiedProofSheet = true
+                    }
+                    Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
+                        .font(.system(.caption, design: .rounded, weight: .bold))
+                        .foregroundStyle(AppTheme.Colors.subtext.opacity(0.4))
+                        .tracking(1.5)
                 }
-
-                Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
-                    .font(.system(.caption, design: .rounded, weight: .bold))
-                    .foregroundStyle(AppTheme.Colors.subtext.opacity(0.4))
-                    .tracking(1.5)
-                    .padding(.top, 8)
-                    .padding(.bottom, 20)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 20)
             }
             .padding(.horizontal, AppTheme.Spacing.md)
             .padding(.top, 12)
