@@ -114,6 +114,32 @@ enum GamificationLevelCalculator {
         }
     }
 
+    /// Every name the ladder has ever produced, including retired flavor
+    /// titles that were never part of `rankTitle`'s output. A stored title
+    /// matching one of these came from the ladder rather than a deliberate
+    /// choice, so it should be recomputed rather than trusted.
+    static func isLadderTitle(_ title: String) -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        if retiredLadderTitles.contains(trimmed) { return true }
+        // Prestige runs prefix the tier name ("Bronze Work Warrior").
+        return PrestigeTheme.tiers.contains { tier in
+            trimmed.hasPrefix(tier.name + " ")
+                && retiredLadderTitles.contains(String(trimmed.dropFirst(tier.name.count + 1)))
+        }
+    }
+
+    private static let retiredLadderTitles: Set<String> = [
+        "Rookie", "Shift Starter", "Clock Puncher", "Hour Hustler", "Time Tracker",
+        "Early Bird", "Daily Grinder", "Break Boss", "Shift Regular", "Week Warrior",
+        "Paycheck Hunter", "Schedule Pro", "Hard Charger", "Time Keeper", "Shift Captain",
+        "Hours Hero", "Work Warrior", "Clock Commander", "Elite Grinder", "Hour Machine",
+        "Shift Legend", "Time Titan", "Overtime Ace", "OT King", "Prestige Ready",
+        // Never emitted by rankTitle, but written by an older client and still
+        // sitting in plenty of stored profiles.
+        "Level 10 Veteran",
+    ]
+
     static func rankTitle(forLevel level: Int, prestige: Int = 0) -> String {
         let names = [
             "Rookie",              // 1

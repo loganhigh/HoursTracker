@@ -11,6 +11,7 @@ const { defineSecret } = require("firebase-functions/params");
 const functionsV1 = require("firebase-functions/v1");
 const {
   recomputeUserStats,
+  rankTitle,
   updateGlobalLeaderboard,
   applyLeaderboardDeltaForUser,
   totalXPAtLevelStart,
@@ -785,8 +786,14 @@ function buildAdminUserRow(uid, userData, profileData, authData, presenceData) {
     adminFloorPrestige:
       u.adminFloorPrestige != null ? Number(u.adminFloorPrestige) : null,
     adminEquippedTitle: u.adminEquippedTitle || "",
+    // Falls back to the level-derived ladder rather than users/{uid}
+    // .equippedTitle, which can still hold a frozen title an old client wrote
+    // (a Level 17 account showing "Level 10 Veteran" here was reading exactly
+    // that). publicProfiles is authoritative once a recompute has run.
     equippedTitle:
-      p.equippedTitle || u.adminEquippedTitle || u.equippedTitle || "",
+      p.equippedTitle ||
+      u.adminEquippedTitle ||
+      rankTitle(Number(p.level) || Number(u.level) || 1, Number(p.prestige) || Number(u.prestige) || 0),
     countryCode: String(u.countryCode || p.countryCode || "").trim().toUpperCase(),
     profilePending: !hasPublicProfile,
   };

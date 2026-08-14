@@ -22,6 +22,40 @@ const LEGACY_INVALID_EQUIPPED_TITLES = new Set([
   "Level 10 Veteran",
 ]);
 
+// ---------------------------------------------------------------------------
+// Default rank title.
+//
+// A port of GamificationLevelCalculator.rankTitle. Titles used to be a frozen
+// string on users/{uid}.equippedTitle, written once by an old client and never
+// updated — which is how a Level 17 account kept displaying "Level 10 Veteran".
+// Deriving it here from the level the server just computed means it tracks the
+// user automatically, with no per-person admin title to maintain.
+// ---------------------------------------------------------------------------
+
+const RANK_TITLES = [
+  "Rookie", "Shift Starter", "Clock Puncher", "Hour Hustler", "Time Tracker",
+  "Early Bird", "Daily Grinder", "Break Boss", "Shift Regular", "Week Warrior",
+  "Paycheck Hunter", "Schedule Pro", "Hard Charger", "Time Keeper", "Shift Captain",
+  "Hours Hero", "Work Warrior", "Clock Commander", "Elite Grinder", "Hour Machine",
+  "Shift Legend", "Time Titan", "Overtime Ace", "OT King", "Prestige Ready",
+];
+
+const PRESTIGE_TIER_NAMES = [
+  "Unranked", "Bronze", "Silver", "Gold", "Platinum",
+  "Diamond", "Master", "Grandmaster", "Champion", "Legend", "Prestige Master",
+];
+
+const MAX_LEVEL = 25;
+
+function rankTitle(level, prestige) {
+  const clamped = Math.min(Math.max(Number(level) || 1, 1), MAX_LEVEL);
+  const base = RANK_TITLES[Math.min(clamped - 1, RANK_TITLES.length - 1)];
+  const p = Number(prestige) || 0;
+  if (p <= 0) return base;
+  const tier = PRESTIGE_TIER_NAMES[Math.min(p, PRESTIGE_TIER_NAMES.length - 1)];
+  return tier ? `${tier} ${base}` : base;
+}
+
 function sanitizedEquippedTitle(rawTitle) {
   if (!rawTitle || LEGACY_INVALID_EQUIPPED_TITLES.has(rawTitle)) return "";
   return stripWrappingQuotes(rawTitle);
@@ -1055,10 +1089,16 @@ async function recomputeUserStats(db, uid, options = {}) {
     // The admin override took the raw value straight through before — it never
     // reached sanitizedEquippedTitle, which is why a quoted admin title was the
     // one kind that survived to the UI.
+    //
+    // Falls through to a title derived from the level computed just above, so
+    // everyone carries a title that matches where they actually are without one
+    // being assigned by hand. A stored equippedTitle only wins if it is not one
+    // of the retired ladder names — i.e. only if it is something a client chose
+    // deliberately outside this scheme.
     equippedTitle:
       stripWrappingQuotes(userData.adminEquippedTitle) ||
       sanitizedEquippedTitle(userData.equippedTitle) ||
-      "",
+      rankTitle(level, prestige),
     profilePhotoURL: photoOverride.value || userData.profilePhotoURL || null,
     privacy: userData.privacy || {},
     acceptInvites: userData.acceptInvites !== false,
@@ -1472,6 +1512,7 @@ module.exports = {
   recomputeUserStats,
   stripWrappingQuotes,
   sanitizeDisplayName,
+  rankTitle,
   updateGlobalLeaderboard,
   applyLeaderboardDeltaForUser,
   entryDerivedXP,

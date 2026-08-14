@@ -630,12 +630,29 @@ final class HoursStore: ObservableObject {
 
     /// Title shown on profile cards — admin override wins when set.
     /// Both branches strip wrapping quotes; see `strippingWrappingQuotes`.
+    /// Admin override, then a deliberately-chosen stored title, then the title
+    /// for the level you're actually at.
+    ///
+    /// The stored `equippedTitle` used to be the last word, which froze whatever
+    /// an old client wrote — a Level 17 account kept reading "Level 10 Veteran"
+    /// years later. Anything from the retired ladder is ignored so it recomputes
+    /// instead; the server publishes the same fallback (see rankTitle in
+    /// functions/src/stats/recompute.js), so both sides agree.
     var displayedEquippedTitle: String {
         if let admin = adminEquippedTitleOverride?.strippingWrappingQuotes,
            !admin.isEmpty {
             return admin
         }
-        return gamificationProfile.equippedTitle?.strippingWrappingQuotes ?? ""
+        let profile = displayedGamificationProfile()
+        if let stored = gamificationProfile.equippedTitle?.strippingWrappingQuotes,
+           !stored.isEmpty,
+           !GamificationLevelCalculator.isLadderTitle(stored) {
+            return stored
+        }
+        return GamificationLevelCalculator.rankTitle(
+            forLevel: profile.level,
+            prestige: profile.prestige
+        )
     }
 
     /// Per-component XP breakdown for the server's XP-migration shadow logs.
