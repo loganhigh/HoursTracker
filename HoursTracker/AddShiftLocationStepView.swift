@@ -294,8 +294,11 @@ struct JobSiteDraft {
         lastUsedAt = site.lastUsedAt
     }
 
+    /// Name and city are both required. Existing sites saved before city
+    /// existed keep working — this only gates the editor.
     var isValid: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func makeSite() -> JobSite {
@@ -322,14 +325,12 @@ struct JobSiteFormFields: View {
     var knownCities: [String] = []
 
     var body: some View {
+        // Name and city only. Detail and icon still exist on the model, so
+        // sites saved with them keep them — they are simply not asked for.
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             nameField
-            TextField("Address or detail (optional)", text: $draft.detail)
-                .appText(.body)
-                .foregroundStyle(AppColors.text)
-                .tint(AppColors.accent)
 
-            TextField("City (optional)", text: $draft.city)
+            TextField("City", text: $draft.city)
                 .appText(.body)
                 .foregroundStyle(AppColors.text)
                 .tint(AppColors.accent)
@@ -344,16 +345,6 @@ struct JobSiteFormFields: View {
                         }
                     }
                     .padding(.horizontal, 1)
-                }
-            }
-
-            Text("Icon")
-                .appText(.eyebrow)
-                .foregroundStyle(AppColors.subtext)
-
-            HStack(spacing: AppSpacing.xs) {
-                ForEach(JobSite.iconOptions, id: \.self) { icon in
-                    iconButton(icon)
                 }
             }
         }
@@ -405,27 +396,4 @@ struct JobSiteFormFields: View {
         }
     }
 
-    private func iconButton(_ icon: String) -> some View {
-        let isSelected = draft.iconName == icon
-        return Button {
-            Haptics.lightTap()
-            draft.iconName = icon
-        } label: {
-            RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
-                .fill(AppColors.accent.opacity(isSelected ? 0.14 : 0.06))
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
-                        .stroke(isSelected ? AppColors.accent.opacity(0.45) : AppColors.stroke, lineWidth: 1)
-                )
-                .frame(height: 36)
-                .overlay(
-                    Image(systemName: icon)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(isSelected ? AppColors.accent : AppColors.subtext)
-                )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(icon)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-    }
 }

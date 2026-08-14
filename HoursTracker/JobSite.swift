@@ -80,9 +80,14 @@ struct JobSite: Identifiable, Codable, Equatable, Hashable {
         String(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(limit))
     }
 
-    /// Row subtitle: the user's own detail when set, otherwise usage context.
+    /// Row subtitle: the user's own detail when set (only sites saved before
+    /// the editor dropped that field have one), then the city — which is what
+    /// makes a row readable in the picker's ungrouped Recent section — then
+    /// usage context.
     var displaySubtitle: String {
         if !detail.isEmpty { return detail }
+        let trimmedCity = city.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedCity.isEmpty { return trimmedCity }
         guard let lastUsedAt else { return "Not used yet" }
         return "Last used \(lastUsedAt.formatted(.dateTime.month(.abbreviated).day()))"
     }
