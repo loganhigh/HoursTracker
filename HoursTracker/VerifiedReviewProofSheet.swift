@@ -200,7 +200,7 @@ struct VerifiedReviewProofSheet: View {
 
             stepRow(
                 number: 3,
-                title: "Send it to us",
+                title: "Send us a screenshot!",
                 detail: VerifiedTracker.proofRecipient,
                 isDone: stage == .sent
             ) {
