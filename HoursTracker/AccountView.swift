@@ -35,6 +35,7 @@ struct AccountView: View {
     @State private var showingPhotoViewer = false
     @State private var showingPhotoPicker = false
     @State private var showingPrestigeInfo = false
+    @State private var showingVerifiedProofSheet = false
     @ObservedObject private var photoManager = ProfilePhotoManager.shared
 
     // MARK: - Identity data
@@ -96,8 +97,15 @@ struct AccountView: View {
                     .cardAppear(index: 3, group: "you")
                 accountSection
                     .cardAppear(index: 4, group: "you")
+                // Same tappable line as the global leaderboard's — one more
+                // door into the review flow, sitting quietly above the
+                // version number.
+                VerifiedReviewNote(isVerified: verifiedStatus.isVerified) {
+                    showingVerifiedProofSheet = true
+                }
+                .cardAppear(index: 5, group: "you")
                 versionFooter
-                    .cardAppear(index: 5, group: "you")
+                    .cardAppear(index: 6, group: "you")
             }
             .padding(.horizontal, AppSpacing.md)
             .padding(.top, AppSpacing.xs)
@@ -109,6 +117,13 @@ struct AccountView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView(store: store, settings: $store.paySettings)
                 .environmentObject(authService)
+        }
+        .sheet(isPresented: $showingVerifiedProofSheet) {
+            VerifiedReviewProofSheet(
+                isVerified: verifiedStatus.isVerified,
+                accountName: displayName,
+                accountUid: authService.user?.uid
+            )
         }
         .sheet(isPresented: $showingNameEditor) {
             DisplayNameEditorSheet(store: store)
