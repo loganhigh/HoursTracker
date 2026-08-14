@@ -336,18 +336,6 @@ struct SettingsView: View {
                 .listRowBackground(AppColors.card.opacity(0.55))
                 .listRowSeparatorTint(AppColors.stroke)
 
-                if DeveloperConfig.isCEO(uid: authService.user?.uid) {
-                    Section {
-                        NavigationLink {
-                            AdminPanelView()
-                        } label: {
-                            SettingsRowLabel(icon: "person.2.badge.gearshape", title: "Admin console")
-                        }
-                    }
-                    .listRowBackground(AppColors.card.opacity(0.55))
-                    .listRowSeparatorTint(AppColors.stroke)
-                }
-
                 Section {
                     Button(role: .destructive, action: {
                         showingDeleteConfirm = true

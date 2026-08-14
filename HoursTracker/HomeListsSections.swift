@@ -426,3 +426,50 @@ struct HomeFriendsCardContent: View {
     }
 }
 
+
+// MARK: - Admin console entry
+
+/// Home's way into the admin console, shown only to the CEO uid.
+///
+/// Sits directly under Recent Shifts. Styled as a quiet single row rather than
+/// a full card: it's a door, not a surface with content of its own, and it
+/// shouldn't compete with the cards carrying the user's actual hours.
+struct HomeAdminConsoleCard: View {
+    var onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: AppSpacing.sm) {
+                Image(systemName: "person.2.badge.gearshape")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(AppColors.accent)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
+                            .fill(AppColors.accent.opacity(0.14))
+                    )
+
+                Text("Admin console")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.text)
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(AppColors.faint)
+            }
+            .padding(AppSpacing.sm)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                    .fill(AppColors.card.opacity(0.55))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                            .stroke(AppColors.stroke, lineWidth: 0.5)
+                    )
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}

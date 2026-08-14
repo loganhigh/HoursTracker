@@ -313,6 +313,7 @@ struct HoursHomeView: View {
     @StateObject private var badgeUnlockTracker = BadgeUnlockTracker()
     @State private var badgeUnlockPresentation: BadgeUnlockPresentation?
     @State private var showingPrestigeInfoFromHeroCard = false
+    @State private var showingAdminPanel = false
 
     private struct BadgeUnlockPresentation: Identifiable {
         let id: String
@@ -580,6 +581,18 @@ struct HoursHomeView: View {
                         .cardAppear(index: 6)
                 }
 
+                // Below Top 5 Hour Trackers, and outside the friendsEnabled
+                // block so turning Friends off doesn't take the console with
+                // it. Invisible to everyone else — same DeveloperConfig gate
+                // the Settings entry used before this moved here.
+                if DeveloperConfig.isCEO(uid: authService.user?.uid) {
+                    HomeAdminConsoleCard {
+                        Haptics.lightTap()
+                        showingAdminPanel = true
+                    }
+                    .cardAppear(index: 7)
+                }
+
                 Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                     .font(.system(.caption, design: .rounded, weight: .bold))
                     .foregroundStyle(AppTheme.Colors.subtext.opacity(0.4))
@@ -680,6 +693,9 @@ struct HoursHomeView: View {
             Button("OK") { }
         } message: {
             Text("Log your shifts each day. Your hours and pay are calculated automatically. Monthly totals appear here once you have entries.")
+        }
+        .sheet(isPresented: $showingAdminPanel) {
+            AdminPanelView()
         }
         .sheet(isPresented: $showingPrestigeInfoFromHeroCard) {
             PrestigeInfoSheet(currentPrestige: store.displayedGamificationProfile().prestige)
