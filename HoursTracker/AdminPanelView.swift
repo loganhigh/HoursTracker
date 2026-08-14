@@ -7,6 +7,9 @@ private struct AdminUser: Identifiable, Equatable {
     let displayName: String
     var friendCode: String
     var email: String
+    /// From the Auth profile — the provider's real name at first sign-in,
+    /// untouched by the in-app display-name editor.
+    var authName: String = ""
     var createdAt: Date?
     /// Last credential authentication. Rarely moves — Sign in with Apple
     /// persists — so it says almost nothing about whether someone still uses
@@ -229,6 +232,18 @@ struct AdminPanelView: View {
                             HStack(spacing: 8) {
                                 VerifiedBadgeView(variant: .static, size: 16)
                                 Text("Verified inbox")
+                            }
+                        }
+                        .listRowBackground(AppTheme.Colors.card)
+
+                        NavigationLink {
+                            AdminAnnouncementView(passcode: passcode)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "megaphone.fill")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(AppTheme.Colors.accent)
+                                Text("Announcement")
                             }
                         }
                         .listRowBackground(AppTheme.Colors.card)
@@ -524,6 +539,7 @@ private extension AdminUser {
             displayName: dict["displayName"] as? String ?? "",
             friendCode: (dict["friendCode"] as? String ?? "").uppercased(),
             email: dict["email"] as? String ?? "",
+            authName: dict["authName"] as? String ?? "",
             createdAt: date("createdAt"),
             lastSignInAt: date("lastSignInAt"),
             lastActiveAt: date("lastActiveAt"),
@@ -634,6 +650,7 @@ private struct AdminEditUserSheet: View {
                 Section {
                     copyRow("Friend code", user.friendCodeDisplay, copyable: !user.friendCode.isEmpty)
                     copyRow("Email", user.email.isEmpty ? "—" : user.email, copyable: !user.email.isEmpty)
+                    copyRow("Real name", user.authName.isEmpty ? "—" : user.authName, copyable: !user.authName.isEmpty)
                     copyRow("UID", user.uid, copyable: !user.uid.isEmpty)
                     HStack {
                         Text("Signed up")
@@ -1198,6 +1215,116 @@ struct AdminVerifiedInboxView: View {
             withAnimation(.snappy) {
                 items.removeAll { $0.uid == item.uid }
             }
+        } catch {
+            Haptics.error()
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Announcement composer
+
+/// Publishes the one live app-wide announcement. Every user sees it once on
+/// their next app open; the "Update" kind routes its button to the App Store
+/// listing. Publishing replaces the previous announcement, Clear takes it
+/// down for anyone who hasn't seen it yet.
+struct AdminAnnouncementView: View {
+    let passcode: String
+
+    @State private var title = "Update available! 🚀"
+    @State private var message = "A new version of Hour Tracker is out with new features and fixes. Update now to get the latest."
+    @State private var isUpdatePrompt = true
+    @State private var isPublishing = false
+    @State private var isClearing = false
+    @State private var statusMessage: String?
+    @State private var errorMessage: String?
+
+    private let functions = Functions.functions(region: "us-central1")
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Title", text: $title)
+                TextField("Message", text: $message, axis: .vertical)
+                    .lineLimit(3...8)
+                Toggle(isOn: $isUpdatePrompt) {
+                    Text("Update button (opens the App Store)")
+                }
+            } header: {
+                Text("Compose")
+            } footer: {
+                Text("Shows once to every user the next time they open the app — a card like the country-flag prompt, with \(isUpdatePrompt ? "an Update Now button that opens the App Store listing" : "a Got it button") and Not Now. Publishing again later re-prompts everyone.")
+            }
+            .listRowBackground(AppTheme.Colors.card)
+
+            Section {
+                Button {
+                    Task { await publish() }
+                } label: {
+                    HStack {
+                        if isPublishing { ProgressView() }
+                        Text(isPublishing ? "Publishing…" : "Publish to all users")
+                            .fontWeight(.bold)
+                    }
+                }
+                .disabled(isPublishing || isClearing
+                          || title.trimmingCharacters(in: .whitespaces).isEmpty
+                          || message.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                Button(role: .destructive) {
+                    Task { await clear() }
+                } label: {
+                    HStack {
+                        if isClearing { ProgressView() }
+                        Text(isClearing ? "Clearing…" : "Clear current announcement")
+                    }
+                }
+                .disabled(isPublishing || isClearing)
+            } footer: {
+                if let statusMessage {
+                    Text(statusMessage).foregroundStyle(AppTheme.Colors.success)
+                } else if let errorMessage {
+                    Text(errorMessage).foregroundStyle(AppTheme.Colors.danger)
+                }
+            }
+            .listRowBackground(AppTheme.Colors.card)
+        }
+        .scrollContentBackground(.hidden)
+        .background(AppTheme.Colors.bg.ignoresSafeArea())
+        .navigationTitle("Announcement")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func publish() async {
+        isPublishing = true
+        statusMessage = nil
+        errorMessage = nil
+        defer { isPublishing = false }
+        do {
+            _ = try await functions.httpsCallable("adminPublishAnnouncement").call([
+                "passcode": passcode,
+                "title": title.trimmingCharacters(in: .whitespaces),
+                "message": message.trimmingCharacters(in: .whitespaces),
+                "kind": isUpdatePrompt ? "update" : "info",
+            ])
+            Haptics.success()
+            statusMessage = "Published. Every user sees it on their next app open."
+        } catch {
+            Haptics.error()
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func clear() async {
+        isClearing = true
+        statusMessage = nil
+        errorMessage = nil
+        defer { isClearing = false }
+        do {
+            _ = try await functions.httpsCallable("adminClearAnnouncement")
+                .call(["passcode": passcode])
+            Haptics.success()
+            statusMessage = "Announcement cleared."
         } catch {
             Haptics.error()
             errorMessage = error.localizedDescription

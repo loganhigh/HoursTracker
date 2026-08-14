@@ -770,6 +770,11 @@ function buildAdminUserRow(uid, userData, profileData, authData, presenceData) {
     // had a recompute since their code was stamped.
     friendCode: String(p.friendCode || u.friendCode || "").toUpperCase(),
     email: a.email || "",
+    // The Auth profile name: set from the provider (Apple fullName / Google
+    // account) at first sign-in and never updated by the in-app display-name
+    // editor — so it stays the real name however often the display name
+    // changes.
+    authName: a.displayName || "",
     // Auth timestamps are RFC-1123 strings; ship epoch millis so the client
     // formats in the viewer's locale. NaN (missing/unparseable) becomes null.
     createdAt: Number.isFinite(createdAt) ? createdAt : null,
@@ -2040,6 +2045,45 @@ exports.adminSetVerified = onCall(
     await db.collection("publicProfiles").doc(targetUid)
       .set({ hasReviewedApp: verified }, { merge: true });
     return { status: "ok", targetUid, verified };
+  }
+);
+
+/**
+ * Admin-only: publish the app-wide announcement. One doc, one live
+ * announcement — publishing replaces whatever was up. Every client shows it
+ * once per id on next app open (see AnnouncementService), so re-publishing
+ * with a fresh id re-prompts everyone.
+ */
+exports.adminPublishAnnouncement = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE] },
+  async (request) => {
+    assertAdmin(request);
+    const title = String(request.data?.title || "").trim().slice(0, 80);
+    const message = String(request.data?.message || "").trim().slice(0, 400);
+    if (!title || !message) {
+      throw new HttpsError("invalid-argument", "title and message are required.");
+    }
+    const kind = request.data?.kind === "update" ? "update" : "info";
+    const id = `ann_${Date.now()}`;
+    await db.collection("announcements").doc("current").set({
+      id,
+      title,
+      message,
+      kind,
+      buttonTitle: kind === "update" ? "Update Now" : "Got it",
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    return { status: "ok", id };
+  }
+);
+
+/** Admin-only: take the current announcement down. */
+exports.adminClearAnnouncement = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE] },
+  async (request) => {
+    assertAdmin(request);
+    await db.collection("announcements").doc("current").delete();
+    return { status: "ok" };
   }
 );
 

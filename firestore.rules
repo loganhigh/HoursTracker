@@ -110,6 +110,13 @@ service cloud.firestore {
       allow delete: if isFriendshipParticipant();
     }
 
+    // App-wide announcement broadcast. Published only by the admin
+    // callable (Admin SDK); clients read the single doc on app open.
+    match /announcements/{docId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     match /users/{uid} {
       // Profile docs are readable by any signed-in user so friend-code lookup
       // (query on `friendCode`) works before a friendship exists. Push device

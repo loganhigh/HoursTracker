@@ -13,6 +13,7 @@ struct RootView: View {
     @AppStorage("display_name_prompt_last_tier") private var displayNamePromptLastTier: Int = 0
     @State private var showingDisplayNamePrompt = false
     @State private var showingCountryFlagPrompt = false
+    @ObservedObject private var announcements = AnnouncementService.shared
     @State private var showingCountryFlagPicker = false
     /// Root-level so the celebration overlays every tab, not just Home
     /// (the trigger lives in HoursHomeView's level ratchet).
@@ -63,6 +64,18 @@ struct RootView: View {
                     showingCountryFlagPrompt = false
                     showingCountryFlagPicker = true
                 }
+            } else if let announcement = announcements.pending {
+                // Same custom-overlay treatment as the country prompt (system
+                // alerts left-align on iOS 26). Country setup outranks news —
+                // this waits its turn behind that prompt.
+                AnnouncementPromptOverlay(announcement: announcement) { accepted in
+                    if accepted && announcement.isUpdatePrompt {
+                        AppActions.openAppStoreListing()
+                    }
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        announcements.markSeen()
+                    }
+                }
             }
         }
         // Choosing a country is required — no Cancel, no swipe-to-dismiss.
@@ -111,6 +124,8 @@ struct RootView: View {
     }
 
     private func scheduleCountryFlagPromptIfNeeded() {
+        // Announcements piggyback the same "app opened, signed in" moment.
+        AnnouncementService.shared.checkForAnnouncement()
         guard authService.user != nil, CountryFlag.needsCountryPrompt else { return }
         guard !showingCountryFlagPrompt, !showingCountryFlagPicker else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
@@ -125,6 +140,60 @@ struct RootView: View {
 // Replaces a system `.alert`, which left-aligns its title/message on iOS 26.
 // Picking a country is required, so there is one button and no way to
 // dismiss around it.
+
+private struct AnnouncementPromptOverlay: View {
+    let announcement: Announcement
+    /// true = primary button (update / got it), false = "Not Now".
+    var onFinish: (Bool) -> Void
+
+    var body: some View {
+        ZStack {
+            AppColors.overlay
+                .ignoresSafeArea()
+
+            VStack(spacing: AppSpacing.md) {
+                Text(announcement.isUpdatePrompt ? "🚀" : "📣")
+                    .font(.system(size: 40))
+
+                Text(announcement.title)
+                    .appText(.title)
+                    .foregroundStyle(AppColors.text)
+                    .multilineTextAlignment(.center)
+
+                Text(announcement.message)
+                    .appText(.subheadline)
+                    .foregroundStyle(AppColors.subtext)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button(announcement.buttonTitle) {
+                    Haptics.lightTap()
+                    onFinish(true)
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .padding(.top, AppSpacing.xxs)
+
+                Button("Not Now") {
+                    Haptics.lightTap()
+                    onFinish(false)
+                }
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppColors.subtext)
+            }
+            .padding(AppSpacing.lg)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                    .fill(AppColors.card)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                            .stroke(AppColors.stroke, lineWidth: 1)
+                    )
+            )
+            .padding(.horizontal, AppSpacing.xxl)
+        }
+        .transition(.opacity)
+    }
+}
 
 private struct CountryFlagPromptOverlay: View {
     let onChoose: () -> Void
@@ -445,6 +514,8 @@ struct HoursHomeView: View {
     /// listeners can sit on a stale snapshot for however long it was suspended.
     private func handleScenePhaseChange(_ newPhase: ScenePhase) {
         guard newPhase == .active else { return }
+        // "Next time they use the app" includes coming back from background.
+        AnnouncementService.shared.checkForAnnouncement()
         guard friendsEnabled else { return }
         guard authService.user?.uid != nil else { return }
         Task { await friendsService.refreshFriendProfiles() }
