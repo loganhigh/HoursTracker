@@ -31,6 +31,10 @@ struct AccountView: View {
     /// The raw picked photo, awaiting the crop step. Non-nil drives the crop
     /// sheet's presentation.
     @State private var pendingCropImage: UIImage?
+    @State private var showingPhotoOptions = false
+    @State private var showingPhotoViewer = false
+    @State private var showingPhotoPicker = false
+    @State private var showingPrestigeInfo = false
     @ObservedObject private var photoManager = ProfilePhotoManager.shared
 
     // MARK: - Identity data
@@ -171,7 +175,17 @@ struct AccountView: View {
         let isSignedIn = authService.isSignedIn
 
         return VStack(spacing: AppSpacing.xs) {
-            PhotosPicker(selection: $photoPickerItem, matching: .images) {
+            Button {
+                Haptics.lightTap()
+                // Nothing to view yet, so skip the menu and go straight to
+                // picking one — a two-item sheet where one item is dead is
+                // worse than no sheet.
+                if photoManager.localImage == nil {
+                    showingPhotoPicker = true
+                } else {
+                    showingPhotoOptions = true
+                }
+            } label: {
                 // The ring is 5pt wider than the avatar on every edge. Reserving
                 // that overflow in the button's own frame (rather than letting
                 // the ring bleed past a 96x96 layout size via a bare overlay)
@@ -198,9 +212,18 @@ struct AccountView: View {
             }
             .buttonStyle(.plain)
             .disabled(!isSignedIn || isUpdatingPhoto)
+            .confirmationDialog("Profile photo", isPresented: $showingPhotoOptions, titleVisibility: .hidden) {
+                Button("View photo") { showingPhotoViewer = true }
+                Button("Change photo") { showingPhotoPicker = true }
+                Button("Cancel", role: .cancel) {}
+            }
+            .photosPicker(isPresented: $showingPhotoPicker, selection: $photoPickerItem, matching: .images)
             .onChange(of: photoPickerItem) { _, item in
                 guard let item else { return }
                 Task { await loadImageForCropping(item) }
+            }
+            .fullScreenCover(isPresented: $showingPhotoViewer) {
+                ProfilePhotoViewer(image: photoManager.localImage)
             }
             .padding(.bottom, AppSpacing.xxs)
 
@@ -229,15 +252,34 @@ struct AccountView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Edit display name")
 
-            HStack(spacing: 6) {
-                Image(systemName: tier.icon)
-                    .font(.footnote.weight(.bold))
-                Text("Prestige \(profile.prestige) • Level \(profile.level)")
-                    .appText(.subheadline)
-                    .fontWeight(.semibold)
-                    .monospacedDigit()
+            // The prestige ranks chart's only reliable way in. Home's copy of
+            // this row sits inside the hero card's NavigationLink, which
+            // swallows the tap and pushes the pay cycle instead — and it is
+            // hidden entirely below Prestige 1, so unranked users could never
+            // reach the chart that explains what prestige is.
+            Button {
+                Haptics.lightTap()
+                showingPrestigeInfo = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: tier.icon)
+                        .font(.footnote.weight(.bold))
+                    Text("Prestige \(profile.prestige) • Level \(profile.level)")
+                        .appText(.subheadline)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .opacity(0.6)
+                }
+                .foregroundStyle(ringColor)
+                .contentShape(Rectangle())
             }
-            .foregroundStyle(ringColor)
+            .buttonStyle(.plain)
+            .accessibilityHint("Shows the prestige ranks")
+            .sheet(isPresented: $showingPrestigeInfo) {
+                PrestigeInfoSheet(currentPrestige: profile.prestige)
+            }
 
             if !equippedTitle.isEmpty {
                 Text(equippedTitle)
