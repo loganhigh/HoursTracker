@@ -85,10 +85,6 @@ struct OnboardingView: View {
             topWash
 
             VStack(spacing: 0) {
-                topBar
-                    .padding(.horizontal, AppSpacing.lg)
-                    .padding(.top, AppSpacing.sm)
-
                 pager
 
                 bottomArea
@@ -176,25 +172,6 @@ struct OnboardingView: View {
     }
 
     // MARK: - Chrome
-
-    private var topBar: some View {
-        HStack {
-            Spacer()
-            if page < namePageIndex {
-                Button("Skip") {
-                    Haptics.lightTap()
-                    withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
-                        page = namePageIndex
-                    }
-                }
-                .appText(.subheadline)
-                .foregroundStyle(AppColors.subtext)
-                .padding(.horizontal, AppSpacing.xxs)
-                .padding(.vertical, AppSpacing.xs)
-            }
-        }
-        .frame(height: 36)
-    }
 
     private var bottomArea: some View {
         VStack(spacing: AppSpacing.md) {
