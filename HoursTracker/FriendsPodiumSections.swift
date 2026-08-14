@@ -108,10 +108,18 @@ struct PayPeriodPodiumCard: View {
                 }
                 .padding(.bottom, 10)
 
-                Text(entry.isMe ? "You" : entry.firstName)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(entry.isMe ? "You" : entry.firstName)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+                    if VerifiedTracker.isVerified(reviewed: entry.hasReviewedApp) {
+                        // Three at most on the podium — shimmer is affordable.
+                        VerifiedBadgeView(variant: .shimmer, size: 13)
+                    }
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
 
                 Text(AppTheme.Format.hours(entry.payPeriodHours))
                     .font(.system(size: isWinner ? 22 : 18, weight: .heavy, design: .rounded))

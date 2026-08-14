@@ -284,6 +284,8 @@ struct HomeFriendsCardContent: View {
         /// listed (so every friend is visible) but their hours stay hidden and
         /// they are never ranked against the sharing standings.
         var hoursHidden: Bool = false
+        /// Verified badge, same rule as every other surface.
+        var hasReviewedApp: Bool = false
     }
 
     /// Ranked standings: me plus every friend who shares hours. Sorted by
@@ -306,7 +308,8 @@ struct HomeFriendsCardContent: View {
                 hours: myHours,
                 levelLine: myLevelLine,
                 profilePhotoURL: ProfilePhotoManager.shared.remotePhotoURL,
-                isMe: true
+                isMe: true,
+                hasReviewedApp: VerifiedStatusService.shared.isVerified
             )
         ]
         rows += friendsService.friends
@@ -318,7 +321,8 @@ struct HomeFriendsCardContent: View {
                     hours: $0.chequeHours,
                     levelLine: $0.levelDisplayLine,
                     profilePhotoURL: $0.profilePhotoURL,
-                    isMe: false
+                    isMe: false,
+                    hasReviewedApp: $0.hasReviewedApp
                 )
             }
         return rows
@@ -341,7 +345,8 @@ struct HomeFriendsCardContent: View {
                     levelLine: $0.levelDisplayLine,
                     profilePhotoURL: $0.profilePhotoURL,
                     isMe: false,
-                    hoursHidden: true
+                    hoursHidden: true,
+                    hasReviewedApp: $0.hasReviewedApp
                 )
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -417,6 +422,11 @@ struct HomeFriendsCardContent: View {
                         .appText(.subheadline)
                         .foregroundStyle(AppColors.text)
                         .lineLimit(1)
+
+                    if VerifiedTracker.isVerified(reviewed: row.hasReviewedApp) {
+                        // Static: this card lists every friend on Home.
+                        VerifiedBadgeView(variant: .static, size: 12)
+                    }
 
                     if row.isMe {
                         Text("YOU")
@@ -550,6 +560,9 @@ struct HomeFriendsPickerSheet: View {
                                     .appText(.body)
                                     .foregroundStyle(AppColors.text)
                                     .lineLimit(1)
+                                if VerifiedTracker.isVerified(reviewed: friend.hasReviewedApp) {
+                                    VerifiedBadgeView(variant: .static, size: 12)
+                                }
                             }
                         }
                         .tint(AppColors.accent)

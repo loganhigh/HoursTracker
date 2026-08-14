@@ -246,6 +246,14 @@ struct FriendsBoardView: View {
 
     // MARK: - Post card
 
+    /// Verified state for any author on the board: own flag from the live
+    /// service, friends' from their published profiles. Unknown authors
+    /// (unfriended since posting) simply show no badge.
+    private func authorIsVerified(_ uid: String) -> Bool {
+        if uid == currentUid { return VerifiedStatusService.shared.isVerified }
+        return friendsService.friends.first { $0.uid == uid }?.hasReviewedApp == true
+    }
+
     private func postCard(_ post: BoardPost) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
@@ -256,6 +264,9 @@ struct FriendsBoardView: View {
                         Text(post.authorName)
                             .font(.system(size: 15, weight: .bold, design: .rounded))
                             .foregroundStyle(theme.textPrimary)
+                        if authorIsVerified(post.authorUid) {
+                            VerifiedBadgeView(variant: .static, size: 13)
+                        }
                         if let badge = post.badgeContext, !badge.isEmpty {
                             Text(badge)
                                 .font(.system(size: 10, weight: .bold, design: .rounded))
@@ -424,6 +435,9 @@ struct FriendsBoardView: View {
                     Text(comment.authorName)
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundStyle(theme.textPrimary)
+                    if authorIsVerified(comment.authorId) {
+                        VerifiedBadgeView(variant: .static, size: 11)
+                    }
                     Text(relativeFormatter.localizedString(for: comment.createdAt, relativeTo: Date()))
                         .font(.system(size: 10.5, weight: .medium))
                         .foregroundStyle(theme.textTertiary)
