@@ -317,18 +317,23 @@ struct EntryShiftTypeSection: View {
 struct EntryDetailsSection: View {
     @Binding var locationLabel: String
     @Binding var notes: String
+    /// Off days and holidays have no job site, so the location field is asked
+    /// for on work shifts only. Notes stay for every kind.
+    var showsLocation: Bool = true
 
     var body: some View {
         VStack(spacing: AppSpacing.xs) {
             EntrySectionLabel("Details")
             EntryEditorCard {
-                TextField("Location or job (optional)", text: $locationLabel, axis: .vertical)
-                    .appText(.body)
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(1...3)
-                    .tint(AppColors.accent)
-                EntryRowDivider()
-                    .padding(.vertical, 10)
+                if showsLocation {
+                    TextField("Location or job (optional)", text: $locationLabel, axis: .vertical)
+                        .appText(.body)
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1...3)
+                        .tint(AppColors.accent)
+                    EntryRowDivider()
+                        .padding(.vertical, 10)
+                }
                 TextField("Notes (optional)", text: $notes, axis: .vertical)
                     .appText(.body)
                     .foregroundStyle(AppColors.text)

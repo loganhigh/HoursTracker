@@ -23,6 +23,10 @@ struct VerifiedReviewProofSheet: View {
     @State private var pickerItem: PhotosPickerItem?
     @State private var stage: Stage = .idle
     @State private var isSubmitting = false
+    /// The scroll view's height, used as the content's minimum so it centers
+    /// vertically when short and still scrolls when the keyboard/preview
+    /// make it tall — same pattern as the onboarding pages.
+    @State private var contentMinHeight: CGFloat = 0
 
     private let functions = Functions.functions(region: "us-central1")
 
@@ -44,19 +48,29 @@ struct VerifiedReviewProofSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: AppSpacing.lg) {
-                    header
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
 
-                    if isVerified {
-                        alreadyVerified
-                    } else {
-                        steps
-                        actionArea
+                    VStack(spacing: AppSpacing.lg) {
+                        header
+
+                        if isVerified {
+                            alreadyVerified
+                        } else {
+                            steps
+                            actionArea
+                        }
                     }
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.vertical, AppSpacing.lg)
+                    .frame(maxWidth: .infinity)
+
+                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.vertical, AppSpacing.lg)
-                .frame(maxWidth: .infinity)
+                .frame(minHeight: contentMinHeight)
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                contentMinHeight = height
             }
             .background(AppColors.bg.ignoresSafeArea())
             .navigationTitle("Verified Mark")

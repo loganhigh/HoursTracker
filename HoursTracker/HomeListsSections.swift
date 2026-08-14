@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - Home Sections, part 2 (Phase 3)
 //
@@ -217,10 +218,28 @@ struct HomeFriendsCard: View {
     @ObservedObject var authService: AuthService
     let onOpenFriends: () -> Void
 
+    @State private var showingFriendsPicker = false
+
     var body: some View {
         Button(action: onOpenFriends) {
             VStack(spacing: AppSpacing.sm) {
                 SectionEyebrow("Friends")
+                    // Trailing overlay so the eyebrow itself stays centered.
+                    .frame(maxWidth: .infinity)
+                    .overlay(alignment: .trailing) {
+                        Button {
+                            Haptics.lightTap()
+                            showingFriendsPicker = true
+                        } label: {
+                            Image(systemName: "slider.horizontal.3")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(AppColors.subtext)
+                                .frame(width: 32, height: 32)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Choose which friends show here")
+                    }
 
                 HomeFriendsCardContent(
                     friendsService: friendsService,
@@ -241,6 +260,9 @@ struct HomeFriendsCard: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
+        .sheet(isPresented: $showingFriendsPicker) {
+            HomeFriendsPickerSheet(friendsService: friendsService)
+        }
     }
 }
 
@@ -249,6 +271,7 @@ struct HomeFriendsCardContent: View {
     @ObservedObject var store: HoursStore
     @ObservedObject var authService: AuthService
     @ObservedObject private var statsListener = StatsListenerService.shared
+    @ObservedObject private var filter = HomeFriendsFilter.shared
 
     private struct StandingsRow: Identifiable {
         let id: String
@@ -287,7 +310,7 @@ struct HomeFriendsCardContent: View {
             )
         ]
         rows += friendsService.friends
-            .filter { $0.privacy.shareHours }
+            .filter { $0.privacy.shareHours && filter.isVisible($0.uid) }
             .map {
                 StandingsRow(
                     id: $0.uid,
@@ -309,7 +332,7 @@ struct HomeFriendsCardContent: View {
     /// the same "Hours hidden" treatment the Friends tab uses (`FriendStatsRow`).
     private var hiddenRows: [StandingsRow] {
         friendsService.friends
-            .filter { !$0.privacy.shareHours }
+            .filter { !$0.privacy.shareHours && filter.isVisible($0.uid) }
             .map {
                 StandingsRow(
                     id: $0.uid,
@@ -462,5 +485,90 @@ struct HomeAdminConsoleCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+
+// MARK: - Home friends visibility
+
+/// Which friends the HOME card shows. A device-local display preference: it
+/// never touches the friendship itself, and the Friends tab still lists
+/// everyone. Default is everyone visible, so the card behaves exactly as
+/// before until someone hides a row.
+@MainActor
+final class HomeFriendsFilter: ObservableObject {
+    static let shared = HomeFriendsFilter()
+    private static let key = "home_friends_hidden_uids_v1"
+
+    @Published private(set) var hiddenUids: Set<String>
+
+    private init() {
+        hiddenUids = Set(UserDefaults.standard.stringArray(forKey: Self.key) ?? [])
+    }
+
+    func isVisible(_ uid: String) -> Bool { !hiddenUids.contains(uid) }
+
+    func setVisible(_ visible: Bool, uid: String) {
+        if visible { hiddenUids.remove(uid) } else { hiddenUids.insert(uid) }
+        UserDefaults.standard.set(Array(hiddenUids), forKey: Self.key)
+    }
+}
+
+/// The toggle list behind the Home card's slider button: every friend, each
+/// with a switch for whether they appear on the Home card.
+struct HomeFriendsPickerSheet: View {
+    @ObservedObject var friendsService: FriendsService
+    @ObservedObject private var filter = HomeFriendsFilter.shared
+    @Environment(\.dismiss) private var dismiss
+
+    private var sortedFriends: [FriendProfile] {
+        friendsService.friends.sorted {
+            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(sortedFriends) { friend in
+                        Toggle(isOn: Binding(
+                            get: { filter.isVisible(friend.uid) },
+                            set: { visible in
+                                Haptics.lightTap()
+                                filter.setVisible(visible, uid: friend.uid)
+                            }
+                        )) {
+                            HStack(spacing: AppSpacing.sm) {
+                                ProfileAvatarView(
+                                    name: friend.displayName,
+                                    size: 34,
+                                    photoURL: friend.profilePhotoURL,
+                                    uid: friend.uid
+                                )
+                                Text(friend.displayName)
+                                    .appText(.body)
+                                    .foregroundStyle(AppColors.text)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .tint(AppColors.accent)
+                        .listRowBackground(AppColors.card.opacity(0.55))
+                    }
+                } footer: {
+                    Text("Only changes who shows on your Home screen. Everyone stays in your Friends tab, and nobody is notified.")
+                        .foregroundStyle(AppColors.faint)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(AppColors.bg.ignoresSafeArea())
+            .navigationTitle("Friends on Home")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }

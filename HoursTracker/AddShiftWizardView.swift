@@ -238,20 +238,22 @@ struct AddShiftWizardView: View {
             }
         }
 
-        AddShiftPanel {
-            AddShiftFieldRow(
-                icon: "mappin.and.ellipse",
-                label: "Location / Job",
-                value: locationValueText,
-                isPlaceholder: locationLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                accessory: .chevron
-            ) {
-                Haptics.lightTap()
-                showLocationPicker = true
-            }
-        }
-
+        // A day you didn't work has no job site — asking for one on an off
+        // day or holiday was just a question with no right answer.
         if shiftKind == .work {
+            AddShiftPanel {
+                AddShiftFieldRow(
+                    icon: "mappin.and.ellipse",
+                    label: "Location / Job",
+                    value: locationValueText,
+                    isPlaceholder: locationLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    accessory: .chevron
+                ) {
+                    Haptics.lightTap()
+                    showLocationPicker = true
+                }
+            }
+
             EntryBreakSection(breakMinutes: $breakMinutes, showCustom: $showCustomBreak)
         }
 
@@ -397,14 +399,16 @@ struct AddShiftWizardView: View {
                     accessory: .hidden
                 )
             }
-            EntryRowDivider()
-            AddShiftFieldRow(
-                icon: "mappin.and.ellipse",
-                label: "Location / Job",
-                value: locationValueText,
-                isPlaceholder: locationLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                accessory: .hidden
-            )
+            if shiftKind == .work {
+                EntryRowDivider()
+                AddShiftFieldRow(
+                    icon: "mappin.and.ellipse",
+                    label: "Location / Job",
+                    value: locationValueText,
+                    isPlaceholder: locationLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    accessory: .hidden
+                )
+            }
         }
 
         if shiftKind == .work {
@@ -557,7 +561,7 @@ struct AddShiftWizardView: View {
         var entry = WorkEntry(date: date, start: s, end: e, breakMinutes: br,
                               notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
                               isOffDay: isOffKind, offDayReason: reason, isHoliday: false)
-        entry.locationName = locationLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        entry.locationName = isOffKind ? "" : locationLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         entry.locationURL = ""
         entry.latitude = nil
         entry.longitude = nil

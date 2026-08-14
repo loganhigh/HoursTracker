@@ -56,7 +56,10 @@ struct EntryEditorView: View {
     private let usualPreset: EntryShiftPreset?
 
     /// Shared with `AddShiftWizardView` so both editors offer the same reasons.
-    static let offDayReasons = ["Sick", "Appointment", "Vacation", "Personal", "Other"]
+    static let offDayReasons = [
+        "Sick", "Weather", "No work scheduled", "Appointment", "Vacation",
+        "Family", "Injury", "Equipment down", "Personal", "Other"
+    ]
     static let holidayReason = "Holiday"
 
     // MARK: - Init (same signature as before — all call sites unchanged)
@@ -140,7 +143,11 @@ struct EntryEditorView: View {
                         }
                         EntryShiftTypeSection(kind: $shiftKind, offDayReason: $offDayReason, reasons: Self.offDayReasons)
                         if shiftKind == .work { summarySection }
-                        EntryDetailsSection(locationLabel: $locationLabel, notes: $notes)
+                        EntryDetailsSection(
+                            locationLabel: $locationLabel,
+                            notes: $notes,
+                            showsLocation: shiftKind == .work
+                        )
                         if isEditing {
                             EntryDeleteRow { showDeleteConfirm = true }
                         }
