@@ -212,6 +212,11 @@ struct AccountView: View {
                         .appText(.title)
                         .foregroundStyle(AppColors.text)
                         .multilineTextAlignment(.center)
+                    // Own profile earns the badge on the same rule as every
+                    // other surface. Shimmering here: one badge on screen.
+                    if VerifiedTracker.isVerified(hours: allTimeHours) {
+                        VerifiedBadgeView(variant: .shimmer, size: 17)
+                    }
                     // The pencil is what makes the name discoverable as
                     // editable — a bare tappable name looks like a label.
                     Image(systemName: "pencil")

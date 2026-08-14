@@ -71,7 +71,6 @@ struct ProfilePhotoCropView: View {
                 .padding(.bottom, AppSpacing.xl)
         }
         .background(Color.black.ignoresSafeArea())
-        .statusBarHidden()
     }
 
     private var header: some View {
@@ -113,7 +112,10 @@ struct ProfilePhotoCropView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, AppSpacing.md)
-        .padding(.top, AppSpacing.sm)
+        // The status bar is deliberately left visible: hiding it shrinks the
+        // top safe-area inset, which slid this row up under the Dynamic
+        // Island where the labels were unreadable.
+        .padding(.top, AppSpacing.xs)
         .padding(.bottom, AppSpacing.xs)
     }
 
