@@ -9,9 +9,26 @@ struct ProfileAvatarView: View {
     var showsAccentRing: Bool = false
 
     @State private var loadedImage: UIImage?
+    /// Observed so saving a new avatar redraws every one of these on screen at
+    /// once. Copying `localImage` into `@State` inside the task below meant the
+    /// new photo only appeared after a relaunch: the task is keyed on
+    /// uid + photoURL, and neither changes when you replace your own photo
+    /// (Storage hands back the same download URL for the same path).
+    @ObservedObject private var photoManager = ProfilePhotoManager.shared
 
     private var initials: String {
         BoardContentFilter.initials(from: name)
+    }
+
+    /// Matches the task's own test below, including the signed-out case where
+    /// both sides are nil and the local photo is still ours to show.
+    private var isCurrentUser: Bool {
+        uid == AuthService.shared.user?.uid
+    }
+
+    /// Own avatar reads the manager live; friends' come from the async load.
+    private var displayedImage: UIImage? {
+        isCurrentUser ? photoManager.localImage : loadedImage
     }
 
     var body: some View {
@@ -19,8 +36,8 @@ struct ProfileAvatarView: View {
             Circle()
                 .fill(AppTheme.Colors.accent.opacity(0.18))
 
-            if let loadedImage {
-                Image(uiImage: loadedImage)
+            if let displayedImage {
+                Image(uiImage: displayedImage)
                     .resizable()
                     .scaledToFill()
             } else {
@@ -40,10 +57,9 @@ struct ProfileAvatarView: View {
         }
         .task(id: loadKey) {
             let manager = ProfilePhotoManager.shared
-            if uid == AuthService.shared.user?.uid {
-                loadedImage = manager.localImage
-                return
-            }
+            // Our own photo is read straight off the manager, so there is
+            // nothing to fetch here.
+            if isCurrentUser { return }
             guard let uid, photoURL != nil else {
                 loadedImage = nil
                 return
