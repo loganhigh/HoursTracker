@@ -176,8 +176,7 @@ struct FriendProfileDetailView: View {
                 Text(friend.displayName)
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(AppColors.text)
-                if friend.privacy.shareHours,
-                   VerifiedTracker.isVerified(hours: friend.totalHours) {
+                if VerifiedTracker.isVerified(reviewed: friend.hasReviewedApp) {
                     // The profile is the badge's hero moment — one on screen,
                     // so it can shimmer like the podium's.
                     VerifiedBadgeView(variant: .shimmer, size: 17)

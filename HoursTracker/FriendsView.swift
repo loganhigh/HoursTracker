@@ -45,18 +45,6 @@ struct FriendsView: View {
     /// bi-weekly board instead of a fixed Mon–Sun week.
     private var payCycle: PayCycle { store.currentPayCycle() }
 
-    /// Lifetime hours for the verified-tracker milestone. Prefers the
-    /// server total so this agrees with the global board and the You tab,
-    /// falling back to a local sum when signed out or offline.
-    private var myLifetimeHours: Double {
-        if let serverTotal = statsListener.lifetimeStats?.totalHours, serverTotal > 0 {
-            return serverTotal
-        }
-        return store.allEntriesIncludingArchive()
-            .filter { !$0.isOffDay }
-            .reduce(0) { $0 + $1.paidHours }
-    }
-
     /// The signed-in user plus every friend, ranked by pay-period hours.
     /// Construction lives on `LeaderboardEntry` — see FriendsLeaderboardModel.
     private var board: [LeaderboardEntry] {
@@ -66,7 +54,6 @@ struct FriendsView: View {
             myProfile: store.displayedGamificationProfile(),
             myPayPeriodHours: PayCycleEngine.entries(store.entries, in: payCycle)
                 .reduce(0) { $0 + $1.paidHours },
-            myLifetimeHours: myLifetimeHours,
             myPhotoURL: ProfilePhotoManager.shared.remotePhotoURL,
             friends: friendsService.friends
         )

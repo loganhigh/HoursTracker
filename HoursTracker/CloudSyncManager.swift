@@ -1711,6 +1711,8 @@ private struct ProfileSnapshotInputs {
     let chequeWindowCutoff: String
     let profilePhotoURL: String?
     let friendShiftAlerts: Bool
+    /// Earns the verified badge on every surface other users see.
+    let hasReviewedApp: Bool
     let countryCode: String
 
     @MainActor
@@ -1799,6 +1801,7 @@ private struct ProfileSnapshotInputs {
             chequeWindowCutoff: chequeWindowCutoff,
             profilePhotoURL: ProfilePhotoManager.shared.remotePhotoURL,
             friendShiftAlerts: SmartNotifier.shared.friendShiftNotificationsEnabled,
+            hasReviewedApp: VerifiedTracker.hasReviewedApp,
             countryCode: CountryFlag.hasChosenCountry ? CountryFlag.resolvedCode : ""
         )
     }
@@ -1820,6 +1823,7 @@ private struct ProfileSnapshotInputs {
             ],
             "acceptInvites": acceptInvites,
             "friendShiftAlerts": friendShiftAlerts,
+            "hasReviewedApp": hasReviewedApp,
             "clientSyncBuild": "repair-diagnostics-v4",
             "updatedAt": FieldValue.serverTimestamp(),
             "lookupEmail": FieldValue.delete(),

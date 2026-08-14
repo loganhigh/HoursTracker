@@ -14,6 +14,9 @@ struct GlobalLeaderboardView: View {
     @EnvironmentObject private var authService: AuthService
     @Environment(\.dismiss) private var dismiss
 
+    /// Mirrors VerifiedTracker so the note reacts the moment it's tapped.
+    @State private var hasReviewed = VerifiedTracker.hasReviewedApp
+
     private var myUid: String? { authService.user?.uid }
 
     private var myTracker: TopTracker? {
@@ -72,6 +75,14 @@ struct GlobalLeaderboardView: View {
             ScrollView {
                 LazyVStack(spacing: AppSpacing.sm) {
                     GlobalRankHeroCard(rank: myTracker?.rank)
+
+                    VerifiedReviewNote(isVerified: hasReviewed) {
+                        // Reaching the review page is the only signal iOS
+                        // gives us — see VerifiedTracker.
+                        VerifiedTracker.hasReviewedApp = true
+                        hasReviewed = true
+                        AppActions.openAppStoreListing()
+                    }
 
                     GlobalStatsStrip(
                         trackerCount: topTrackers.allTrackers.count,

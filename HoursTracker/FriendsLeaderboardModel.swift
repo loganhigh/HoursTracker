@@ -28,7 +28,8 @@ struct LeaderboardEntry: Identifiable, Equatable {
     /// Lifetime hours, used only for the verified-tracker milestone. Ranking
     /// still runs on `payPeriodHours`; this is 0 for anyone hiding hours, so
     /// they simply go unbadged.
-    var lifetimeHours: Double = 0
+    /// Earns the verified badge beside the name.
+    var hasReviewedApp: Bool = false
     let photoURL: String?
     /// Friend opted out of sharing hours; their figure is not real.
     let hoursHidden: Bool
@@ -105,7 +106,6 @@ extension LeaderboardEntry {
         myName: String,
         myProfile: GamificationProfile,
         myPayPeriodHours: Double,
-        myLifetimeHours: Double,
         myPhotoURL: String?,
         friends: [FriendProfile]
     ) -> [LeaderboardEntry] {
@@ -118,7 +118,7 @@ extension LeaderboardEntry {
                 prestige: myProfile.prestige,
                 streak: myProfile.currentStreak,
                 payPeriodHours: myPayPeriodHours,
-                lifetimeHours: myLifetimeHours,
+                hasReviewedApp: VerifiedTracker.isSelfVerified,
                 photoURL: myPhotoURL,
                 hoursHidden: false
             )
@@ -136,7 +136,7 @@ extension LeaderboardEntry {
                 // zero is the only honest position for a value the app is not
                 // allowed to see, but the row renders "—" rather than "0h".
                 payPeriodHours: friend.privacy.shareHours ? friend.chequeHours : 0,
-                lifetimeHours: friend.privacy.shareHours ? friend.totalHours : 0,
+                hasReviewedApp: friend.hasReviewedApp,
                 photoURL: friend.profilePhotoURL,
                 hoursHidden: !friend.privacy.shareHours
             )

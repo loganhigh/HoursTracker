@@ -214,7 +214,7 @@ struct AccountView: View {
                         .multilineTextAlignment(.center)
                     // Own profile earns the badge on the same rule as every
                     // other surface. Shimmering here: one badge on screen.
-                    if VerifiedTracker.isVerified(hours: allTimeHours) {
+                    if VerifiedTracker.isSelfVerified {
                         VerifiedBadgeView(variant: .shimmer, size: 17)
                     }
                     // The pencil is what makes the name discoverable as

@@ -972,6 +972,9 @@ async function recomputeUserStats(db, uid, options = {}) {
     // Server-side moderation: whatever the client wrote to its own users doc,
     // the name every OTHER user reads is sanitized here.
     displayName: sanitizeDisplayName(userData.displayName, "Friend"),
+    // Verified badge. Client-owned (it records tapping through to the review
+    // page), so it rides along unchanged rather than being derived here.
+    hasReviewedApp: userData.hasReviewedApp === true,
     friendCode: userData.friendCode || null,
     level,
     prestige,

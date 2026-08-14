@@ -19,6 +19,9 @@ struct TopTracker: Identifiable, Equatable {
     var level: Int = 0
     var prestige: Int = 0
     var streak: Int = 0
+    /// Earns the verified badge. Defaulted false for profiles published
+    /// before the flag existed.
+    var hasReviewedApp: Bool = false
 
     var id: String { uid }
 
@@ -247,7 +250,8 @@ final class TopTrackersService: ObservableObject {
                 photoURL: (photo?.isEmpty ?? true) ? nil : photo,
                 level: intValue(data["level"]),
                 prestige: intValue(data["prestige"]),
-                streak: intValue(data["currentStreak"])
+                streak: intValue(data["currentStreak"]),
+                hasReviewedApp: data["hasReviewedApp"] as? Bool ?? false
             )
         }
     }

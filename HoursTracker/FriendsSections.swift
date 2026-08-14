@@ -250,8 +250,7 @@ struct FriendStatsRow: View {
                         .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundStyle(AppColors.text)
                         .lineLimit(1)
-                    if friend.privacy.shareHours,
-                       VerifiedTracker.isVerified(hours: friend.totalHours) {
+                    if VerifiedTracker.isVerified(reviewed: friend.hasReviewedApp) {
                         VerifiedBadgeView(variant: .static, size: 14)
                     }
                 }

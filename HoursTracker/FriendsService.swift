@@ -53,6 +53,8 @@ struct FriendProfile: Identifiable, Equatable, Hashable {
     let chequeWindowStart: String
     /// "yyyy-MM-dd" last work day (cutoff) of the friend's current cheque window.
     let chequeWindowCutoff: String
+    /// Earns the verified badge beside their name.
+    var hasReviewedApp: Bool = false
 
     var hasChequeDetail: Bool {
         !chequeWindowStart.isEmpty || !chequeDailySummary.isEmpty || chequeHours > 0
@@ -925,6 +927,7 @@ final class FriendsService: ObservableObject {
             chequeDailySummary: chequeDailySummary,
             chequeWindowStart: data["chequeWindowStart"] as? String ?? "",
             chequeWindowCutoff: data["chequeWindowCutoff"] as? String ?? "",
+            hasReviewedApp: data["hasReviewedApp"] as? Bool ?? false,
             privacy: privacy
         )
         if let idx = friends.firstIndex(where: { $0.uid == uid }) {

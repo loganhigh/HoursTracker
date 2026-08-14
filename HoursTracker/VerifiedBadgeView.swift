@@ -11,13 +11,32 @@ import SwiftUI
 // Dynamic Type, and needs no path data to keep in sync — the shimmer is then
 // masked by the symbol exactly as the original masks its SVG.
 
-/// Lifetime-hours milestone that earns the badge.
+/// What earns the badge.
+///
+/// Reviewing the app, not an hours milestone. Apple exposes no way to confirm
+/// a review was actually submitted — `AppStore.requestReview` returns nothing,
+/// and App Store Connect's reviews carry nicknames that don't map to accounts
+/// — so this records that the user tapped through to the write-review page.
+/// It verifies intent, not the review itself; that gap is the price of it
+/// being automatic rather than granted by hand.
 enum VerifiedTracker {
-    static let hoursThreshold: Double = 1000
+    /// Set when the user taps through to the App Store review page.
+    static let reviewedKey = "has_reviewed_app_v1"
 
-    static func isVerified(hours: Double) -> Bool {
-        hours >= hoursThreshold
+    static var hasReviewedApp: Bool {
+        get { UserDefaults.standard.bool(forKey: reviewedKey) }
+        set { UserDefaults.standard.set(newValue, forKey: reviewedKey) }
     }
+
+    /// For rows built from a published profile. `isSelf` covers your own row:
+    /// the server flag only lands on the next recompute, so without it your
+    /// badge would lag your own tap by a shift.
+    static func isVerified(reviewed: Bool, isSelf: Bool = false) -> Bool {
+        reviewed || (isSelf && hasReviewedApp)
+    }
+
+    /// For the signed-in user's own rows, which read the local flag.
+    static var isSelfVerified: Bool { hasReviewedApp }
 }
 
 struct VerifiedBadgeView: View {

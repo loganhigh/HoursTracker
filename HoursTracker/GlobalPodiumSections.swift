@@ -53,7 +53,7 @@ struct GlobalPodiumRow: View {
                         .font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundStyle(AppColors.text)
                         .lineLimit(1)
-                    if VerifiedTracker.isVerified(hours: entry.hours) {
+                    if VerifiedTracker.isVerified(reviewed: entry.hasReviewedApp, isSelf: isMe) {
                         // Only three of these on screen, so they can shimmer.
                         VerifiedBadgeView(variant: .shimmer, size: 14)
                     }
@@ -203,7 +203,7 @@ struct GlobalTrackerRow: View {
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(AppColors.text)
                         .lineLimit(1)
-                    if VerifiedTracker.isVerified(hours: tracker.hours) {
+                    if VerifiedTracker.isVerified(reviewed: tracker.hasReviewedApp, isSelf: isMe) {
                         // Static in the list: the board scrolls hundreds of
                         // rows, and a shimmer each would be one clock per row.
                         VerifiedBadgeView(variant: .static, size: 13)

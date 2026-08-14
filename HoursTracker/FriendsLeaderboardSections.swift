@@ -50,7 +50,7 @@ struct LeaderboardRankRow: View {
                         .font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundStyle(entry.isMe ? AppColors.accent : AppColors.text)
                         .lineLimit(1)
-                    if VerifiedTracker.isVerified(hours: entry.lifetimeHours) {
+                    if VerifiedTracker.isVerified(reviewed: entry.hasReviewedApp) {
                         VerifiedBadgeView(variant: .static, size: 13)
                     }
                 }
