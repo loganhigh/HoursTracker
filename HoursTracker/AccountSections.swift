@@ -62,23 +62,14 @@ struct ProfileXPCapsule: View {
                     .foregroundStyle(AppColors.accent)
             }
 
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(AppColors.stroke.opacity(0.6))
-
-                    Capsule()
-                        .fill(AppColors.accentGradient)
-                        .frame(width: max(0, geo.size.width * displayedProgress))
-                }
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(AppColors.stroke.opacity(0.6))
+                // Liquid fill: seeds at the current value on first appearance
+                // (no replay from zero), pours and sloshes only on change.
+                LiquidXPFill(progress: displayedProgress)
             }
             .frame(height: 10)
-            // Only fires when the value actually changes — the fill is not
-            // replayed from zero when the tab appears.
-            .animation(
-                reduceMotion ? nil : .easeInOut(duration: 0.7),
-                value: displayedProgress
-            )
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(

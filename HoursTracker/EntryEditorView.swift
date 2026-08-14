@@ -425,6 +425,9 @@ struct EntryEditorView: View {
     }
 
     private func save() {
+        // Same double-tap race as the wizard: the disabled re-render can lose
+        // to a second in-flight tap during the 0.55s dismiss delay.
+        guard !showSaveSuccess else { return }
         if !isValid {
             Haptics.error()
             toastMessage = paidHours > 48 ? "Shift too long (max 48 hours)" : "Invalid hours"
@@ -479,8 +482,11 @@ struct EntryEditorView: View {
         }
     }
 
+    @State private var hasDeleted = false
+
     private func deleteEntry() {
-        guard case .edit(let entry) = mode else { return }
+        guard case .edit(let entry) = mode, !hasDeleted else { return }
+        hasDeleted = true
         Haptics.mediumTap()
         withAnimation(AppMotion.Spring.smooth) { store.delete(entry) }
         toastMessage = "Shift deleted"

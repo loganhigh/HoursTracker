@@ -539,6 +539,11 @@ struct AddShiftWizardView: View {
     }
 
     private func save() {
+        // The Save button disables on showSaveSuccess, but a second tap can be
+        // in flight before that re-render lands — each tap built a fresh
+        // WorkEntry with its own UUID, which is exactly the identical-content
+        // duplicate pairs found in user data. Idempotent at the source.
+        guard !showSaveSuccess else { return }
         if !isValid {
             Haptics.error()
             toastMessage = paidHours > 48 ? "Shift too long (max 48 hours)" : "Invalid hours"

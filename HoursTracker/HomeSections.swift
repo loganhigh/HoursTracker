@@ -245,21 +245,16 @@ struct HomeXPStrip: View {
     }
 
     private var progressCapsule: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(AppColors.stroke.opacity(0.6))
-                    .frame(height: 6)
-                // No fill at zero progress — an empty track is honest; a
-                // floating 6pt knob reads as a rendering bug.
-                if displayedProgress > 0 {
-                    Capsule()
-                        .fill(AppColors.accentGradient)
-                        .frame(width: max(6, geo.size.width * displayedProgress), height: 6)
-                }
-            }
-            .frame(maxHeight: .infinity, alignment: .center)
+        ZStack(alignment: .leading) {
+            Capsule()
+                .fill(AppColors.stroke.opacity(0.6))
+            // The fill is liquid: it pours toward the target and sloshes as
+            // it settles instead of snapping. LiquidXPFill owns the motion,
+            // so displayedProgress is handed over un-animated.
+            LiquidXPFill(progress: displayedProgress)
         }
+        .frame(height: 6)
+        .frame(maxHeight: .infinity, alignment: .center)
     }
 
     private func seedAndAnimate() {
@@ -273,10 +268,9 @@ struct HomeXPStrip: View {
     }
 
     private func animateToLive() {
-        let target = liveProgress
-        withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
-            displayedProgress = target
-        }
+        // No withAnimation: LiquidXPFill runs its own spring toward the new
+        // value (and under Reduce Motion renders the flat fill directly).
+        displayedProgress = liveProgress
         persistCache()
     }
 

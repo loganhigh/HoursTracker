@@ -718,6 +718,10 @@ final class HoursStore: ObservableObject {
 
     // MARK: - CRUD
 
+    /// Fingerprint + timestamp of the most recent add, for the rapid-repeat
+    /// guard below. Never persisted — the window is seconds.
+    private var lastAddStamp: (fingerprint: String, at: Date)?
+
     func add(_ entry: WorkEntry) {
         // Prevent duplicate entries
         guard !entries.contains(where: { $0.id == entry.id }) else {
@@ -726,6 +730,29 @@ final class HoursStore: ObservableObject {
             #endif
             return
         }
+
+        // Same content arriving twice within seconds is one intent delivered
+        // twice — a double-tapped Save, a re-fired Siri intent — never a user
+        // deliberately logging two identical shifts (real doubles are entered
+        // minutes apart). Different ids, so the id check above can't catch it.
+        let fingerprint = [
+            entry.date.timeIntervalSince1970.description,
+            entry.start.timeIntervalSince1970.description,
+            entry.end.timeIntervalSince1970.description,
+            String(entry.breakMinutes),
+            entry.isOffDay ? "off:\(entry.offDayReason)" : "work",
+            entry.locationName,
+            entry.notes
+        ].joined(separator: "|")
+        if let last = lastAddStamp,
+           last.fingerprint == fingerprint,
+           Date().timeIntervalSince(last.at) < 10 {
+            #if DEBUG
+            print("Prevented rapid duplicate add (identical content within 10s)")
+            #endif
+            return
+        }
+        lastAddStamp = (fingerprint, Date())
 
         let previousProfile = gamificationProfile
         let previousMonthHours = monthTotalHours(monthDate: entry.date)

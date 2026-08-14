@@ -18,27 +18,24 @@ struct PrestigeCelebrationView: View {
     @State private var confettiActive = false
     @State private var buttonVisible = false
     @State private var dismissing = false
-    /// The Higgsfield transformation clip (silver shell cracking open to
-    /// gold). Plays once as the centerpiece before the emblem reveal; when the
-    /// asset is missing or Reduce Motion is on, the flow is the pre-cinematic
-    /// one, unchanged.
-    @StateObject private var cinematicPlayer: LevelAnimationPlayer
-    @State private var showingCinematic = false
-
-    init(prestige: Int, onDismiss: @escaping () -> Void) {
-        self.prestige = prestige
-        self.onDismiss = onDismiss
-        _cinematicPlayer = StateObject(wrappedValue: LevelAnimationPlayer(
-            cinematic: .prestige(tier: PrestigeTheme.tier(for: prestige))
-        ))
-    }
+    /// Portal opening: the old emblem is absorbed into a singularity that
+    /// detonates into the reveal below. Skipped under Reduce Motion.
+    @State private var showingPortal = false
 
     private var tier: PrestigeTheme.Tier { PrestigeTheme.tier(for: prestige) }
     private var previousTier: PrestigeTheme.Tier { PrestigeTheme.tier(for: max(0, prestige - 1)) }
 
     var body: some View {
         ZStack {
-            Color.black.opacity(backdropOpacity)
+            // Material first, dim over it: the Home screen underneath reads
+            // as frosted glass behind the ritual, not a flat black curtain.
+            // (Both fullScreenCover call sites set a clear presentation
+            // background so there is something back there to blur.)
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+                .opacity(backdropOpacity)
+            Color.black.opacity(backdropOpacity * 0.72)
                 .ignoresSafeArea()
 
             RadialGradient(
@@ -82,20 +79,10 @@ struct PrestigeCelebrationView: View {
                         .opacity(headerVisible ? 1 : 0)
                         .offset(y: headerVisible ? 0 : 12)
 
-                    ZStack {
-                        if showingCinematic {
-                            CinematicVideoSurface(player: cinematicPlayer.player)
-                                .frame(width: 250, height: 276)
-                                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                                .transition(.opacity)
-                        } else {
-                            prestigeEmblem
-                                .scaleEffect(emblemScale)
-                                .opacity(emblemOpacity)
-                                .transition(.opacity)
-                        }
-                    }
-                    .frame(minHeight: 150)
+                    prestigeEmblem
+                        .scaleEffect(emblemScale)
+                        .opacity(emblemOpacity)
+                        .frame(minHeight: 150)
 
                     VStack(spacing: 8) {
                         Text(tier.name)
@@ -131,7 +118,10 @@ struct PrestigeCelebrationView: View {
                 .background(celebrationCardBackground)
                 .padding(.horizontal, 20)
                 .scaleEffect(dismissing ? 0.92 : 1)
-                .opacity(dismissing ? 0 : 1)
+                // Hidden while the portal runs — its chrome glows even with
+                // empty contents, and an empty gold frame behind the
+                // singularity reads as a rendering bug, not staging.
+                .opacity(dismissing || showingPortal ? 0 : 1)
 
                 Spacer(minLength: 24)
 
@@ -171,51 +161,39 @@ struct PrestigeCelebrationView: View {
                 ConfettiLayer(active: confettiActive, palette: tier.confettiColors, pieceCount: 64)
                     .allowsHitTesting(false)
             }
+
+            if showingPortal {
+                PrestigePortalStage(
+                    oldTier: previousTier,
+                    oldPrestige: max(0, prestige - 1),
+                    newTier: tier
+                ) {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        showingPortal = false
+                    }
+                    runCelebrationSequence()
+                }
+                .transition(.opacity)
+            }
         }
         .onAppear {
             playCelebrationSound()
-            if !reduceMotion && cinematicPlayer.hasAsset {
-                runCinematicOpening()
-            } else {
+            if reduceMotion {
                 runCelebrationSequence()
+            } else {
+                runPortalOpening()
             }
         }
-        .onChange(of: cinematicPlayer.didFinish) { _, finished in
-            guard finished, showingCinematic else { return }
-            withAnimation(.easeInOut(duration: 0.3)) {
-                showingCinematic = false
-            }
-            cinematicPlayer.teardown()
-            runCelebrationSequence()
-        }
-        .onDisappear { cinematicPlayer.teardown() }
     }
 
-    /// Cinematic-first opening: dim the backdrop, play the transformation
-    /// clip once with escalating haptics, then hand off to the standard
-    /// reveal sequence. A watchdog keeps a stalled decode from stranding the
-    /// celebration on a frozen frame.
-    private func runCinematicOpening() {
-        showingCinematic = true
-        Haptics.mediumTap()
-        withAnimation(.easeOut(duration: 0.25)) {
-            backdropOpacity = 0.82
+    /// Portal-first opening: dim + blur the backdrop, run the singularity
+    /// ritual on the OLD rank, and let its detonation hand off to the
+    /// standard reveal of the new one.
+    private func runPortalOpening() {
+        withAnimation(.easeOut(duration: 0.3)) {
+            backdropOpacity = 1
         }
-        withAnimation(AppMotion.Spring.smooth.delay(0.12)) {
-            headerVisible = true
-        }
-        cinematicPlayer.play()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-            if showingCinematic { Haptics.heavyTap() }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
-            guard showingCinematic else { return }
-            withAnimation(.easeInOut(duration: 0.3)) {
-                showingCinematic = false
-            }
-            cinematicPlayer.teardown()
-            runCelebrationSequence()
-        }
+        showingPortal = true
     }
 
     private var prestigeEmblem: some View {
@@ -319,7 +297,9 @@ struct PrestigeCelebrationView: View {
 
         Haptics.success()
 
-        withAnimation(.easeOut(duration: 0.25)) {
+        // Coming out of the portal the backdrop sits at full dim; ease it to
+        // the reveal's resting level (or up to it under a cold start).
+        withAnimation(.easeOut(duration: 0.35)) {
             backdropOpacity = 0.82
         }
 

@@ -106,6 +106,7 @@ struct RootView: View {
                 prestige: max(1, store.displayedGamificationProfile().prestige + 1),
                 onDismiss: { demoPrestige = false }
             )
+            .presentationBackground(.clear)
         }
     }
 
@@ -183,6 +184,7 @@ private struct DisplayNamePromptSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
+                Spacer(minLength: 0)
                 Text("Add your display name")
                     .font(.system(.title2, weight: .semibold))
                     .foregroundStyle(AppTheme.Colors.text)
@@ -216,10 +218,9 @@ private struct DisplayNamePromptSheet: View {
                         .padding(.horizontal, 32)
                 }
 
-                Spacer(minLength: 20)
+                Spacer(minLength: 0)
             }
-            .padding(.top, 40)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(AppTheme.Colors.bg.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -712,6 +713,9 @@ struct HoursHomeView: View {
                 prestige: store.gamificationProfile.prestige,
                 onDismiss: { showingPrestigeConfetti = false }
             )
+            // Clear so the celebration's material backdrop has the real Home
+            // screen behind it to blur.
+            .presentationBackground(.clear)
         }
         .onChange(of: store.xpGainEvent) { _, event in
             // Only fires for XP earned by a real user action (shift logged /
