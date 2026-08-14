@@ -77,6 +77,7 @@ struct HistoryTabView: View {
             title: row.cycle.workRangeText(),
             subtitle: subtitle(for: row),
             status: status(for: row),
+            accentLine: accentLine(for: row),
             index: index
         ) {
             PayCycleDetailView(
@@ -93,6 +94,45 @@ struct HistoryTabView: View {
     private func subtitle(for row: ChequeRow) -> String {
         let entries = PayCycleEngine.entries(store.entries, in: row.cycle)
         return "\(shiftsCaption(for: entries)) · \(AppTheme.Format.hours(cycleHours(row.cycle)))"
+    }
+
+    /// Third row line: a paid cheque shows the total the user recorded for
+    /// it; the live cheque shows the learned projection once at least two
+    /// totals exist. Nothing renders until the user has typed totals in, so
+    /// the feature is invisible until it has real data to stand on.
+    private func accentLine(for row: ChequeRow) -> (text: String, tint: Color)? {
+        if let recorded = store.actualPayout(for: row.cycle) {
+            return (Self.currency(recorded), AppColors.positive)
+        }
+        guard row.isCurrent else { return nil }
+        guard let prediction = currentPrediction() else { return nil }
+        return (
+            "Projected ~\(Self.currency(prediction.amount)) · \(prediction.confidence.label)",
+            AppColors.accent
+        )
+    }
+
+    /// Projection for the live cheque, learned from every past period the
+    /// user recorded a real total for (weighted toward recent cheques —
+    /// see AdvancedPayPredictor).
+    private func currentPrediction() -> AdvancedPayPredictor.Prediction? {
+        let current = store.currentPayCycle()
+        let past: [AdvancedPayPredictor.PastCheque] = previousCycles(before: current).compactMap { cycle in
+            guard let payout = store.actualPayout(for: cycle) else { return nil }
+            return AdvancedPayPredictor.PastCheque(
+                start: cycle.start,
+                hours: cycleHours(cycle),
+                payout: payout
+            )
+        }
+        return AdvancedPayPredictor.predict(currentHours: cycleHours(current), past: past)
+    }
+
+    private static func currency(_ amount: Double) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.maximumFractionDigits = 2
+        return f.string(from: NSNumber(value: amount)) ?? String(format: "$%.2f", amount)
     }
 
     /// The live cheque is In Progress; a closed one is Pending until its

@@ -1758,6 +1758,41 @@ final class HoursStore: ObservableObject {
         PayCycleEngine.currentCycle(settings: paySettings, asOf: Date(), calendar: calendar)
     }
 
+    // MARK: - Actual cheque totals (user-entered)
+
+    /// What each cheque REALLY paid, typed in by the user after payday, keyed
+    /// by the pay period's start day. This is the training data for
+    /// AdvancedPayPredictor: the recorded amount carries taxes, tips, and
+    /// bonuses that the in-app estimate can't know about. Device-local.
+    @Published private(set) var actualPayouts: [String: Double] =
+        (UserDefaults.standard.dictionary(forKey: "actual_cheque_payouts_v1") as? [String: Double]) ?? [:]
+
+    private static let actualPayoutsKey = "actual_cheque_payouts_v1"
+
+    /// Stable per-cycle key. Fixed-locale calendar date of the period start —
+    /// timezone shifts around DST can't split one cheque into two keys.
+    static func payoutKey(for cycle: PayCycle) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: cycle.start)
+    }
+
+    func actualPayout(for cycle: PayCycle) -> Double? {
+        actualPayouts[Self.payoutKey(for: cycle)]
+    }
+
+    /// nil (or a non-positive amount) clears the record.
+    func setActualPayout(_ amount: Double?, for cycle: PayCycle) {
+        let key = Self.payoutKey(for: cycle)
+        if let amount, amount > 0, amount.isFinite {
+            actualPayouts[key] = amount
+        } else {
+            actualPayouts.removeValue(forKey: key)
+        }
+        UserDefaults.standard.set(actualPayouts, forKey: Self.actualPayoutsKey)
+    }
+
     func payCycle(containing date: Date, calendar: Calendar = .current) -> PayCycle {
         PayCycleEngine.cycle(containing: date, settings: paySettings, calendar: calendar)
     }

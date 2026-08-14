@@ -13,6 +13,8 @@ struct PayCycleDetailView: View {
     @State private var didCopyAll = false
     @State private var copyAllBurst = 0
     @State private var showingPrestigeInfo = false
+    @State private var showingPayoutEntry = false
+    @State private var payoutDraft = ""
     @Environment(\.dismiss) private var dismiss
 
     init(
@@ -88,6 +90,106 @@ struct PayCycleDetailView: View {
         }
     }
 
+    /// The selected period's payday has passed — the one moment "what did
+    /// this cheque actually pay?" has an answer.
+    private var isPaidPeriod: Bool {
+        selectedCycle.payday <= Date()
+    }
+
+    private var recordedPayout: Double? {
+        store.actualPayout(for: selectedCycle)
+    }
+
+    private static let payoutCurrency: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.maximumFractionDigits = 2
+        return f
+    }()
+
+    /// Records what the cheque really paid. This is the training data for the
+    /// projection on History's In Progress row: each recorded total teaches
+    /// the predictor the real net rate — taxes, tips, and bonuses included —
+    /// that the in-app estimate can't see.
+    @ViewBuilder
+    private var chequeTotalSection: some View {
+        if isPaidPeriod {
+            Button {
+                Haptics.lightTap()
+                payoutDraft = recordedPayout.map { String(format: "%.2f", $0) } ?? ""
+                showingPayoutEntry = true
+            } label: {
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    Image(systemName: "banknote")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(AppTheme.Colors.accent)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(AppTheme.Colors.accent.opacity(0.14))
+                        )
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(recordedPayout == nil ? "Add cheque total" : "Cheque total")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppTheme.Colors.text)
+                        Text(recordedPayout == nil
+                             ? "Enter what this cheque actually paid — it teaches your pay projection."
+                             : "Tap to edit. Powers the projection on your live cheque.")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AppTheme.Colors.subtext)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    if let recordedPayout {
+                        Text(Self.payoutCurrency.string(from: NSNumber(value: recordedPayout)) ?? "")
+                            .font(.system(size: 16, weight: .heavy, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(AppTheme.Colors.success)
+                    } else {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(AppTheme.Colors.accent)
+                    }
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(AppTheme.Colors.card.opacity(0.55))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
+                        )
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .alert("Cheque total", isPresented: $showingPayoutEntry) {
+                TextField("Amount", text: $payoutDraft)
+                    .keyboardType(.decimalPad)
+                Button("Save") {
+                    // Tolerate "1,540.25" and "$1540" — typed off a paystub.
+                    let cleaned = payoutDraft
+                        .replacingOccurrences(of: "$", with: "")
+                        .replacingOccurrences(of: ",", with: "")
+                        .trimmingCharacters(in: .whitespaces)
+                    store.setActualPayout(Double(cleaned), for: selectedCycle)
+                    Haptics.success()
+                }
+                if recordedPayout != nil {
+                    Button("Remove", role: .destructive) {
+                        store.setActualPayout(nil, for: selectedCycle)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("What this cheque actually paid, after tax and including tips or bonuses.")
+            }
+        }
+    }
+
     var body: some View {
         ZStack {
             AppTheme.Colors.bg.ignoresSafeArea()
@@ -96,6 +198,8 @@ struct PayCycleDetailView: View {
                     heroBlock
 
                     payBreakdownSection
+
+                    chequeTotalSection
 
                     if cycleEntries.isEmpty {
                         EmptyStateView(

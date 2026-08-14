@@ -53,6 +53,9 @@ struct ChequeTableRow<Destination: View>: View {
     let title: String
     let subtitle: String
     let status: ChequeStatus
+    /// Optional third line: recorded cheque total on paid rows, the live
+    /// projection on the In Progress row. Tinted by the caller.
+    var accentLine: (text: String, tint: Color)? = nil
     /// Staggers this row's entrance so a card's rows arrive in sequence.
     let index: Int
     @ViewBuilder let destination: () -> Destination
@@ -78,6 +81,14 @@ struct ChequeTableRow<Destination: View>: View {
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
                         .lineLimit(1)
+                    if let accentLine {
+                        Text(accentLine.text)
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(accentLine.tint)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
                 }
 
                 Spacer(minLength: AppSpacing.xs)
