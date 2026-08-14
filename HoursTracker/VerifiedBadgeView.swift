@@ -1,4 +1,6 @@
 import SwiftUI
+import FirebaseFirestore
+import Combine
 
 // MARK: - Verified badge
 //
@@ -13,30 +15,68 @@ import SwiftUI
 
 /// What earns the badge.
 ///
-/// Reviewing the app, not an hours milestone. Apple exposes no way to confirm
-/// a review was actually submitted — `AppStore.requestReview` returns nothing,
-/// and App Store Connect's reviews carry nicknames that don't map to accounts
-/// — so this records that the user tapped through to the write-review page.
-/// It verifies intent, not the review itself; that gap is the price of it
-/// being automatic rather than granted by hand.
+/// Reviewing the app — but granted by hand, not by the client. Apple exposes no
+/// way to confirm a review was actually submitted (`AppStore.requestReview`
+/// returns nothing, and App Store Connect's reviews carry nicknames that don't
+/// map to accounts), so anything the app could detect on its own would verify
+/// intent at best. Instead the user emails a screenshot of their review, and
+/// the mark is granted on `users/{uid}.hasReviewedApp`, which the recompute
+/// publishes to `publicProfiles`.
+///
+/// The client deliberately never *writes* that field: its `false` would
+/// overwrite each grant on the very next profile sync.
 enum VerifiedTracker {
-    /// Set when the user taps through to the App Store review page.
-    static let reviewedKey = "has_reviewed_app_v1"
+    /// For rows built from a published profile.
+    static func isVerified(reviewed: Bool) -> Bool { reviewed }
 
-    static var hasReviewedApp: Bool {
-        get { UserDefaults.standard.bool(forKey: reviewedKey) }
-        set { UserDefaults.standard.set(newValue, forKey: reviewedKey) }
+    /// Where proof of a review is sent.
+    static let proofRecipient = "trackedhours@gmail.com"
+}
+
+/// Watches the signed-in user's own published profile for the verified flag.
+///
+/// Their own rows read the same document everyone else does, so what they see
+/// is exactly what other users see — no local mirror to drift out of sync with
+/// a hand-granted mark.
+@MainActor
+final class VerifiedStatusService: ObservableObject {
+    static let shared = VerifiedStatusService()
+
+    @Published private(set) var isVerified = false
+
+    private var listener: ListenerRegistration?
+    private var activeUid: String?
+
+    private init() {}
+
+    func startListening(uid: String) {
+        guard activeUid != uid else { return }
+        stopListening()
+        activeUid = uid
+        listener = Firestore.firestore().collection("publicProfiles").document(uid)
+            .addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor in
+                    guard let self, self.activeUid == uid else { return }
+                    if let error {
+                        FirestoreOperationLog.listenerError(
+                            owner: .cloudSync,
+                            purpose: "publicProfiles.verified",
+                            uid: uid,
+                            error: error
+                        )
+                        return
+                    }
+                    self.isVerified = snapshot?.data()?["hasReviewedApp"] as? Bool ?? false
+                }
+            }
     }
 
-    /// For rows built from a published profile. `isSelf` covers your own row:
-    /// the server flag only lands on the next recompute, so without it your
-    /// badge would lag your own tap by a shift.
-    static func isVerified(reviewed: Bool, isSelf: Bool = false) -> Bool {
-        reviewed || (isSelf && hasReviewedApp)
+    func stopListening() {
+        listener?.remove()
+        listener = nil
+        activeUid = nil
+        isVerified = false
     }
-
-    /// For the signed-in user's own rows, which read the local flag.
-    static var isSelfVerified: Bool { hasReviewedApp }
 }
 
 struct VerifiedBadgeView: View {

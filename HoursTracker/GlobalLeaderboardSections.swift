@@ -272,9 +272,8 @@ struct GlobalStatsStrip: View {
 // MARK: - Verified review note
 
 /// The line between the rank card and the stats strip explaining how the
-/// verified mark is earned. Tapping it opens the App Store write-review page
-/// and grants the badge — see `VerifiedTracker` for why tapping through is the
-/// only signal iOS gives us.
+/// verified mark is earned. Tapping it opens the proof sheet — the mark is
+/// granted by hand from an emailed screenshot, see `VerifiedTracker`.
 struct VerifiedReviewNote: View {
     let isVerified: Bool
     var onTap: () -> Void
@@ -283,9 +282,16 @@ struct VerifiedReviewNote: View {
         Button(action: onTap) {
             HStack(spacing: 6) {
                 VerifiedBadgeView(variant: isVerified ? .shimmer : .static, size: 13)
-                Text(isVerified
-                     ? "Thanks for reviewing — your verified mark is live!"
-                     : "(Users who review the app receive a verified mark beside their name!)")
+                VStack(spacing: 1) {
+                    Text(isVerified
+                         ? "Thanks for reviewing — your verified mark is live!"
+                         : "(Users who review the app receive a verified mark beside their name!)")
+                    if !isVerified {
+                        Text("Tap to send us proof")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppColors.accent)
+                    }
+                }
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(AppColors.subtext)
                     .multilineTextAlignment(.center)

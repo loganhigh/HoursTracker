@@ -21,6 +21,7 @@ struct FriendsView: View {
     // badge appears as soon as the snapshot lands.
     @ObservedObject private var statsListener = StatsListenerService.shared
     @ObservedObject private var presence = PresenceService.shared
+    @ObservedObject private var verifiedStatus = VerifiedStatusService.shared
     @State private var codeInput = ""
     @State private var actionMessage: String?
     @State private var actionMessageIsError = false
@@ -55,6 +56,7 @@ struct FriendsView: View {
             myPayPeriodHours: PayCycleEngine.entries(store.entries, in: payCycle)
                 .reduce(0) { $0 + $1.paidHours },
             myPhotoURL: ProfilePhotoManager.shared.remotePhotoURL,
+            myIsVerified: verifiedStatus.isVerified,
             friends: friendsService.friends
         )
     }

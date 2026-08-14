@@ -14,8 +14,9 @@ struct GlobalLeaderboardView: View {
     @EnvironmentObject private var authService: AuthService
     @Environment(\.dismiss) private var dismiss
 
-    /// Mirrors VerifiedTracker so the note reacts the moment it's tapped.
-    @State private var hasReviewed = VerifiedTracker.hasReviewedApp
+    @ObservedObject private var verified = VerifiedStatusService.shared
+
+    @State private var showingProofSheet = false
 
     private var myUid: String? { authService.user?.uid }
 
@@ -45,6 +46,13 @@ struct GlobalLeaderboardView: View {
         }
         .background(AppColors.bg.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showingProofSheet) {
+            VerifiedReviewProofSheet(
+                isVerified: verified.isVerified,
+                accountName: UserDefaults.standard.string(forKey: "profile_display_name") ?? "",
+                accountUid: myUid
+            )
+        }
         .task {
             await topTrackers.ensureFullLeaderboardLoaded()
         }
@@ -76,12 +84,8 @@ struct GlobalLeaderboardView: View {
                 LazyVStack(spacing: AppSpacing.sm) {
                     GlobalRankHeroCard(rank: myTracker?.rank)
 
-                    VerifiedReviewNote(isVerified: hasReviewed) {
-                        // Reaching the review page is the only signal iOS
-                        // gives us — see VerifiedTracker.
-                        VerifiedTracker.hasReviewedApp = true
-                        hasReviewed = true
-                        AppActions.openAppStoreListing()
+                    VerifiedReviewNote(isVerified: verified.isVerified) {
+                        showingProofSheet = true
                     }
 
                     GlobalStatsStrip(

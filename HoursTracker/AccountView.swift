@@ -25,6 +25,7 @@ struct AccountView: View {
     @State private var showingDeleteAccountConfirm = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError: String?
+    @ObservedObject private var verifiedStatus = VerifiedStatusService.shared
     @State private var photoPickerItem: PhotosPickerItem?
     @State private var isUpdatingPhoto = false
     /// The raw picked photo, awaiting the crop step. Non-nil drives the crop
@@ -214,7 +215,7 @@ struct AccountView: View {
                         .multilineTextAlignment(.center)
                     // Own profile earns the badge on the same rule as every
                     // other surface. Shimmering here: one badge on screen.
-                    if VerifiedTracker.isSelfVerified {
+                    if verifiedStatus.isVerified {
                         VerifiedBadgeView(variant: .shimmer, size: 17)
                     }
                     // The pencil is what makes the name discoverable as

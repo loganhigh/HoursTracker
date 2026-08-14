@@ -107,6 +107,7 @@ extension LeaderboardEntry {
         myProfile: GamificationProfile,
         myPayPeriodHours: Double,
         myPhotoURL: String?,
+        myIsVerified: Bool,
         friends: [FriendProfile]
     ) -> [LeaderboardEntry] {
         var entries: [LeaderboardEntry] = [
@@ -118,7 +119,7 @@ extension LeaderboardEntry {
                 prestige: myProfile.prestige,
                 streak: myProfile.currentStreak,
                 payPeriodHours: myPayPeriodHours,
-                hasReviewedApp: VerifiedTracker.isSelfVerified,
+                hasReviewedApp: myIsVerified,
                 photoURL: myPhotoURL,
                 hoursHidden: false
             )
