@@ -153,7 +153,7 @@ struct ChequeYearCard<Content: View>: View {
             HStack(spacing: AppSpacing.sm) {
                 Text("No")
                     .frame(width: 22, alignment: .leading)
-                Text("Cheque")
+                Text("Paid")
                 Spacer(minLength: AppSpacing.xs)
                 Text("Status")
             }

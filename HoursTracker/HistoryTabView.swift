@@ -75,7 +75,7 @@ struct HistoryTabView: View {
     private func tableRow(for row: ChequeRow, index: Int) -> some View {
         ChequeTableRow(
             number: row.ordinal,
-            title: row.cycle.workRangeText(),
+            title: Self.depositDateText(for: row.cycle),
             subtitle: subtitle(for: row),
             status: status(for: row),
             accentLine: accentLine(for: row),
@@ -208,6 +208,18 @@ struct HistoryTabView: View {
 
     private static func ordinalText(_ value: Int) -> String {
         ordinalFormatter.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
+    /// Row title: the payday, not the work range — "when does this money
+    /// land" is the question people scan this list with. The year only
+    /// appears when the deposit slips outside the year card it sits in
+    /// (a late-December cheque paying in January).
+    private static func depositDateText(for cycle: PayCycle) -> String {
+        let payYear = Calendar.current.component(.year, from: cycle.payday)
+        let cardYear = Calendar.current.component(.year, from: cycle.cutoff)
+        return payYear == cardYear
+            ? cycle.payday.formatted(.dateTime.month(.abbreviated).day())
+            : cycle.payday.formatted(.dateTime.month(.abbreviated).day().year())
     }
 
     private func cycleHours(_ cycle: PayCycle) -> Double {
