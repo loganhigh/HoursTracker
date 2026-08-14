@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseFunctions
+import PhotosUI
 
 /// A user row returned by the `adminListUsers` callable.
 private struct AdminUser: Identifiable, Equatable {
@@ -548,6 +549,12 @@ private struct AdminEditUserSheet: View {
     @State private var errorMessage: String?
     @State private var refreshedMessage: String?
     @State private var copiedField: String?
+    @State private var nameText: String = ""
+    @State private var photoItem: PhotosPickerItem?
+    @State private var pendingPhoto: UIImage?
+    @State private var isLoadingPhoto = false
+    @State private var isSavingProfile = false
+    @State private var profileMessage: String?
 
     private let functions = Functions.functions(region: "us-central1")
 
@@ -567,6 +574,7 @@ private struct AdminEditUserSheet: View {
         _prestigeText = State(initialValue: "\(user.prestige)")
         _titleText = State(initialValue: user.adminEquippedTitle)
         _countryCode = State(initialValue: user.countryCode)
+        _nameText = State(initialValue: user.displayName)
     }
 
     var body: some View {
@@ -634,6 +642,55 @@ private struct AdminEditUserSheet: View {
                 } footer: {
                     Text(accountFooterText)
                         .foregroundStyle(copiedField != nil ? AppTheme.Colors.success : AppTheme.Colors.faint)
+                }
+
+                Section {
+                    TextField("Display name", text: $nameText)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+
+                    HStack(spacing: 12) {
+                        Group {
+                            if isLoadingPhoto {
+                                ProgressView()
+                            } else if let pendingPhoto {
+                                Image(uiImage: pendingPhoto)
+                                    .resizable()
+                                    .scaledToFill()
+                            } else {
+                                Image(systemName: "person.crop.circle")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .foregroundStyle(AppTheme.Colors.faint)
+                            }
+                        }
+                        .frame(width: 44, height: 44)
+                        .clipShape(Circle())
+
+                        PhotosPicker(selection: $photoItem, matching: .images) {
+                            Text(pendingPhoto == nil ? "Choose photo" : "Choose a different photo")
+                        }
+                    }
+
+                    Button("Save name & photo") {
+                        Task { await saveProfile() }
+                    }
+                    .disabled(isSavingProfile || isLoadingPhoto)
+
+                    Button("Clear admin photo", role: .destructive) {
+                        Task { await saveProfile(clearPhoto: true) }
+                    }
+                    .disabled(isSavingProfile)
+
+                    if let profileMessage {
+                        Text(profileMessage)
+                            .font(.footnote)
+                            .foregroundStyle(AppTheme.Colors.success)
+                    }
+                } header: {
+                    Text("Name & photo")
+                } footer: {
+                    Text("What other users see. Stays until this person changes their own name or photo on their device — at that point their choice takes over and the override retires itself. Clearing the name field on save removes the override. Note this doesn't change what they see on their own device, which reads their local copy.")
                 }
 
                 Section {
@@ -722,6 +779,10 @@ private struct AdminEditUserSheet: View {
             .background(AppTheme.Colors.bg.ignoresSafeArea())
             .navigationTitle("Edit user")
             .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: photoItem) { _, item in
+                guard let item else { return }
+                Task { await loadPendingPhoto(item) }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -732,6 +793,56 @@ private struct AdminEditUserSheet: View {
                 }
             }
         }
+    }
+
+    private func loadPendingPhoto(_ item: PhotosPickerItem) async {
+        isLoadingPhoto = true
+        defer { isLoadingPhoto = false }
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else {
+            errorMessage = "That image couldn't be read."
+            return
+        }
+        pendingPhoto = image
+    }
+
+    /// Sends the name and/or photo. Photos are downscaled and JPEG-encoded here
+    /// so the callable carries roughly a hundred kilobytes rather than a
+    /// full-resolution capture.
+    private func saveProfile(clearPhoto: Bool = false) async {
+        isSavingProfile = true
+        errorMessage = nil
+        profileMessage = nil
+        defer { isSavingProfile = false }
+
+        var payload: [String: Any] = ["passcode": passcode, "targetUid": user.uid]
+        payload["displayName"] = nameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if clearPhoto {
+            payload["clearPhoto"] = true
+        } else if let pendingPhoto, let data = Self.encodedJPEG(pendingPhoto) {
+            payload["photoBase64"] = data.base64EncodedString()
+        }
+
+        do {
+            _ = try await functions.httpsCallable("adminSetUserProfile").call(payload)
+            profileMessage = clearPhoto ? "Admin photo cleared." : "Saved."
+            if clearPhoto { pendingPhoto = nil }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private static func encodedJPEG(_ image: UIImage, maxEdge: CGFloat = 512) -> Data? {
+        let longest = max(image.size.width, image.size.height)
+        guard longest > 0 else { return nil }
+        let scale = min(1, maxEdge / longest)
+        let target = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let resized = UIGraphicsImageRenderer(size: target, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: target))
+        }
+        return resized.jpegData(compressionQuality: 0.82)
     }
 
     private func forceRefresh() async {

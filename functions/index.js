@@ -24,6 +24,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const { getMessaging } = require("firebase-admin/messaging");
+const { getStorage } = require("firebase-admin/storage");
 
 initializeApp();
 
@@ -1844,6 +1845,99 @@ exports.adminSetUserProgression = onCall(
       equippedTitle:
         p.equippedTitle || u.adminEquippedTitle || u.equippedTitle || "",
       countryCode: String(u.countryCode || p.countryCode || "").trim().toUpperCase(),
+    };
+  }
+);
+
+/**
+ * Admin-only: set a user's display name and/or profile photo.
+ *
+ * Both are overrides that stand until that user changes the value themselves —
+ * see resolveAdminOverride in src/stats/recompute.js. The base value is
+ * recorded here so the recompute can tell "user edited it" apart from the
+ * routine profile republish every client does on launch.
+ *
+ * The photo is uploaded to a path the user's own client never writes, so
+ * replacing their avatar can't silently overwrite the admin's copy — the
+ * override is retired by the base comparison instead.
+ */
+exports.adminSetUserProfile = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE], memory: "512MiB" },
+  async (request) => {
+    assertAdmin(request);
+
+    const targetUid = request.data?.targetUid;
+    if (!targetUid || typeof targetUid !== "string") {
+      throw new HttpsError("invalid-argument", "targetUid is required.");
+    }
+
+    const userRef = db.collection("users").doc(targetUid);
+    const snap = await userRef.get();
+    const current = snap.data() || {};
+    const update = {};
+
+    // --- Display name -------------------------------------------------------
+    if (request.data?.displayName !== undefined) {
+      const raw = request.data.displayName;
+      if (raw === null || String(raw).trim() === "") {
+        update.adminDisplayName = FieldValue.delete();
+        update.adminDisplayNameBase = FieldValue.delete();
+      } else {
+        const name = String(raw).trim().slice(0, 40);
+        update.adminDisplayName = name;
+        // What they have right now. Any later change makes this stale and
+        // retires the override.
+        update.adminDisplayNameBase = String(current.displayName || "");
+      }
+    }
+
+    // --- Profile photo ------------------------------------------------------
+    if (request.data?.clearPhoto === true) {
+      update.adminProfilePhotoURL = FieldValue.delete();
+      update.adminProfilePhotoBase = FieldValue.delete();
+    } else if (typeof request.data?.photoBase64 === "string" && request.data.photoBase64) {
+      const buffer = Buffer.from(request.data.photoBase64, "base64");
+      const MAX_BYTES = 4 * 1024 * 1024;
+      if (buffer.length === 0 || buffer.length > MAX_BYTES) {
+        throw new HttpsError("invalid-argument", "Photo must be between 1 byte and 4 MB.");
+      }
+      const bucket = getStorage().bucket();
+      // Deliberately not users/{uid}/profile/avatar.jpg — that path belongs to
+      // the user's own uploads.
+      const file = bucket.file(`users/${targetUid}/profile/admin-avatar.jpg`);
+      const token = `${targetUid}-${Date.now()}`;
+      await file.save(buffer, {
+        contentType: "image/jpeg",
+        metadata: { metadata: { firebaseStorageDownloadTokens: token } },
+      });
+      const url =
+        `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
+        `${encodeURIComponent(file.name)}?alt=media&token=${token}`;
+      update.adminProfilePhotoURL = url;
+      update.adminProfilePhotoBase = String(current.profilePhotoURL || "");
+    }
+
+    if (Object.keys(update).length === 0) {
+      throw new HttpsError("invalid-argument", "Nothing to update.");
+    }
+
+    await userRef.set(update, { merge: true });
+
+    // Republish so the change lands on publicProfiles now rather than waiting
+    // for their next shift write.
+    await recomputeUserStats(db, targetUid, {
+      skipFence: true,
+      skipLeaderboardUpdate: true,
+    });
+    await updateGlobalLeaderboard(db);
+
+    const after = await db.collection("publicProfiles").doc(targetUid).get();
+    const p = after.data() || {};
+    return {
+      status: "ok",
+      targetUid,
+      displayName: p.displayName || "",
+      profilePhotoURL: p.profilePhotoURL || "",
     };
   }
 );
