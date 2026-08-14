@@ -8,7 +8,13 @@ private struct AdminUser: Identifiable, Equatable {
     var friendCode: String
     var email: String
     var createdAt: Date?
+    /// Last credential authentication. Rarely moves — Sign in with Apple
+    /// persists — so it says almost nothing about whether someone still uses
+    /// the app. `lastActiveAt` is the honest one.
     var lastSignInAt: Date?
+    /// Last app foreground, from presence; falls back to an ID-token refresh.
+    var lastActiveAt: Date?
+    var lastActiveFromPresence: Bool = false
     var level: Int
     var prestige: Int
     let totalHours: Double
@@ -500,6 +506,8 @@ private extension AdminUser {
             email: dict["email"] as? String ?? "",
             createdAt: date("createdAt"),
             lastSignInAt: date("lastSignInAt"),
+            lastActiveAt: date("lastActiveAt"),
+            lastActiveFromPresence: dict["lastActiveFromPresence"] as? Bool ?? false,
             level: int("level") ?? 1,
             prestige: int("prestige") ?? 0,
             totalHours: double("totalHours"),
@@ -607,6 +615,12 @@ private struct AdminEditUserSheet: View {
                         Text("Signed up")
                         Spacer()
                         Text(Self.absoluteDate(user.createdAt))
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Text("Last active")
+                        Spacer()
+                        Text(Self.absoluteDate(user.lastActiveAt))
                             .foregroundStyle(.secondary)
                     }
                     HStack {
@@ -849,7 +863,10 @@ private struct AdminEditUserSheet: View {
         if let copiedField {
             return "Copied \(copiedField.lowercased())."
         }
-        return "Tap a row to copy it. A blank friend code means the account signed up but hasn't opened the app while signed in yet — the code is stamped on first authenticated launch."
+        let activitySource = user.lastActiveFromPresence
+            ? "Last active is their most recent time with the app open."
+            : "Last active falls back to a sign-in token refresh here — this account has no presence record yet, so treat it as approximate."
+        return "\(activitySource) Last signed in only moves when they re-enter credentials, which Sign in with Apple almost never asks for. Tap a row to copy it. A blank friend code means the account signed up but hasn't opened the app while signed in yet — the code is stamped on first authenticated launch."
     }
 
     /// A read-only detail row that copies its value on tap. Values that aren't

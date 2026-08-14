@@ -739,13 +739,26 @@ async function listAllAuthUsers() {
   return all;
 }
 
-function buildAdminUserRow(uid, userData, profileData, authData) {
+function buildAdminUserRow(uid, userData, profileData, authData, presenceData) {
   const u = userData || {};
   const p = profileData || {};
   const a = authData || {};
   const hasPublicProfile = Object.keys(p).length > 0;
   const createdAt = Date.parse(a.metadata?.creationTime || "");
+  // `lastSignInTime` is the last time they entered CREDENTIALS, not the last
+  // time they used the app. Sign-in with Apple persists indefinitely, so for
+  // most users this is frozen at their install date and reads as "inactive"
+  // for people who opened the app this morning. Kept for the audit trail, but
+  // the row below leads with real activity:
+  //   presence.lastActiveAt  — written on every foreground (PresenceService)
+  //   metadata.lastRefreshTime — ID-token refresh, a decent fallback for
+  //                              anyone predating presence.
   const lastSignInAt = Date.parse(a.metadata?.lastSignInTime || "");
+  const lastRefreshAt = Date.parse(a.metadata?.lastRefreshTime || "");
+  const presenceMs = presenceData?.lastActiveAt?.toMillis?.() ?? null;
+  const lastActiveAt = presenceMs != null
+    ? presenceMs
+    : (Number.isFinite(lastRefreshAt) ? lastRefreshAt : null);
   return {
     uid,
     displayName: p.displayName || u.displayName || "",
@@ -758,6 +771,10 @@ function buildAdminUserRow(uid, userData, profileData, authData) {
     // formats in the viewer's locale. NaN (missing/unparseable) becomes null.
     createdAt: Number.isFinite(createdAt) ? createdAt : null,
     lastSignInAt: Number.isFinite(lastSignInAt) ? lastSignInAt : null,
+    lastActiveAt,
+    // True when lastActiveAt came from presence rather than a token refresh,
+    // so the client can say which it is instead of overstating precision.
+    lastActiveFromPresence: presenceMs != null,
     level: Number(p.level) || Number(u.level) || 1,
     prestige: Number(p.prestige) || Number(u.prestige) || 0,
     totalHours:
@@ -1619,14 +1636,18 @@ exports.adminListUsers = onCall(
   async (request) => {
     assertAdmin(request);
 
-    const [usersSnap, profilesSnap, authUsers] = await Promise.all([
+    const [usersSnap, profilesSnap, presenceSnap, authUsers] = await Promise.all([
       db.collection("users").get(),
       db.collection("publicProfiles").get(),
+      db.collection("presence").get(),
       listAllAuthUsers(),
     ]);
 
     const profileByUid = new Map(
       profilesSnap.docs.map((doc) => [doc.id, doc.data() || {}])
+    );
+    const presenceByUid = new Map(
+      presenceSnap.docs.map((doc) => [doc.id, doc.data() || {}])
     );
     const authByUid = new Map(authUsers.map((user) => [user.uid, user]));
     const firestoreUids = new Set(usersSnap.docs.map((doc) => doc.id));
@@ -1636,7 +1657,8 @@ exports.adminListUsers = onCall(
         doc.id,
         doc.data(),
         profileByUid.get(doc.id),
-        authByUid.get(doc.id)
+        authByUid.get(doc.id),
+        presenceByUid.get(doc.id)
       )
     );
 
@@ -1647,7 +1669,7 @@ exports.adminListUsers = onCall(
       rows.push(
         buildAdminUserRow(authUser.uid, {
           displayName: authUser.displayName || fallbackName,
-        }, null, authUser)
+        }, null, authUser, presenceByUid.get(authUser.uid))
       );
     }
 
