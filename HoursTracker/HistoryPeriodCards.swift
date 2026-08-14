@@ -12,13 +12,17 @@ enum ChequeStatus {
     case inProgress
     /// Work window closed, payday hasn't arrived yet.
     case pending
-    /// Payday has passed.
+    /// Payday has passed but the user hasn't recorded what it paid — the
+    /// badge is the nudge that turns cheques into projection training data.
+    case awaitingPay
+    /// Payday has passed and the cheque total is recorded.
     case paid
 
     var label: String {
         switch self {
         case .inProgress: return "In Progress"
         case .pending: return "Pending"
+        case .awaitingPay: return "Add Pay"
         case .paid: return "Paid"
         }
     }
@@ -27,6 +31,7 @@ enum ChequeStatus {
         switch self {
         case .inProgress: return AppColors.warning
         case .pending: return AppColors.subtext
+        case .awaitingPay: return AppColors.accent
         case .paid: return AppColors.positive
         }
     }
@@ -147,6 +152,7 @@ struct ChequeYearCard<Content: View>: View {
             Text(String(year))
                 .appText(.title)
                 .foregroundStyle(AppColors.text)
+                .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.bottom, AppSpacing.sm)
 
             // Column header strip — the row layout's labels.

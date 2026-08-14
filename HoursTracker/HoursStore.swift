@@ -1794,6 +1794,34 @@ final class HoursStore: ObservableObject {
         cloudSync.saveChequeTotals(actualPayouts)
     }
 
+    /// Projection for the live cheque from every past period with a recorded
+    /// total. One implementation feeds both the History row and Home's hero
+    /// card. Walks back from the current cycle to the period holding the
+    /// earliest entry (same bound as History's list).
+    func currentChequeProjection() -> AdvancedPayPredictor.Prediction? {
+        guard !actualPayouts.isEmpty, let earliest = entries.map(\.date).min() else { return nil }
+        let current = currentPayCycle()
+        func hours(in cycle: PayCycle) -> Double {
+            PayCycleEngine.entries(entries, in: cycle)
+                .filter { !$0.isOffDay }
+                .reduce(0) { $0 + $1.paidHours }
+        }
+        var past: [AdvancedPayPredictor.PastCheque] = []
+        var cursor = current
+        for _ in 0..<60 {
+            cursor = PayCycleEngine.previousCycle(before: cursor, settings: paySettings)
+            if let payout = actualPayout(for: cursor) {
+                past.append(AdvancedPayPredictor.PastCheque(
+                    start: cursor.start,
+                    hours: hours(in: cursor),
+                    payout: payout
+                ))
+            }
+            if cursor.start <= earliest { break }
+        }
+        return AdvancedPayPredictor.predict(currentHours: hours(in: current), past: past)
+    }
+
     /// Cloud copy of the totals arriving from the listener. Replaces local
     /// wholesale — the doc is last-writer-wins, and an unchanged map is
     /// dropped early so the echo of this device's own write is a no-op.

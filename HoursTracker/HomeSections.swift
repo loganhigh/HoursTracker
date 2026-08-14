@@ -24,13 +24,6 @@ struct TodayHeroCard: View {
         PayCycleEngine.entries(store.entries, in: cycle)
     }
 
-    private var todayHours: Double {
-        let cal = Calendar.current
-        return store.entries
-            .filter { cal.isDateInToday($0.date) && !$0.isOffDay }
-            .reduce(0) { $0 + $1.paidHours }
-    }
-
     private var chequeHours: Double {
         cycleEntries.reduce(0) { $0 + $1.paidHours }
     }
@@ -46,17 +39,28 @@ struct TodayHeroCard: View {
             VStack(spacing: AppSpacing.md) {
                 SectionEyebrow("Today", subtitle: Self.todayFormatter.string(from: Date()))
 
-                // ONE dominant numeral — today's hours — over one compact
-                // cheque line. Zero renders quiet (subtext), never alarming,
-                // and there is no instructional copy.
+                // The cheque line carries the card now (the old today-hours
+                // hero numeral spent most days reading "0h"), with the
+                // learned pay projection beneath it once cheque totals exist.
                 VStack(spacing: AppSpacing.xs) {
-                    AnimatedMetricText(value: todayHours) { AppTheme.Format.hours($0) }
-                        .font(AppTypography.heroNumber)
-                        .foregroundStyle(todayHours > 0 ? AppColors.text : AppColors.subtext)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-
                     chequeLine
+
+                    if let projection = store.currentChequeProjection() {
+                        HStack(spacing: 4) {
+                            Text("Projected pay")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(AppColors.subtext)
+                            Text("~")
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundStyle(AppColors.accent)
+                            AnimatedMetricText(currency: projection.amount, code: store.paySettings.currencyCode)
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(AppColors.accent)
+                        }
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    }
                 }
 
                 // Rank is earned chrome — an "Unranked" shield is just noise.
@@ -78,10 +82,11 @@ struct TodayHeroCard: View {
     private var chequeLine: some View {
         HStack(spacing: 4) {
             AnimatedMetricText(value: chequeHours) { AppTheme.Format.hours($0) }
-                .font(AppTypography.caption.weight(.semibold))
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .monospacedDigit()
                 .foregroundStyle(AppColors.text)
             Text("this cheque · \(cycle.workRangeText())")
-                .appText(.caption)
+                .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
             if store.paySettings.showPayCalculations {
                 Text("·")

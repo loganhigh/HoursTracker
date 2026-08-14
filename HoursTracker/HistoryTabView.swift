@@ -113,20 +113,10 @@ struct HistoryTabView: View {
         return (prediction.amount, store.paySettings.currencyCode, prediction.confidence.label)
     }
 
-    /// Projection for the live cheque, learned from every past period the
-    /// user recorded a real total for (weighted toward recent cheques —
-    /// see AdvancedPayPredictor).
+    /// Projection for the live cheque — shared with Home's hero card, so the
+    /// two can never disagree. Lives on HoursStore.
     private func currentPrediction() -> AdvancedPayPredictor.Prediction? {
-        let current = store.currentPayCycle()
-        let past: [AdvancedPayPredictor.PastCheque] = previousCycles(before: current).compactMap { cycle in
-            guard let payout = store.actualPayout(for: cycle) else { return nil }
-            return AdvancedPayPredictor.PastCheque(
-                start: cycle.start,
-                hours: cycleHours(cycle),
-                payout: payout
-            )
-        }
-        return AdvancedPayPredictor.predict(currentHours: cycleHours(current), past: past)
+        store.currentChequeProjection()
     }
 
     private static func currency(_ amount: Double) -> String {
@@ -137,10 +127,12 @@ struct HistoryTabView: View {
     }
 
     /// The live cheque is In Progress; a closed one is Pending until its
-    /// payday passes, then Paid.
+    /// payday passes, then "Add Pay" until the user records what it paid,
+    /// and finally Paid.
     private func status(for row: ChequeRow) -> ChequeStatus {
         if row.isCurrent { return .inProgress }
-        return row.cycle.payday <= Date() ? .paid : .pending
+        guard row.cycle.payday <= Date() else { return .pending }
+        return store.actualPayout(for: row.cycle) != nil ? .paid : .awaitingPay
     }
 
     // MARK: - Grouping
