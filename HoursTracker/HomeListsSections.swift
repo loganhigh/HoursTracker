@@ -439,27 +439,18 @@ struct HomeAdminConsoleCard: View {
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(spacing: AppSpacing.sm) {
-                Image(systemName: "person.2.badge.gearshape")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(AppColors.accent)
-                    .frame(width: 28, height: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
-                            .fill(AppColors.accent.opacity(0.14))
-                    )
-
-                Text("Admin console")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.text)
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(AppColors.faint)
-            }
-            .padding(AppSpacing.sm)
+            Text("Admin console")
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+                .frame(maxWidth: .infinity)
+                // Trailing overlay rather than an HStack sibling: a chevron in
+                // the flow would shift the label off true centre by its width.
+                .overlay(alignment: .trailing) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(AppColors.faint)
+                }
+                .padding(AppSpacing.sm)
             .background(
                 RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
                     .fill(AppColors.card.opacity(0.55))
