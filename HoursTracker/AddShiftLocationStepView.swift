@@ -28,6 +28,7 @@ struct AddShiftLocationPickerSheet: View {
     @State private var isAddingNew: Bool = false
     @State private var draft = JobSiteDraft()
     @State private var showingPaywall = false
+    @State private var pendingDelete: JobSite?
     @FocusState private var nameFocused: Bool
 
     private var canAddMore: Bool { store.canAddJobSite(isPro: premium.isPremium) }
@@ -36,12 +37,6 @@ struct AddShiftLocationPickerSheet: View {
     private var filtered: [JobSite] { ordered.filter { $0.matches(query) } }
     private var recent: [JobSite] { Array(filtered.prefix(3)) }
     private var rest: [JobSite] { Array(filtered.dropFirst(3)) }
-    /// Everything past Recent, grouped by city. Recent stays ungrouped — it
-    /// is a shortcut, and splitting three rows across city headings would
-    /// bury the thing it exists to surface.
-    private var restByCity: [(title: String, sites: [JobSite])] {
-        store.jobSitesGroupedByCity(rest)
-    }
 
     var body: some View {
         NavigationStack {
@@ -61,8 +56,8 @@ struct AddShiftLocationPickerSheet: View {
                             if !recent.isEmpty {
                                 section(title: "Recent", sites: recent)
                             }
-                            ForEach(restByCity, id: \.title) { group in
-                                section(title: group.title, sites: group.sites)
+                            if !rest.isEmpty {
+                                section(title: "All Locations / Jobs", sites: rest)
                             }
                         }
 
@@ -89,6 +84,25 @@ struct AddShiftLocationPickerSheet: View {
         }
         .sheet(isPresented: $showingPaywall) {
             PremiumUpgradeView()
+        }
+        .alert("Delete this location?", isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } }
+        ), presenting: pendingDelete) { site in
+            Button("Delete", role: .destructive) {
+                Haptics.mediumTap()
+                // Deleting the site you had selected shouldn't leave the wizard
+                // pointing at something that no longer exists.
+                if selectedSiteID == site.id {
+                    selectedSiteID = nil
+                    locationLabel = ""
+                }
+                store.deleteJobSite(site)
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { _ in
+            Text("Shifts you've already logged keep their location name.")
         }
     }
 
@@ -137,6 +151,16 @@ struct AddShiftLocationPickerSheet: View {
                         isSelected: selectedSiteID == site.id
                     ) {
                         toggle(site)
+                    }
+                    // These rows live in a custom panel rather than a List, so
+                    // swipe-to-delete isn't available the way it is in
+                    // Settings. Long press is the standard fallback.
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            pendingDelete = site
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
                 }
             }
@@ -214,11 +238,7 @@ struct AddShiftLocationPickerSheet: View {
 
                 if isAddingNew {
                     EntryRowDivider()
-                    JobSiteFormFields(
-                        draft: $draft,
-                        nameFocused: $nameFocused,
-                        knownCities: store.knownJobSiteCities
-                    )
+                    JobSiteFormFields(draft: $draft, nameFocused: $nameFocused)
                         .padding(.top, AppSpacing.sm)
                     Button("Save Location / Job", action: commitDraft)
                         .buttonStyle(SecondaryButtonStyle())
@@ -277,7 +297,6 @@ struct JobSiteDraft {
     var id: String?
     var name: String = ""
     var detail: String = ""
-    var city: String = ""
     var iconName: String = JobSite.defaultIcon
     var createdAt: Date = Date()
     var lastUsedAt: Date?
@@ -288,17 +307,13 @@ struct JobSiteDraft {
         id = site.id
         name = site.name
         detail = site.detail
-        city = site.city
         iconName = site.iconName
         createdAt = site.createdAt
         lastUsedAt = site.lastUsedAt
     }
 
-    /// Name and city are both required. Existing sites saved before city
-    /// existed keep working — this only gates the editor.
     var isValid: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func makeSite() -> JobSite {
@@ -306,7 +321,6 @@ struct JobSiteDraft {
             id: id ?? UUID().uuidString,
             name: name,
             detail: detail,
-            city: city,
             iconName: iconName,
             createdAt: createdAt,
             lastUsedAt: lastUsedAt
@@ -319,63 +333,25 @@ struct JobSiteDraft {
 struct JobSiteFormFields: View {
     @Binding var draft: JobSiteDraft
     var nameFocused: FocusState<Bool>.Binding?
-    /// Cities already in use, offered as chips. Tapping one reuses its exact
-    /// spelling, which is what keeps a city from splitting into near-identical
-    /// groups.
-    var knownCities: [String] = []
 
     var body: some View {
-        // Name and city only. Detail and icon still exist on the model, so
-        // sites saved with them keep them — they are simply not asked for.
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             nameField
-
-            TextField("City", text: $draft.city)
+            TextField("Address or detail (optional)", text: $draft.detail)
                 .appText(.body)
                 .foregroundStyle(AppColors.text)
                 .tint(AppColors.accent)
-                .textInputAutocapitalization(.words)
-                .autocorrectionDisabled()
 
-            if !suggestedCities.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: AppSpacing.xs) {
-                        ForEach(suggestedCities, id: \.self) { city in
-                            cityChip(city)
-                        }
-                    }
-                    .padding(.horizontal, 1)
+            Text("Icon")
+                .appText(.eyebrow)
+                .foregroundStyle(AppColors.subtext)
+
+            HStack(spacing: AppSpacing.xs) {
+                ForEach(JobSite.iconOptions, id: \.self) { icon in
+                    iconButton(icon)
                 }
             }
         }
-    }
-
-    /// Chips for cities the user hasn't already typed.
-    private var suggestedCities: [String] {
-        let current = draft.city.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return knownCities.filter { $0.lowercased() != current }
-    }
-
-    private func cityChip(_ city: String) -> some View {
-        Button {
-            Haptics.lightTap()
-            draft.city = city
-        } label: {
-            Text(city)
-                .appText(.caption)
-                .foregroundStyle(AppColors.accent)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(AppColors.accent.opacity(0.12))
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(AppColors.accent.opacity(0.25), lineWidth: 1)
-                        )
-                )
-        }
-        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -396,4 +372,27 @@ struct JobSiteFormFields: View {
         }
     }
 
+    private func iconButton(_ icon: String) -> some View {
+        let isSelected = draft.iconName == icon
+        return Button {
+            Haptics.lightTap()
+            draft.iconName = icon
+        } label: {
+            RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
+                .fill(AppColors.accent.opacity(isSelected ? 0.14 : 0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
+                        .stroke(isSelected ? AppColors.accent.opacity(0.45) : AppColors.stroke, lineWidth: 1)
+                )
+                .frame(height: 36)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(isSelected ? AppColors.accent : AppColors.subtext)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(icon)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
 }
