@@ -1,6 +1,5 @@
 import SwiftUI
 import FirebaseFunctions
-import PhotosUI
 
 /// A user row returned by the `adminListUsers` callable.
 private struct AdminUser: Identifiable, Equatable {
@@ -24,6 +23,7 @@ private struct AdminUser: Identifiable, Equatable {
     var adminEquippedTitle: String
     var equippedTitle: String
     var countryCode: String
+    var hasReviewedApp: Bool = false
     var profilePending: Bool
 
     var id: String { uid }
@@ -219,6 +219,22 @@ struct AdminPanelView: View {
             } else {
                 List {
                     Section {
+                        NavigationLink {
+                            AdminVerifiedInboxView(passcode: passcode) { approvedUid in
+                                if let idx = users.firstIndex(where: { $0.uid == approvedUid }) {
+                                    users[idx].hasReviewedApp = true
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                VerifiedBadgeView(variant: .static, size: 16)
+                                Text("Verified inbox")
+                            }
+                        }
+                        .listRowBackground(AppTheme.Colors.card)
+                    }
+
+                    Section {
                         Button {
                             Task { await bulkRefreshAllUsers() }
                         } label: {
@@ -286,6 +302,9 @@ struct AdminPanelView: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(AppTheme.Colors.text)
                         .lineLimit(1)
+                    if user.hasReviewedApp {
+                        VerifiedBadgeView(variant: .static, size: 13)
+                    }
                     if let flag = CountryFlag.emoji(for: user.countryCode) {
                         Text(flag)
                             .font(.system(size: 14))
@@ -517,6 +536,7 @@ private extension AdminUser {
             adminEquippedTitle: dict["adminEquippedTitle"] as? String ?? "",
             equippedTitle: dict["equippedTitle"] as? String ?? "",
             countryCode: (dict["countryCode"] as? String ?? "").uppercased(),
+            hasReviewedApp: dict["hasReviewedApp"] as? Bool ?? false,
             profilePending: dict["profilePending"] as? Bool ?? false
         )
     }
@@ -549,12 +569,8 @@ private struct AdminEditUserSheet: View {
     @State private var errorMessage: String?
     @State private var refreshedMessage: String?
     @State private var copiedField: String?
-    @State private var nameText: String = ""
-    @State private var photoItem: PhotosPickerItem?
-    @State private var pendingPhoto: UIImage?
-    @State private var isLoadingPhoto = false
-    @State private var isSavingProfile = false
-    @State private var profileMessage: String?
+    @State private var verifiedDraft: Bool
+    @State private var isSavingVerified = false
 
     private let functions = Functions.functions(region: "us-central1")
 
@@ -574,7 +590,7 @@ private struct AdminEditUserSheet: View {
         _prestigeText = State(initialValue: "\(user.prestige)")
         _titleText = State(initialValue: user.adminEquippedTitle)
         _countryCode = State(initialValue: user.countryCode)
-        _nameText = State(initialValue: user.displayName)
+        _verifiedDraft = State(initialValue: user.hasReviewedApp)
     }
 
     var body: some View {
@@ -631,11 +647,16 @@ private struct AdminEditUserSheet: View {
                         Text(Self.absoluteDate(user.lastActiveAt))
                             .foregroundStyle(.secondary)
                     }
-                    HStack {
-                        Text("Last signed in")
-                        Spacer()
-                        Text(Self.absoluteDate(user.lastSignInAt))
-                            .foregroundStyle(.secondary)
+                    // Redundant beside a real activity time; only useful as a
+                    // stand-in when the account has neither presence nor a
+                    // token refresh on record.
+                    if user.lastActiveAt == nil {
+                        HStack {
+                            Text("Last signed in")
+                            Spacer()
+                            Text(Self.absoluteDate(user.lastSignInAt))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 } header: {
                     Text("Account")
@@ -645,52 +666,24 @@ private struct AdminEditUserSheet: View {
                 }
 
                 Section {
-                    TextField("Display name", text: $nameText)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-
-                    HStack(spacing: 12) {
-                        Group {
-                            if isLoadingPhoto {
-                                ProgressView()
-                            } else if let pendingPhoto {
-                                Image(uiImage: pendingPhoto)
-                                    .resizable()
-                                    .scaledToFill()
-                            } else {
-                                Image(systemName: "person.crop.circle")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .foregroundStyle(AppTheme.Colors.faint)
+                    Toggle(isOn: $verifiedDraft) {
+                        HStack(spacing: 6) {
+                            VerifiedBadgeView(variant: .static, size: 15)
+                            Text("Verified mark")
+                            if isSavingVerified {
+                                ProgressView().controlSize(.small)
                             }
                         }
-                        .frame(width: 44, height: 44)
-                        .clipShape(Circle())
-
-                        PhotosPicker(selection: $photoItem, matching: .images) {
-                            Text(pendingPhoto == nil ? "Choose photo" : "Choose a different photo")
-                        }
                     }
-
-                    Button("Save name & photo") {
-                        Task { await saveProfile() }
-                    }
-                    .disabled(isSavingProfile || isLoadingPhoto)
-
-                    Button("Clear admin photo", role: .destructive) {
-                        Task { await saveProfile(clearPhoto: true) }
-                    }
-                    .disabled(isSavingProfile)
-
-                    if let profileMessage {
-                        Text(profileMessage)
-                            .font(.footnote)
-                            .foregroundStyle(AppTheme.Colors.success)
+                    .disabled(isSavingVerified)
+                    .onChange(of: verifiedDraft) { old, new in
+                        guard old != new else { return }
+                        Task { await setVerified(new) }
                     }
                 } header: {
-                    Text("Name & photo")
+                    Text("Verified mark")
                 } footer: {
-                    Text("What other users see. Stays until this person changes their own name or photo on their device — at that point their choice takes over and the override retires itself. Clearing the name field on save removes the override. Note this doesn't change what they see on their own device, which reads their local copy.")
+                    Text("Grants or removes the checkmark beside their name everywhere other users see it. Applies immediately. Submissions with screenshots arrive in the Verified inbox on the main admin screen.")
                 }
 
                 Section {
@@ -779,10 +772,6 @@ private struct AdminEditUserSheet: View {
             .background(AppTheme.Colors.bg.ignoresSafeArea())
             .navigationTitle("Edit user")
             .navigationBarTitleDisplayMode(.inline)
-            .onChange(of: photoItem) { _, item in
-                guard let item else { return }
-                Task { await loadPendingPhoto(item) }
-            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -795,54 +784,25 @@ private struct AdminEditUserSheet: View {
         }
     }
 
-    private func loadPendingPhoto(_ item: PhotosPickerItem) async {
-        isLoadingPhoto = true
-        defer { isLoadingPhoto = false }
-        guard let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data) else {
-            errorMessage = "That image couldn't be read."
-            return
-        }
-        pendingPhoto = image
-    }
-
-    /// Sends the name and/or photo. Photos are downscaled and JPEG-encoded here
-    /// so the callable carries roughly a hundred kilobytes rather than a
-    /// full-resolution capture.
-    private func saveProfile(clearPhoto: Bool = false) async {
-        isSavingProfile = true
+    /// Applied on toggle rather than on Save: the mark is independent of the
+    /// progression fields the Save button batches, and an immediate write
+    /// matches how the inbox's Approve behaves.
+    private func setVerified(_ verified: Bool) async {
+        isSavingVerified = true
         errorMessage = nil
-        profileMessage = nil
-        defer { isSavingProfile = false }
-
-        var payload: [String: Any] = ["passcode": passcode, "targetUid": user.uid]
-        payload["displayName"] = nameText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if clearPhoto {
-            payload["clearPhoto"] = true
-        } else if let pendingPhoto, let data = Self.encodedJPEG(pendingPhoto) {
-            payload["photoBase64"] = data.base64EncodedString()
-        }
-
+        defer { isSavingVerified = false }
         do {
-            _ = try await functions.httpsCallable("adminSetUserProfile").call(payload)
-            profileMessage = clearPhoto ? "Admin photo cleared." : "Saved."
-            if clearPhoto { pendingPhoto = nil }
+            _ = try await functions.httpsCallable("adminSetVerified")
+                .call(["passcode": passcode, "targetUid": user.uid, "verified": verified])
+            Haptics.success()
+            var updated = user
+            updated.hasReviewedApp = verified
+            onSaved(updated)
         } catch {
+            Haptics.error()
             errorMessage = error.localizedDescription
+            verifiedDraft = !verified // roll the switch back; the write failed
         }
-    }
-
-    private static func encodedJPEG(_ image: UIImage, maxEdge: CGFloat = 512) -> Data? {
-        let longest = max(image.size.width, image.size.height)
-        guard longest > 0 else { return nil }
-        let scale = min(1, maxEdge / longest)
-        let target = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        let format = UIGraphicsImageRendererFormat.default()
-        format.scale = 1
-        let resized = UIGraphicsImageRenderer(size: target, format: format).image { _ in
-            image.draw(in: CGRect(origin: .zero, size: target))
-        }
-        return resized.jpegData(compressionQuality: 0.82)
     }
 
     private func forceRefresh() async {
@@ -977,7 +937,7 @@ private struct AdminEditUserSheet: View {
         let activitySource = user.lastActiveFromPresence
             ? "Last active is their most recent time with the app open."
             : "Last active falls back to a sign-in token refresh here — this account has no presence record yet, so treat it as approximate."
-        return "\(activitySource) Last signed in only moves when they re-enter credentials, which Sign in with Apple almost never asks for. Tap a row to copy it. A blank friend code means the account signed up but hasn't opened the app while signed in yet — the code is stamped on first authenticated launch."
+        return "\(activitySource) Tap a row to copy it. A blank friend code means the account signed up but hasn't opened the app while signed in yet — the code is stamped on first authenticated launch."
     }
 
     /// A read-only detail row that copies its value on tap. Values that aren't
@@ -1061,5 +1021,186 @@ private struct AdminCountryPickerView: View {
         .background(AppTheme.Colors.bg.ignoresSafeArea())
         .navigationTitle("Country flag")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Verified inbox
+
+/// Pending verified-mark submissions, populated by the `submitVerifiedProof`
+/// callable when users submit review screenshots in-app. Approving grants the
+/// mark; either outcome removes the row.
+struct AdminVerifiedInboxView: View {
+    let passcode: String
+    /// Lets the parent list flip its cached row without a full reload.
+    var onApproved: (String) -> Void
+
+    @State private var items: [InboxItem] = []
+    @State private var isLoading = true
+    @State private var resolvingUid: String?
+    @State private var errorMessage: String?
+
+    private let functions = Functions.functions(region: "us-central1")
+
+    struct InboxItem: Identifiable {
+        let uid: String
+        let displayName: String
+        let friendCode: String
+        let photoURL: String
+        let submittedAt: Date?
+        var id: String { uid }
+    }
+
+    var body: some View {
+        Group {
+            if isLoading {
+                ProgressView().tint(AppTheme.Colors.accent)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if items.isEmpty {
+                VStack(spacing: AppSpacing.sm) {
+                    VerifiedBadgeView(variant: .static, size: 40)
+                        .opacity(0.5)
+                    Text("No submissions waiting")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppTheme.Colors.subtext)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(items) { item in
+                        inboxRow(item)
+                            .listRowBackground(AppTheme.Colors.card)
+                    }
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(AppTheme.Colors.danger)
+                            .listRowBackground(AppTheme.Colors.card)
+                    }
+                }
+                .scrollContentBackground(.hidden)
+            }
+        }
+        .background(AppTheme.Colors.bg.ignoresSafeArea())
+        .navigationTitle("Verified inbox")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    private func inboxRow(_ item: InboxItem) -> some View {
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            HStack(spacing: 8) {
+                Text(item.displayName.isEmpty ? "(no name)" : item.displayName)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppTheme.Colors.text)
+                if !item.friendCode.isEmpty {
+                    Text(item.friendCode)
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(AppTheme.Colors.subtext)
+                }
+                Spacer(minLength: 0)
+                if let date = item.submittedAt {
+                    Text(date.formatted(.relative(presentation: .named)))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppTheme.Colors.faint)
+                }
+            }
+
+            // The screenshot itself — the whole point of the row.
+            AsyncImage(url: URL(string: item.photoURL)) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFit()
+                case .failure:
+                    Label("Couldn't load screenshot", systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                        .foregroundStyle(AppTheme.Colors.subtext)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, AppSpacing.lg)
+                default:
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, AppSpacing.lg)
+                }
+            }
+            .frame(maxHeight: 320)
+            .clipShape(RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous))
+
+            HStack(spacing: AppSpacing.sm) {
+                Button {
+                    Task { await resolve(item, approve: true) }
+                } label: {
+                    HStack(spacing: 6) {
+                        if resolvingUid == item.uid { ProgressView().tint(.white) }
+                        Text("Approve")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Capsule().fill(AppTheme.Colors.accent))
+                    .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    Task { await resolve(item, approve: false) }
+                } label: {
+                    Text("Reject")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Capsule().fill(AppTheme.Colors.danger.opacity(0.16)))
+                        .foregroundStyle(AppTheme.Colors.danger)
+                }
+                .buttonStyle(.plain)
+            }
+            .disabled(resolvingUid != nil)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func load() async {
+        errorMessage = nil
+        do {
+            let result = try await functions.httpsCallable("adminListVerifiedInbox")
+                .call(["passcode": passcode])
+            let data = result.data as? [String: Any] ?? [:]
+            let raw = data["items"] as? [[String: Any]] ?? []
+            items = raw.map { dict in
+                InboxItem(
+                    uid: dict["uid"] as? String ?? "",
+                    displayName: dict["displayName"] as? String ?? "",
+                    friendCode: dict["friendCode"] as? String ?? "",
+                    photoURL: dict["photoURL"] as? String ?? "",
+                    submittedAt: (dict["submittedAt"] as? Double).map {
+                        Date(timeIntervalSince1970: $0 / 1000)
+                    }
+                )
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isLoading = false
+    }
+
+    private func resolve(_ item: InboxItem, approve: Bool) async {
+        resolvingUid = item.uid
+        defer { resolvingUid = nil }
+        do {
+            _ = try await functions.httpsCallable("adminResolveVerifiedProof")
+                .call(["passcode": passcode, "targetUid": item.uid, "approve": approve])
+            if approve {
+                Haptics.success()
+                onApproved(item.uid)
+            } else {
+                Haptics.mediumTap()
+            }
+            withAnimation(.snappy) {
+                items.removeAll { $0.uid == item.uid }
+            }
+        } catch {
+            Haptics.error()
+            errorMessage = error.localizedDescription
+        }
     }
 }

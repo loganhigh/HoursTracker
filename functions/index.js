@@ -795,6 +795,7 @@ function buildAdminUserRow(uid, userData, profileData, authData, presenceData) {
       u.adminEquippedTitle ||
       rankTitle(Number(p.level) || Number(u.level) || 1, Number(p.prestige) || Number(u.prestige) || 0),
     countryCode: String(u.countryCode || p.countryCode || "").trim().toUpperCase(),
+    hasReviewedApp: p.hasReviewedApp === true || u.hasReviewedApp === true,
     profilePending: !hasPublicProfile,
   };
 }
@@ -1857,95 +1858,146 @@ exports.adminSetUserProgression = onCall(
 );
 
 /**
- * Admin-only: set a user's display name and/or profile photo.
+ * A signed-in user submits proof of their App Store review — the screenshot —
+ * for the verified mark. Replaces the old email round trip: the image lands in
+ * Storage and a doc lands in the `verifiedInbox` collection, which the admin
+ * console lists for approval.
  *
- * Both are overrides that stand until that user changes the value themselves —
- * see resolveAdminOverride in src/stats/recompute.js. The base value is
- * recorded here so the recompute can tell "user edited it" apart from the
- * routine profile republish every client does on launch.
- *
- * The photo is uploaded to a path the user's own client never writes, so
- * replacing their avatar can't silently overwrite the admin's copy — the
- * override is retired by the base comparison instead.
+ * Doc id is the uid, so resubmitting replaces the user's earlier submission
+ * instead of piling up copies — one pending review per account.
  */
-exports.adminSetUserProfile = onCall(
-  { region: "us-central1", secrets: [ADMIN_PASSCODE], memory: "512MiB" },
+exports.submitVerifiedProof = onCall(
+  { region: "us-central1", memory: "512MiB" },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+    const uid = request.auth.uid;
+
+    const photoBase64 = request.data?.photoBase64;
+    if (typeof photoBase64 !== "string" || !photoBase64) {
+      throw new HttpsError("invalid-argument", "photoBase64 is required.");
+    }
+    const buffer = Buffer.from(photoBase64, "base64");
+    const MAX_BYTES = 4 * 1024 * 1024;
+    if (buffer.length === 0 || buffer.length > MAX_BYTES) {
+      throw new HttpsError("invalid-argument", "Photo must be between 1 byte and 4 MB.");
+    }
+
+    const [userSnap, profileSnap] = await Promise.all([
+      db.collection("users").doc(uid).get(),
+      db.collection("publicProfiles").doc(uid).get(),
+    ]);
+    const u = userSnap.data() || {};
+    const p = profileSnap.data() || {};
+    if (p.hasReviewedApp === true) {
+      // Already verified — nothing to review.
+      return { status: "already-verified" };
+    }
+
+    const bucket = getStorage().bucket();
+    const file = bucket.file(`verified-proof/${uid}.jpg`);
+    const token = `${uid}-${Date.now()}`;
+    await file.save(buffer, {
+      contentType: "image/jpeg",
+      metadata: { metadata: { firebaseStorageDownloadTokens: token } },
+    });
+    const photoURL =
+      `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
+      `${encodeURIComponent(file.name)}?alt=media&token=${token}`;
+
+    await db.collection("verifiedInbox").doc(uid).set({
+      uid,
+      displayName: p.displayName || u.displayName || "",
+      friendCode: String(p.friendCode || u.friendCode || "").toUpperCase(),
+      photoURL,
+      status: "pending",
+      submittedAt: FieldValue.serverTimestamp(),
+    });
+
+    return { status: "submitted" };
+  }
+);
+
+/** Admin-only: the pending verified-mark submissions, newest first. */
+exports.adminListVerifiedInbox = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE] },
   async (request) => {
     assertAdmin(request);
+    const snap = await db.collection("verifiedInbox")
+      .where("status", "==", "pending")
+      .get();
+    const items = snap.docs
+      .map((doc) => {
+        const d = doc.data() || {};
+        return {
+          uid: d.uid || doc.id,
+          displayName: d.displayName || "",
+          friendCode: d.friendCode || "",
+          photoURL: d.photoURL || "",
+          submittedAt: d.submittedAt?.toMillis?.() ?? null,
+        };
+      })
+      .sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0));
+    return { ok: true, items };
+  }
+);
 
+/**
+ * Admin-only: approve or reject a verified-mark submission.
+ *
+ * Approval writes the flag to users/{uid} (so every future recompute keeps
+ * publishing it) AND directly onto publicProfiles (so the badge appears now,
+ * not after their next shift). The inbox doc keeps the outcome as an audit
+ * trail rather than being deleted.
+ */
+exports.adminResolveVerifiedProof = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE] },
+  async (request) => {
+    assertAdmin(request);
     const targetUid = request.data?.targetUid;
     if (!targetUid || typeof targetUid !== "string") {
       throw new HttpsError("invalid-argument", "targetUid is required.");
     }
+    const approve = request.data?.approve === true;
 
-    const userRef = db.collection("users").doc(targetUid);
-    const snap = await userRef.get();
-    const current = snap.data() || {};
-    const update = {};
-
-    // --- Display name -------------------------------------------------------
-    if (request.data?.displayName !== undefined) {
-      const raw = request.data.displayName;
-      if (raw === null || String(raw).trim() === "") {
-        update.adminDisplayName = FieldValue.delete();
-        update.adminDisplayNameBase = FieldValue.delete();
-      } else {
-        const name = String(raw).trim().slice(0, 40);
-        update.adminDisplayName = name;
-        // What they have right now. Any later change makes this stale and
-        // retires the override.
-        update.adminDisplayNameBase = String(current.displayName || "");
-      }
+    if (approve) {
+      await db.collection("users").doc(targetUid)
+        .set({ hasReviewedApp: true }, { merge: true });
+      await db.collection("publicProfiles").doc(targetUid)
+        .set({ hasReviewedApp: true }, { merge: true });
     }
+    await db.collection("verifiedInbox").doc(targetUid).set({
+      status: approve ? "approved" : "rejected",
+      resolvedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
 
-    // --- Profile photo ------------------------------------------------------
-    if (request.data?.clearPhoto === true) {
-      update.adminProfilePhotoURL = FieldValue.delete();
-      update.adminProfilePhotoBase = FieldValue.delete();
-    } else if (typeof request.data?.photoBase64 === "string" && request.data.photoBase64) {
-      const buffer = Buffer.from(request.data.photoBase64, "base64");
-      const MAX_BYTES = 4 * 1024 * 1024;
-      if (buffer.length === 0 || buffer.length > MAX_BYTES) {
-        throw new HttpsError("invalid-argument", "Photo must be between 1 byte and 4 MB.");
-      }
-      const bucket = getStorage().bucket();
-      // Deliberately not users/{uid}/profile/avatar.jpg — that path belongs to
-      // the user's own uploads.
-      const file = bucket.file(`users/${targetUid}/profile/admin-avatar.jpg`);
-      const token = `${targetUid}-${Date.now()}`;
-      await file.save(buffer, {
-        contentType: "image/jpeg",
-        metadata: { metadata: { firebaseStorageDownloadTokens: token } },
-      });
-      const url =
-        `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
-        `${encodeURIComponent(file.name)}?alt=media&token=${token}`;
-      update.adminProfilePhotoURL = url;
-      update.adminProfilePhotoBase = String(current.profilePhotoURL || "");
+    return { status: "ok", targetUid, approved: approve };
+  }
+);
+
+/**
+ * Admin-only: grant or revoke the verified mark directly.
+ *
+ * Written to both docs: users/{uid} so every future recompute keeps
+ * republishing it, publicProfiles so the badge changes now rather than after
+ * their next shift.
+ */
+exports.adminSetVerified = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE] },
+  async (request) => {
+    assertAdmin(request);
+    const targetUid = request.data?.targetUid;
+    if (!targetUid || typeof targetUid !== "string") {
+      throw new HttpsError("invalid-argument", "targetUid is required.");
     }
-
-    if (Object.keys(update).length === 0) {
-      throw new HttpsError("invalid-argument", "Nothing to update.");
+    if (typeof request.data?.verified !== "boolean") {
+      throw new HttpsError("invalid-argument", "verified must be a boolean.");
     }
-
-    await userRef.set(update, { merge: true });
-
-    // Republish so the change lands on publicProfiles now rather than waiting
-    // for their next shift write.
-    await recomputeUserStats(db, targetUid, {
-      skipFence: true,
-      skipLeaderboardUpdate: true,
-    });
-    await updateGlobalLeaderboard(db);
-
-    const after = await db.collection("publicProfiles").doc(targetUid).get();
-    const p = after.data() || {};
-    return {
-      status: "ok",
-      targetUid,
-      displayName: p.displayName || "",
-      profilePhotoURL: p.profilePhotoURL || "",
-    };
+    const verified = request.data.verified;
+    await db.collection("users").doc(targetUid)
+      .set({ hasReviewedApp: verified }, { merge: true });
+    await db.collection("publicProfiles").doc(targetUid)
+      .set({ hasReviewedApp: verified }, { merge: true });
+    return { status: "ok", targetUid, verified };
   }
 );
 

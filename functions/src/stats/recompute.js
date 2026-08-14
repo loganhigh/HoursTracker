@@ -167,36 +167,6 @@ function nameIsBlocked(raw) {
   return false;
 }
 
-/**
- * Resolves an admin override that lasts until the user changes the value
- * themselves.
- *
- * The client republishes its whole profile on every app open, so "the field was
- * written" can't mean "the user edited it". Instead the override records the
- * value that was current when the admin set it (`baseKey`). While the incoming
- * value still matches that base, the user hasn't touched it and the override
- * stands; the moment it differs they've deliberately changed it, so the
- * override is dropped and their choice wins from then on.
- *
- * Entirely server-side by design — old app versions in the wild never learn
- * about overrides, and this still behaves correctly for them.
- *
- * Returns { value, clear } where `clear` asks the caller to delete the override
- * fields in the same batch.
- */
-function resolveAdminOverride(userData, { overrideKey, baseKey, liveKey }) {
-  const override = userData[overrideKey];
-  if (override == null || override === "") return { value: null, clear: false };
-
-  const base = userData[baseKey];
-  const live = userData[liveKey];
-  // `base` absent means the override predates this scheme; honor it rather
-  // than dropping it on the first recompute.
-  const userChangedIt = base !== undefined && String(live || "") !== String(base || "");
-  if (userChangedIt) return { value: null, clear: true };
-  return { value: override, clear: false };
-}
-
 /** The display name as other users may see it: fallback when moderated. */
 function sanitizeDisplayName(raw, fallback) {
   const trimmed = String(raw || "").trim();
@@ -1032,35 +1002,10 @@ async function recomputeUserStats(db, uid, options = {}) {
   // carries every field the friends list + friend profile screen render, so a
   // friend never reads the private users/{uid} doc or recomputes anything. The
   // server (Admin SDK) is the sole writer; clients are denied by security rules.
-  // Admin-set name/photo, each standing until that user changes their own.
-  const nameOverride = resolveAdminOverride(userData, {
-    overrideKey: "adminDisplayName",
-    baseKey: "adminDisplayNameBase",
-    liveKey: "displayName",
-  });
-  const photoOverride = resolveAdminOverride(userData, {
-    overrideKey: "adminProfilePhotoURL",
-    baseKey: "adminProfilePhotoBase",
-    liveKey: "profilePhotoURL",
-  });
-  const clearedOverrides = {};
-  if (nameOverride.clear) {
-    clearedOverrides.adminDisplayName = FieldValue.delete();
-    clearedOverrides.adminDisplayNameBase = FieldValue.delete();
-  }
-  if (photoOverride.clear) {
-    clearedOverrides.adminProfilePhotoURL = FieldValue.delete();
-    clearedOverrides.adminProfilePhotoBase = FieldValue.delete();
-  }
-
   const publicProfile = {
     // Server-side moderation: whatever the client wrote to its own users doc,
-    // the name every OTHER user reads is sanitized here. An admin-set name
-    // skips the filter — it was chosen by a human with the console open, and
-    // the filter's job is policing what users pick for themselves.
-    displayName: nameOverride.value
-      ? String(nameOverride.value)
-      : sanitizeDisplayName(userData.displayName, "Friend"),
+    // the name every OTHER user reads is sanitized here.
+    displayName: sanitizeDisplayName(userData.displayName, "Friend"),
     // Verified badge. Client-owned (it records tapping through to the review
     // page), so it rides along unchanged rather than being derived here.
     hasReviewedApp: userData.hasReviewedApp === true,
@@ -1099,7 +1044,7 @@ async function recomputeUserStats(db, uid, options = {}) {
       stripWrappingQuotes(userData.adminEquippedTitle) ||
       sanitizedEquippedTitle(userData.equippedTitle) ||
       rankTitle(level, prestige),
-    profilePhotoURL: photoOverride.value || userData.profilePhotoURL || null,
+    profilePhotoURL: userData.profilePhotoURL || null,
     privacy: userData.privacy || {},
     acceptInvites: userData.acceptInvites !== false,
     // Company identity is sensitive PII (employer, role, start date) and
@@ -1120,12 +1065,6 @@ async function recomputeUserStats(db, uid, options = {}) {
     updatedAt,
   };
   batch.set(db.collection("publicProfiles").doc(uid), publicProfile, { merge: true });
-
-  // Retire overrides the user has now overtaken, in the same batch that
-  // publishes without them.
-  if (Object.keys(clearedOverrides).length > 0) {
-    batch.set(db.collection("users").doc(uid), clearedOverrides, { merge: true });
-  }
 
   // The users/{uid} "legacy mirror" of these stats is retired. publicProfiles
   // is the single friend-facing projection and users/{uid}/stats/* the single

@@ -1,18 +1,15 @@
 import SwiftUI
 import PhotosUI
-import MessageUI
+import FirebaseFunctions
 import UIKit
 
 // MARK: - Verified mark: proof of review
 //
 // The mark is granted by hand, so this sheet's whole job is making the round
 // trip painless: open the App Store, pick the screenshot from the library, and
-// hand off a pre-addressed, pre-filled email with the shot attached. The user
-// still taps Send themselves — that's Mail's own composer, not ours.
-//
-// The email carries the account's uid and name in its body. Without them a
-// screenshot of an App Store review (which carries only a nickname) can't be
-// matched back to an account, and the grant would be guesswork.
+// submit it. Submission goes straight to the app's own review inbox (the
+// `submitVerifiedProof` callable) — no email round trip — where the admin
+// console approves it and the badge appears.
 
 struct VerifiedReviewProofSheet: View {
     /// Already verified — the sheet congratulates instead of collecting.
@@ -25,9 +22,9 @@ struct VerifiedReviewProofSheet: View {
 
     @State private var pickerItem: PhotosPickerItem?
     @State private var stage: Stage = .idle
-    @State private var showingMailComposer = false
-    @State private var showingShareSheet = false
-    @State private var copiedAddress = false
+    @State private var isSubmitting = false
+
+    private let functions = Functions.functions(region: "us-central1")
 
     /// Where the flow is, which is also what the action area renders.
     private enum Stage: Equatable {
@@ -42,24 +39,6 @@ struct VerifiedReviewProofSheet: View {
             if case let .ready(image) = self { return image }
             return nil
         }
-    }
-
-    private var emailSubject: String {
-        "Hour Tracker — verified mark request"
-    }
-
-    /// Everything needed to match the review to an account, so the grant isn't
-    /// a guess against an App Store nickname.
-    private var emailBody: String {
-        """
-        Hi! I left a review for Hour Tracker — screenshot attached.
-
-        Name: \(accountName.isEmpty ? "(not set)" : accountName)
-        Account ID: \(accountUid ?? "(signed out)")
-        App version: \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"))
-
-        Thanks!
-        """
     }
 
     var body: some View {
@@ -93,49 +72,6 @@ struct VerifiedReviewProofSheet: View {
             guard let item else { return }
             Task { await loadScreenshot(item) }
         }
-        .sheet(isPresented: $showingMailComposer) {
-            MailComposeView(
-                recipient: VerifiedTracker.proofRecipient,
-                subject: emailSubject,
-                body: emailBody,
-                attachment: stage.image
-            ) { result in
-                showingMailComposer = false
-                switch result {
-                case .sent:
-                    Haptics.success()
-                    withAnimation(AppMotion.animation(.spring(response: 0.5, dampingFraction: 0.7), reduceMotion: reduceMotion)) {
-                        stage = .sent
-                    }
-                case .failed:
-                    Haptics.error()
-                    stage = .failed("Mail couldn't send that. Try the share sheet instead.")
-                default:
-                    break // Cancelled or saved as a draft: leave the shot staged.
-                }
-            }
-            .ignoresSafeArea()
-        }
-        .sheet(isPresented: $showingShareSheet) {
-            // No Mail account on the device. The share sheet reaches Gmail,
-            // Outlook, or whatever else they actually use — but it can't
-            // pre-address the message, so the address goes on the clipboard
-            // on the way in (see sendButton).
-            ProofShareSheet(items: shareItems) { completed in
-                showingShareSheet = false
-                guard completed else { return }
-                Haptics.success()
-                withAnimation(AppMotion.animation(AppMotion.Spring.celebratory, reduceMotion: reduceMotion)) {
-                    stage = .sent
-                }
-            }
-        }
-    }
-
-    private var shareItems: [Any] {
-        var items: [Any] = ["\(emailSubject)\n\n\(emailBody)"]
-        if let image = stage.image { items.append(image) }
-        return items
     }
 
     // MARK: Header
@@ -151,7 +87,7 @@ struct VerifiedReviewProofSheet: View {
 
             Text(isVerified
                  ? "Your mark shows beside your name everywhere other trackers can see you."
-                 : "Leave a review, send us a screenshot of it, and we'll add the mark beside your name.")
+                 : "Leave a review, submit a screenshot of it, and we'll add the mark beside your name.")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
                 .multilineTextAlignment(.center)
@@ -201,23 +137,9 @@ struct VerifiedReviewProofSheet: View {
             stepRow(
                 number: 3,
                 title: "Send us a screenshot!",
-                detail: VerifiedTracker.proofRecipient,
+                detail: "Submitted right here in the app.",
                 isDone: stage == .sent
-            ) {
-                Button {
-                    UIPasteboard.general.string = VerifiedTracker.proofRecipient
-                    Haptics.lightTap()
-                    withAnimation(.snappy) { copiedAddress = true }
-                } label: {
-                    Image(systemName: copiedAddress ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(copiedAddress ? AppColors.accent : AppColors.subtext)
-                        .frame(width: 30, height: 30)
-                        .contentTransition(.symbolEffect(.replace))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Copy email address")
-            }
+            ) { EmptyView() }
         }
     }
 
@@ -335,30 +257,75 @@ struct VerifiedReviewProofSheet: View {
     private var sendButton: some View {
         Button {
             Haptics.lightTap()
-            if MFMailComposeViewController.canSendMail() {
-                showingMailComposer = true
-            } else {
-                // Nothing downstream can fill in the recipient for them.
-                UIPasteboard.general.string = VerifiedTracker.proofRecipient
-                copiedAddress = true
-                showingShareSheet = true
-            }
+            Task { await submitProof() }
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: "paperplane.fill")
-                    .font(.system(size: 15, weight: .bold))
-                Text("Email it to us")
+                if isSubmitting {
+                    ProgressView()
+                        .tint(AppColors.textOnAccent)
+                } else {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 15, weight: .bold))
+                }
+                Text(isSubmitting ? "Submitting…" : "Submit for review")
                     .font(.system(size: 16, weight: .heavy, design: .rounded))
+                    .contentTransition(.opacity)
             }
             .foregroundStyle(AppColors.textOnAccent)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
             .background(
                 RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                    .fill(AppColors.accent)
+                    .fill(AppColors.accent.opacity(isSubmitting ? 0.7 : 1))
             )
         }
         .buttonStyle(.plain)
+        .disabled(isSubmitting)
+    }
+
+    /// Ships the screenshot to the app's own review inbox. The image is
+    /// re-encoded at 1024px JPEG first, so the call carries a few hundred
+    /// kilobytes instead of a full-resolution screenshot.
+    private func submitProof() async {
+        guard let image = stage.image, !isSubmitting else { return }
+        guard accountUid != nil else {
+            stage = .failed("Sign in to submit — the mark is attached to your account.")
+            return
+        }
+        isSubmitting = true
+        defer { isSubmitting = false }
+
+        guard let data = Self.encodedJPEG(image) else {
+            stage = .failed("That image couldn't be read. Try picking it again.")
+            return
+        }
+        do {
+            _ = try await functions.httpsCallable("submitVerifiedProof")
+                .call(["photoBase64": data.base64EncodedString()])
+            Haptics.success()
+            withAnimation(AppMotion.animation(AppMotion.Spring.celebratory, reduceMotion: reduceMotion)) {
+                stage = .sent
+            }
+        } catch {
+            Haptics.error()
+            withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
+                stage = .failed("Couldn't submit right now. Check your connection and try again.")
+            }
+        }
+    }
+
+    /// Longest edge 1024px — enough to read a review screenshot comfortably.
+    private static func encodedJPEG(_ image: UIImage, maxEdge: CGFloat = 1024) -> Data? {
+        let longest = max(image.size.width, image.size.height)
+        guard longest > 0 else { return nil }
+        let scale = min(1, maxEdge / longest)
+        let target = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let resized = UIGraphicsImageRenderer(size: target, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: target))
+        }
+        return resized.jpegData(compressionQuality: 0.8)
     }
 
     // MARK: Loading
@@ -500,7 +467,7 @@ private struct SentConfirmation: View {
                 .font(.system(size: 18, weight: .heavy, design: .rounded))
                 .foregroundStyle(AppColors.text)
 
-            Text("We'll add your mark once we've had a look. It shows up on its own — no need to check back.")
+            Text("Your screenshot is in our review queue. Once it's approved the mark shows up on its own — no need to check back.")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
                 .multilineTextAlignment(.center)
@@ -519,70 +486,6 @@ private struct SentConfirmation: View {
         .onAppear {
             withAnimation(AppMotion.animation(AppMotion.Spring.celebratory, reduceMotion: reduceMotion)) {
                 appeared = true
-            }
-        }
-    }
-}
-
-// MARK: - Share fallback
-
-/// Like `ShareSheet`, but reports whether the user actually completed a share
-/// rather than just dismissing — the difference between "sent" and "changed
-/// their mind", which the confirmation below shouldn't get wrong.
-private struct ProofShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-    var onComplete: (Bool) -> Void
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        let vc = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        vc.completionWithItemsHandler = { _, completed, _, _ in onComplete(completed) }
-        return vc
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
-// MARK: - Mail composer
-
-/// Wraps MFMailComposeViewController. The user sends it themselves — this only
-/// pre-fills the recipient, subject, body, and attachment.
-struct MailComposeView: UIViewControllerRepresentable {
-    let recipient: String
-    let subject: String
-    let body: String
-    let attachment: UIImage?
-    var onFinish: (MFMailComposeResult) -> Void
-
-    func makeUIViewController(context: Context) -> MFMailComposeViewController {
-        let vc = MFMailComposeViewController()
-        vc.mailComposeDelegate = context.coordinator
-        vc.setToRecipients([recipient])
-        vc.setSubject(subject)
-        vc.setMessageBody(body, isHTML: false)
-        if let attachment, let data = attachment.jpegData(compressionQuality: 0.85) {
-            vc.addAttachmentData(data, mimeType: "image/jpeg", fileName: "review.jpg")
-        }
-        return vc
-    }
-
-    func updateUIViewController(_ uiViewController: MFMailComposeViewController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator { Coordinator(onFinish: onFinish) }
-
-    final class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
-        let onFinish: (MFMailComposeResult) -> Void
-
-        init(onFinish: @escaping (MFMailComposeResult) -> Void) {
-            self.onFinish = onFinish
-        }
-
-        func mailComposeController(
-            _ controller: MFMailComposeViewController,
-            didFinishWith result: MFMailComposeResult,
-            error: Error?
-        ) {
-            controller.dismiss(animated: true) { [onFinish] in
-                onFinish(error == nil ? result : .failed)
             }
         }
     }

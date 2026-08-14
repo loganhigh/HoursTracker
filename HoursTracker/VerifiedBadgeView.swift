@@ -28,9 +28,6 @@ import Combine
 enum VerifiedTracker {
     /// For rows built from a published profile.
     static func isVerified(reviewed: Bool) -> Bool { reviewed }
-
-    /// Where proof of a review is sent.
-    static let proofRecipient = "trackedhours@gmail.com"
 }
 
 /// Watches the signed-in user's own published profile for the verified flag.
