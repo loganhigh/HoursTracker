@@ -47,7 +47,7 @@ struct HistoryTabView: View {
                     // Each year is its own card titled with the year, so the
                     // year label travels with its cheques instead of pinning
                     // to the top and trailing the user into later years.
-                    ForEach(yearGroups) { group in
+                    ForEach(Array(yearGroups.enumerated()), id: \.element.id) { groupIndex, group in
                         ChequeYearCard(year: group.year) {
                             ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
                                 if index > 0 {
@@ -56,6 +56,7 @@ struct HistoryTabView: View {
                                 tableRow(for: row, index: index)
                             }
                         }
+                        .cardAppear(index: groupIndex, group: "history")
                     }
                 }
             }
@@ -78,6 +79,7 @@ struct HistoryTabView: View {
             subtitle: subtitle(for: row),
             status: status(for: row),
             accentLine: accentLine(for: row),
+            projection: projection(for: row),
             index: index
         ) {
             PayCycleDetailView(
@@ -96,20 +98,19 @@ struct HistoryTabView: View {
         return "\(shiftsCaption(for: entries)) · \(AppTheme.Format.hours(cycleHours(row.cycle)))"
     }
 
-    /// Third row line: a paid cheque shows the total the user recorded for
-    /// it; the live cheque shows the learned projection once at least two
-    /// totals exist. Nothing renders until the user has typed totals in, so
-    /// the feature is invisible until it has real data to stand on.
+    /// Recorded total on a paid cheque's row, in green. Nothing renders until
+    /// the user has typed totals in.
     private func accentLine(for row: ChequeRow) -> (text: String, tint: Color)? {
-        if let recorded = store.actualPayout(for: row.cycle) {
-            return (Self.currency(recorded), AppColors.positive)
-        }
-        guard row.isCurrent else { return nil }
+        guard let recorded = store.actualPayout(for: row.cycle) else { return nil }
+        return (Self.currency(recorded), AppColors.positive)
+    }
+
+    /// The live cheque's projection, once at least two totals exist. The
+    /// amount rides AnimatedMetricText so it rolls when hours change.
+    private func projection(for row: ChequeRow) -> (amount: Double, currencyCode: String, caption: String)? {
+        guard row.isCurrent, store.actualPayout(for: row.cycle) == nil else { return nil }
         guard let prediction = currentPrediction() else { return nil }
-        return (
-            "Projected ~\(Self.currency(prediction.amount)) · \(prediction.confidence.label)",
-            AppColors.accent
-        )
+        return (prediction.amount, store.paySettings.currencyCode, prediction.confidence.label)
     }
 
     /// Projection for the live cheque, learned from every past period the

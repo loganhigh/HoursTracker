@@ -107,3 +107,52 @@ final class PayPredictorTests: XCTestCase {
         XCTAssertEqual(predict(withSamples: 10)?.confidence, .high)
     }
 }
+
+// MARK: - Hours-aware regression
+
+extension PayPredictorTests {
+
+    /// "I get 72h five times — the system knows 72h pays X."
+    func testRepeatedIdenticalHoursPinTheirPayout() {
+        let past = (1...5).map { cheque(14 * $0, hours: 72, payout: 1800) }
+        let p = AdvancedPayPredictor.predict(currentHours: 72, past: past)!
+        XCTAssertEqual(p.amount, 1800, accuracy: 0.01)
+        XCTAssertEqual(p.confidence, .medium)
+    }
+
+    /// With spread in the history, higher hours ride the learned line —
+    /// overtime slope included — not a flat rate.
+    func testSpreadTeachesTheSlopeForUnseenHours() {
+        // ~$25/h base with OT pushing marginal dollars above that:
+        // 60h → $1500, 72h → $1900, 90h → $2500.
+        let past = [
+            cheque(56, hours: 60, payout: 1500),
+            cheque(42, hours: 72, payout: 1900),
+            cheque(28, hours: 72, payout: 1900),
+            cheque(14, hours: 90, payout: 2500),
+        ]
+        let at72 = AdvancedPayPredictor.predict(currentHours: 72, past: past)!
+        XCTAssertEqual(at72.amount, 1900, accuracy: 60) // near the observed 72h payout
+
+        let at100 = AdvancedPayPredictor.predict(currentHours: 100, past: past)!
+        // The line's marginal rate (~$33/h across the observed span) carries
+        // past the highest observed hours; a flat $25/h would say ~$2500.
+        XCTAssertGreaterThan(at100.amount, 2700)
+        XCTAssertLessThan(at100.amount, 3600)
+    }
+
+    /// A nonsense negative slope (less pay for more hours) is not trusted —
+    /// the flat-rate path answers instead.
+    func testNegativeSlopeFallsBackToFlatRate() {
+        let past = [
+            cheque(42, hours: 60, payout: 2400),
+            cheque(28, hours: 80, payout: 2000),
+            cheque(14, hours: 100, payout: 1600),
+        ]
+        let p = AdvancedPayPredictor.predict(currentHours: 80, past: past)!
+        // Fallback WMA rate is positive and sane; the line would have sloped
+        // downward and been rejected.
+        XCTAssertGreaterThan(p.amount, 0)
+        XCTAssertEqual(p.netRate, (40.0 * 1 + 25.0 * 2 + 16.0 * 3) / 6.0, accuracy: 0.001)
+    }
+}

@@ -242,9 +242,11 @@ struct FriendsView: View {
         return ScrollView {
             VStack(spacing: AppSpacing.md) {
                 FriendsHeroHeader(onAddFriend: { showingAddFriend = true })
+                    .cardAppear(index: 0, group: "friends")
 
                 if !entries.isEmpty {
                     PayPeriodPodiumCard(entries: entries)
+                        .cardAppear(index: 1, group: "friends")
                 }
 
                 if let actionMessage {
@@ -290,6 +292,7 @@ struct FriendsView: View {
 
                 friendsList(entries)
                     .padding(.top, AppSpacing.xxs)
+                    .cardAppear(index: 2, group: "friends")
             }
             .padding(.horizontal, AppSpacing.md)
             .padding(.vertical, AppSpacing.md)

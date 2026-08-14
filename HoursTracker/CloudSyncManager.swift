@@ -39,6 +39,7 @@ final class CloudSyncManager: ObservableObject {
     private var entriesListener: ListenerRegistration?
     private var entriesListenerKey: String?
     private var settingsListener: ListenerRegistration?
+    private var chequeTotalsListener: ListenerRegistration?
     private var settingsListenerKey: String?
     private var gamificationListener: ListenerRegistration?
     private var gamificationListenerKey: String?
@@ -1234,6 +1235,8 @@ final class CloudSyncManager: ObservableObject {
         }
         settingsListener?.remove()
         settingsListener = nil
+        chequeTotalsListener?.remove()
+        chequeTotalsListener = nil
         settingsListenerKey = nil
         if let gamificationListenerKey {
             FirebaseListenerRegistry.shared.remove(key: gamificationListenerKey)
@@ -1335,6 +1338,45 @@ final class CloudSyncManager: ObservableObject {
         startEntriesListener(uid: uid)
         startSettingsListener(uid: uid)
         startGamificationListener(uid: uid)
+        startChequeTotalsListener(uid: uid)
+    }
+
+    // MARK: - Cheque totals (user-recorded actual payouts)
+
+    /// Pushes the full totals map. Whole-document replace: totals are edited
+    /// one at a time on a single device in practice, and replacing the map is
+    /// what makes a removal propagate too.
+    func saveChequeTotals(_ totals: [String: Double]) {
+        guard let uid = currentUID else { return }
+        db.collection("users").document(uid)
+            .collection("paySettings").document("chequeTotals")
+            .setData([
+                "totals": totals,
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: false)
+    }
+
+    /// Mirrors the cloud copy into HoursStore so a second device (or a
+    /// reinstall) sees the same recorded cheques the projection learns from.
+    private func startChequeTotalsListener(uid: String) {
+        chequeTotalsListener?.remove()
+        let registration = db.collection("users").document(uid)
+            .collection("paySettings").document("chequeTotals")
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self else { return }
+                DispatchQueue.main.async {
+                    guard self.currentUID == uid else { return }
+                    if error != nil { return } // next snapshot repairs
+                    guard let raw = snapshot?.data()?["totals"] as? [String: Any] else { return }
+                    let totals = raw.compactMapValues { value -> Double? in
+                        if let d = value as? Double { return d }
+                        if let n = value as? NSNumber { return n.doubleValue }
+                        return nil
+                    }
+                    self.hoursStore?.applyRemoteChequeTotals(totals)
+                }
+            }
+        chequeTotalsListener = registration
     }
 
     private func startGamificationListener(uid: String) {

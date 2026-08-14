@@ -87,11 +87,17 @@ struct AccountView: View {
                     settingsBar
                     identityHero
                 }
+                .cardAppear(index: 0, group: "you")
                 ProfileXPCapsule(store: store)
+                    .cardAppear(index: 1, group: "you")
                 lifetimeStatsSection
+                    .cardAppear(index: 2, group: "you")
                 navigationCard
+                    .cardAppear(index: 3, group: "you")
                 accountSection
+                    .cardAppear(index: 4, group: "you")
                 versionFooter
+                    .cardAppear(index: 5, group: "you")
             }
             .padding(.horizontal, AppSpacing.md)
             .padding(.top, AppSpacing.xs)

@@ -132,6 +132,7 @@ struct YearlyOverviewSection: View {
 struct MonthlyOverviewChart: View {
     let data: [(label: String, hours: Double)]
     @State private var appeared = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var maxHours: Double {
         max(data.map(\.hours).max() ?? 8, 8)
@@ -185,7 +186,16 @@ struct MonthlyOverviewChart: View {
                                         : 0
                                 )
                                 .opacity(item.hours > 0 ? 1 : 0)
-                                .animation(AppMotion.Spring.smooth.delay(Double(index) * 0.04), value: appeared)
+                                // Ease-out growth from the baseline: fast
+                                // launch, gentle landing — no spring wobble on
+                                // a data chart. 40ms per month keeps the whole
+                                // year under a second.
+                                .animation(
+                                    reduceMotion
+                                        ? nil
+                                        : .easeOut(duration: 0.55).delay(Double(index) * 0.04),
+                                    value: appeared
+                                )
                         }
                         .frame(maxWidth: .infinity)
                     }

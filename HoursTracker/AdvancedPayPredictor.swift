@@ -65,6 +65,37 @@ struct AdvancedPayPredictor {
         }
     }
 
+    /// Recency-weighted least squares over (hours, payout). Nil when there
+    /// are too few points or the hours barely vary — the guard that keeps a
+    /// vertical stack of identical-hour cheques from fitting a garbage line.
+    private static func weightedLine(
+        _ usable: [PastCheque]
+    ) -> (intercept: Double, slope: Double)? {
+        guard usable.count >= 3 else { return nil }
+        let hours = usable.map(\.hours)
+        guard let minH = hours.min(), let maxH = hours.max() else { return nil }
+        let sortedH = hours.sorted()
+        let median = sortedH[sortedH.count / 2]
+        // Spread must be meaningful: at least 4h and 10% of a typical period.
+        guard maxH - minH > max(4, median * 0.10) else { return nil }
+
+        var sw = 0.0, swx = 0.0, swy = 0.0
+        for (index, c) in usable.enumerated() {
+            let w = Double(index + 1)
+            sw += w; swx += w * c.hours; swy += w * c.payout
+        }
+        let xBar = swx / sw, yBar = swy / sw
+        var num = 0.0, den = 0.0
+        for (index, c) in usable.enumerated() {
+            let w = Double(index + 1)
+            num += w * (c.hours - xBar) * (c.payout - yBar)
+            den += w * (c.hours - xBar) * (c.hours - xBar)
+        }
+        guard den > 0 else { return nil }
+        let slope = num / den
+        return (yBar - slope * xBar, slope)
+    }
+
     /// If the live period's hours exceed the historical median by this factor,
     /// the projected rate starts scaling up — heavy periods land dispropor-
     /// tionately in overtime, which the flat learned rate under-counts.
@@ -95,6 +126,28 @@ struct AdvancedPayPredictor {
             totalWeight += weight
         }
         let baseRate = weightedRate / totalWeight
+
+        // When the history has real SPREAD in hours, upgrade from a flat rate
+        // to a recency-weighted line payout = a + b·hours. Five cheques at
+        // 72h pin down exactly what 72h pays; the cheques above and below
+        // teach the marginal rate — overtime included — so hours the user has
+        // never logged before land on the learned line instead of a flat
+        // extrapolation. Falls back to the WMA rate when every cheque has
+        // nearly the same hours (a line fitted to one x-value is noise).
+        if let line = Self.weightedLine(usable), line.slope > 0 {
+            let projected = line.intercept + line.slope * currentHours
+            if projected > 0 {
+                return Prediction(
+                    amount: projected,
+                    netRate: projected / currentHours,
+                    sampleCount: usable.count,
+                    confidence: Confidence(sampleCount: usable.count),
+                    // The slope IS the volume adjustment — heavy periods pay
+                    // more per hour by construction, no bolt-on cap needed.
+                    volumeAdjusted: false
+                )
+            }
+        }
 
         // Volume scaling against the median (not mean — one outlier period
         // shouldn't move the yardstick everything is compared to).

@@ -196,10 +196,13 @@ struct PayCycleDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppTheme.Spacing.xl) {
                     heroBlock
+                        .cardAppear(index: 0, group: "cheque")
 
                     payBreakdownSection
+                        .cardAppear(index: 1, group: "cheque")
 
                     chequeTotalSection
+                        .cardAppear(index: 2, group: "cheque")
 
                     if cycleEntries.isEmpty {
                         EmptyStateView(

@@ -1791,6 +1791,16 @@ final class HoursStore: ObservableObject {
             actualPayouts.removeValue(forKey: key)
         }
         UserDefaults.standard.set(actualPayouts, forKey: Self.actualPayoutsKey)
+        cloudSync.saveChequeTotals(actualPayouts)
+    }
+
+    /// Cloud copy of the totals arriving from the listener. Replaces local
+    /// wholesale — the doc is last-writer-wins, and an unchanged map is
+    /// dropped early so the echo of this device's own write is a no-op.
+    func applyRemoteChequeTotals(_ remote: [String: Double]) {
+        guard remote != actualPayouts else { return }
+        actualPayouts = remote
+        UserDefaults.standard.set(actualPayouts, forKey: Self.actualPayoutsKey)
     }
 
     func payCycle(containing date: Date, calendar: Calendar = .current) -> PayCycle {

@@ -89,16 +89,19 @@ struct GlobalLeaderboardView: View {
             ScrollView {
                 LazyVStack(spacing: AppSpacing.sm) {
                     GlobalRankHeroCard(rank: myTracker?.rank)
+                        .cardAppear(index: 0, group: "globalBoard")
 
                     VerifiedReviewNote(isVerified: verified.isVerified) {
                         showingProofSheet = true
                     }
+                    .cardAppear(index: 1, group: "globalBoard")
 
                     GlobalStatsStrip(
                         trackerCount: topTrackers.allTrackers.count,
                         totalHours: totalRankedHours,
                         activeNow: presence.activeNowCount
                     )
+                    .cardAppear(index: 2, group: "globalBoard")
 
                     if showsPodium {
                         GlobalPodiumRow(
@@ -112,6 +115,7 @@ struct GlobalLeaderboardView: View {
 
                     if !listTrackers.isEmpty {
                         rankedList
+                            .cardAppear(index: 4, group: "globalBoard")
                     }
                 }
                 .padding(.horizontal, AppSpacing.md)

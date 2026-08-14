@@ -56,6 +56,9 @@ struct ChequeTableRow<Destination: View>: View {
     /// Optional third line: recorded cheque total on paid rows, the live
     /// projection on the In Progress row. Tinted by the caller.
     var accentLine: (text: String, tint: Color)? = nil
+    /// Live projection line with a rolling-digits amount. Takes precedence
+    /// over `accentLine` when both are set.
+    var projection: (amount: Double, currencyCode: String, caption: String)? = nil
     /// Staggers this row's entrance so a card's rows arrive in sequence.
     let index: Int
     @ViewBuilder let destination: () -> Destination
@@ -81,7 +84,21 @@ struct ChequeTableRow<Destination: View>: View {
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
                         .lineLimit(1)
-                    if let accentLine {
+                    if let projection {
+                        // Rolling odometer digits: the amount ticks over as
+                        // hours land instead of snapping — same treatment as
+                        // Home's hero numbers.
+                        HStack(spacing: 3) {
+                            Text("Projected ~")
+                            AnimatedMetricText(currency: projection.amount, code: projection.currencyCode)
+                                .monospacedDigit()
+                            Text("· \(projection.caption)")
+                        }
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppColors.accent)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    } else if let accentLine {
                         Text(accentLine.text)
                             .font(.system(size: 12, weight: .bold, design: .rounded))
                             .monospacedDigit()

@@ -30,11 +30,14 @@ enum AppMotion {
 
 @MainActor
 private enum CardAppearState {
-    static var completedIndices = Set<Int>()
+    /// Keyed "group:index" — each screen has its own entrance memory, so
+    /// visiting Home doesn't consume the You tab's first-impression stagger.
+    static var completedKeys = Set<String>()
 }
 
 private struct CardAppearModifier: ViewModifier {
     let index: Int
+    let group: String
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var visible = false
 
@@ -43,11 +46,12 @@ private struct CardAppearModifier: ViewModifier {
             .opacity(visible ? 1 : 0)
             .offset(y: visible ? 0 : (reduceMotion ? 0 : 8))
             .onAppear {
-                if CardAppearState.completedIndices.contains(index) {
+                let key = "\(group):\(index)"
+                if CardAppearState.completedKeys.contains(key) {
                     visible = true
                     return
                 }
-                CardAppearState.completedIndices.insert(index)
+                CardAppearState.completedKeys.insert(key)
                 if reduceMotion {
                     visible = true
                 } else {
@@ -370,8 +374,10 @@ struct GentleFadeIn: ViewModifier {
 // MARK: - View extensions
 
 extension View {
-    func cardAppear(index: Int) -> some View {
-        modifier(CardAppearModifier(index: index))
+    /// Staggered entrance: fade + rise, ~50ms per index. `group` scopes the
+    /// once-per-launch memory to a screen so every screen gets its own intro.
+    func cardAppear(index: Int, group: String = "home") -> some View {
+        modifier(CardAppearModifier(index: index, group: group))
     }
 
     func podiumRise(delay: Double = 0) -> some View {
