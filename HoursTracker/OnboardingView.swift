@@ -20,9 +20,10 @@ enum AppTutorialStorage {
 
 // MARK: - OnboardingView
 //
-// Three paged screens: Welcome → Features → Sign in. The moment Firebase
-// confirms the session the user lands on Home — there is no post-auth setup
-// step (company details live in Settings → Company Profile).
+// Five paged screens: Welcome → Leaderboard → Display name → Pay cycle →
+// Sign in. Setup comes before the account, so the last thing a new user does
+// is authenticate; the moment Firebase confirms the session, onboarding ends
+// and they land on Home. (Company details still live in Settings.)
 //
 // Auto-advance is LEVEL-triggered, not edge-triggered. The old
 // AppTutorialView only listened for the isSignedIn false→true edge and
@@ -52,11 +53,15 @@ struct OnboardingView: View {
 
     @State private var payPeriodDraft: PayPeriodType = .biWeekly
     @State private var paydayDraft = OnboardingView.defaultPayday()
+    @State private var usesCutoffDraft = false
+    @State private var cutoffDraft = OnboardingView.defaultPayday()
 
+    // Setup first, sign-in last: the account is the final step, so the pager
+    // ends on it and auth completion ends onboarding.
     private let pageCount = 5
-    private let signInPageIndex = 2
-    private let namePageIndex = 3
-    private let payPageIndex = 4
+    private let namePageIndex = 2
+    private let payPageIndex = 3
+    private let signInPageIndex = 4
 
     /// Seeds the payday picker with the next Friday — the most common payday,
     /// and a date the user is more likely to adjust than to type from scratch.
@@ -89,14 +94,6 @@ struct OnboardingView: View {
         }
         .onChange(of: page) { _, newPage in
             Haptics.lightTap()
-            // The pager is swipeable; the setup pages are only reachable once
-            // signed in, so a forward swipe past sign-in snaps back. The
-            // rehearsal hook may bypass the gate — it never runs in production.
-            if newPage > signInPageIndex && !authService.isSignedIn
-                && ProcessInfo.processInfo.environment["ONBOARDING_DEMO"] == nil {
-                page = signInPageIndex
-                return
-            }
             if newPage == namePageIndex {
                 prefillNameDraft()
             }
@@ -111,9 +108,6 @@ struct OnboardingView: View {
             // touch input. Inert unless the launch environment carries the
             // variable, which production never does.
             guard let demo = ProcessInfo.processInfo.environment["ONBOARDING_DEMO"] else { return }
-            // "name" and "pay" walk into the post-sign-in setup pages (which
-            // real users only reach authenticated); anything else stops at
-            // sign-in.
             let lastPage: Int
             switch demo {
             case "name": lastPage = namePageIndex
@@ -164,14 +158,14 @@ struct OnboardingView: View {
             }
             .tag(1)
 
-            signInPage
-                .tag(signInPageIndex)
-
             namePage
                 .tag(namePageIndex)
 
             payPage
                 .tag(payPageIndex)
+
+            signInPage
+                .tag(signInPageIndex)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .animation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion), value: page)
@@ -182,11 +176,11 @@ struct OnboardingView: View {
     private var topBar: some View {
         HStack {
             Spacer()
-            if page < signInPageIndex {
+            if page < namePageIndex {
                 Button("Skip") {
                     Haptics.lightTap()
                     withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
-                        page = signInPageIndex
+                        page = namePageIndex
                     }
                 }
                 .appText(.subheadline)
@@ -202,7 +196,7 @@ struct OnboardingView: View {
         VStack(spacing: AppSpacing.md) {
             OnboardingPageIndicator(count: pageCount, current: page)
 
-            if page < signInPageIndex {
+            if page < namePageIndex {
                 Button(page == 0 ? "Get Started" : "Continue") {
                     Haptics.lightTap()
                     withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
@@ -352,19 +346,9 @@ struct OnboardingView: View {
             Haptics.error()
             return
         }
+        // Stored locally only — there is no account yet at this point in the
+        // flow. `finishOnboarding` reasserts it once auth completes.
         UserDefaults.standard.set(name, forKey: "profile_display_name")
-        // Push straight to users/{uid} — the profile snapshot sync that
-        // normally rewrites it runs when tabs appear, but the very next thing
-        // the server publishes shouldn't carry the provider name.
-        if let user = authService.user {
-            Task {
-                try? await authService.upsertUserDocument(
-                    uid: user.uid,
-                    displayName: name,
-                    email: user.email
-                )
-            }
-        }
         Haptics.success()
         withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
             page = payPageIndex
@@ -402,15 +386,42 @@ struct OnboardingView: View {
                 }
                 .pickerStyle(.segmented)
 
-                DatePicker(
-                    "Next payday",
-                    selection: $paydayDraft,
-                    displayedComponents: .date
-                )
-                .datePickerStyle(.compact)
+                VStack(spacing: 0) {
+                    DatePicker(
+                        "Next payday",
+                        selection: $paydayDraft,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.compact)
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.vertical, 12)
+
+                    Divider().overlay(AppColors.stroke)
+
+                    Toggle(isOn: $usesCutoffDraft.animation(
+                        AppMotion.animation(AppMotion.Spring.snappy, reduceMotion: reduceMotion)
+                    )) {
+                        Text("Hours cutoff")
+                            .appText(.body)
+                            .foregroundStyle(AppColors.text)
+                    }
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.vertical, 6)
+
+                    if usesCutoffDraft {
+                        Divider().overlay(AppColors.stroke)
+
+                        DatePicker(
+                            "Cutoff date",
+                            selection: $cutoffDraft,
+                            displayedComponents: .date
+                        )
+                        .datePickerStyle(.compact)
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.vertical, 12)
+                    }
+                }
                 .tint(AppColors.accent)
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.vertical, 12)
                 .background(
                     RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
                         .fill(AppColors.card2.opacity(0.6))
@@ -419,6 +430,14 @@ struct OnboardingView: View {
                                 .stroke(AppColors.stroke.opacity(0.5), lineWidth: 1)
                         )
                 )
+
+                Text(usesCutoffDraft
+                     ? "Hours are counted up to the cutoff, then paid on payday."
+                     : "Hours are counted right up to payday.")
+                    .appText(.caption)
+                    .foregroundStyle(AppColors.faint)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Button("Continue") {
                     savePayCycleAndFinish()
@@ -434,9 +453,18 @@ struct OnboardingView: View {
     private func savePayCycleAndFinish() {
         store.paySettings.payPeriodType = payPeriodDraft
         store.paySettings.nextPayday = Calendar.current.startOfDay(for: paydayDraft)
+        store.paySettings.payPeriodUsesCutoff = usesCutoffDraft
+        // Cleared rather than left stale when off — Settings does the same, so
+        // toggling back on there starts from "Select date" instead of a date
+        // the user never chose.
+        store.paySettings.nextCutoff = usesCutoffDraft
+            ? Calendar.current.startOfDay(for: cutoffDraft)
+            : nil
         store.persist()
         Haptics.success()
-        finishOnboarding()
+        withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
+            page = signInPageIndex
+        }
     }
 
     // MARK: - Auth auto-advance
@@ -449,18 +477,33 @@ struct OnboardingView: View {
     @MainActor
     private func advanceIfReady() {
         guard !hasAdvanced else { return }
-        guard page >= signInPageIndex, page < namePageIndex else { return }
+        guard page >= signInPageIndex else { return }
         guard authService.isSignedIn, !authService.isSigningIn else { return }
         hasAdvanced = true
         Haptics.success()
-        withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
-            page = namePageIndex
-        }
+        finishOnboarding()
     }
 
     // MARK: - Completion (same semantics as the old finishTutorial)
 
     private func finishOnboarding() {
+        // Sign-in runs last, and the auth paths set `profile_display_name`
+        // from the provider account — which would silently discard the name
+        // the user chose two screens earlier. Reassert it here, and push it so
+        // the first thing the server publishes is the chosen name.
+        let chosen = String(nameDraft.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
+        if !chosen.isEmpty, BroadContentFilter.shared.validate(chosen).isAllowed {
+            UserDefaults.standard.set(chosen, forKey: "profile_display_name")
+            if let user = authService.user {
+                Task {
+                    try? await authService.upsertUserDocument(
+                        uid: user.uid,
+                        displayName: chosen,
+                        email: user.email
+                    )
+                }
+            }
+        }
         AppTutorialStorage.markComplete()
         onComplete?()
         guard dismissesWhenComplete else { return }
