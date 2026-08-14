@@ -681,6 +681,9 @@ struct HoursHomeView: View {
                         .tracking(1.5)
                 }
                 .frame(maxWidth: .infinity)
+                // Pulls the footer group up against the last card — the
+                // stack's full section gap read as the note floating alone.
+                .padding(.top, -AppSpacing.sm)
                 .padding(.bottom, 20)
             }
             .padding(.horizontal, AppTheme.Spacing.md)

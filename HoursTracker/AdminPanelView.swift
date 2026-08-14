@@ -159,9 +159,11 @@ struct AdminPanelView: View {
     private var userList: some View {
         VStack(spacing: 0) {
             if isLoading && users.isEmpty {
-                Spacer()
-                ProgressView().tint(AppTheme.Colors.accent)
-                Spacer()
+                // Full-frame labelled loading state: with the passcode gate
+                // gone this is the console's opening frame, and the old bare
+                // spinner between two Spacers read as a broken empty sheet
+                // while adminListUsers walked every auth account.
+                SoftLoadingIndicator(title: "Loading users…")
             } else {
                 List {
                     Section {
