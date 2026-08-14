@@ -278,29 +278,31 @@ struct VerifiedReviewNote: View {
     let isVerified: Bool
     var onTap: () -> Void
 
+    /// The seal rides inside the sentence rather than sitting beside it, so the
+    /// badge itself names what's on offer and the whole thing stays one line.
+    /// A `Text`-embedded image can't shimmer — that's the trade for inlining.
+    private var line: Text {
+        let seal = Text(Image(systemName: "checkmark.seal.fill"))
+            .foregroundColor(VerifiedBadgeView.badgeBlue)
+        if isVerified {
+            return Text("Thanks for reviewing — your ") + seal + Text(" is live!")
+        }
+        return Text("(Users who review the app receive a ") + seal + Text(" beside their name!)")
+    }
+
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 6) {
-                VerifiedBadgeView(variant: isVerified ? .shimmer : .static, size: 13)
-                VStack(spacing: 1) {
-                    Text(isVerified
-                         ? "Thanks for reviewing — your verified mark is live!"
-                         : "(Users who review the app receive a verified mark beside their name!)")
-                    if !isVerified {
-                        Text("Tap to send us proof")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(AppColors.accent)
-                    }
-                }
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(AppColors.subtext)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, AppSpacing.xs)
-            .padding(.horizontal, AppSpacing.sm)
-            .contentShape(Rectangle())
+            line
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(AppColors.subtext)
+                // One line by design: this sits between the rank card and the
+                // stats strip, where a second row would push the podium down.
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, AppSpacing.xs)
+                .padding(.horizontal, AppSpacing.sm)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         // Nothing left to earn once it's granted, so the row goes read-only.

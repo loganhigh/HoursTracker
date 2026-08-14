@@ -94,7 +94,7 @@ struct VerifiedBadgeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// hsl(203, 89%, 57%) from the original, i.e. the standard verified blue.
-    private static let badgeBlue = Color(red: 0.114, green: 0.631, blue: 0.949)
+    static let badgeBlue = Color(red: 0.114, green: 0.631, blue: 0.949)
 
     /// One sweep, then a pause, matching the source's 0.5s sweep and 1.5s
     /// repeatDelay.
