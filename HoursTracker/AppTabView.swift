@@ -71,6 +71,13 @@ struct AppTabView: View {
                 switch newValue {
                 case .add:
                     Haptics.lightTap()
+                    // Republish the CURRENT tab even though nothing changed:
+                    // the native bar moves its visual selection before this
+                    // setter runs, and when the cover presents in the same
+                    // beat the bar can be left sitting on the clear pseudo-tab
+                    // — a black screen. The same-value publish forces TabView
+                    // to re-read `get` and snap back under the cover.
+                    tabRouter.selection = tabRouter.selection
                     showingAddShift = true
                 case .friends where !friendsEnabled:
                     tabRouter.selection = .home
@@ -96,8 +103,10 @@ struct AppTabView: View {
             .tabItem { Label("History", systemImage: "calendar") }
             .tag(AppTab.history)
 
-            // Never actually selected — the binding intercepts this tag.
-            Color.clear
+            // Never actually selected — the binding intercepts this tag. App
+            // background rather than Color.clear so that if the bar ever does
+            // land here it shows the normal backdrop, not a black void.
+            AppColors.bg.ignoresSafeArea()
                 .tabItem { Label("Add", systemImage: "plus.circle.fill") }
                 .tag(AppTab.add)
 
@@ -117,6 +126,12 @@ struct AppTabView: View {
         }
         .tint(AppColors.accent)
         .environmentObject(tabRouter)
+        // Last line of defense: nothing should ever leave the pseudo-tab
+        // selected, but if a restore or race does, recover to Home instead of
+        // stranding the user on an empty screen until they force-quit.
+        .onChange(of: tabRouter.selection) { _, newValue in
+            if newValue == .add { tabRouter.selection = .home }
+        }
         .onChange(of: friendsEnabled) { _, isEnabled in
             // Friends can be the selected tab at the moment it's switched off
             // (the toggle lives in a sheet that can be opened from anywhere).
