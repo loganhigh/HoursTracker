@@ -980,6 +980,40 @@ final class HoursStore: ObservableObject {
         }
     }
 
+    /// Saved sites grouped by city for the pickers, each group's sites in
+    /// recency order. Cities sort alphabetically; sites with no city collect
+    /// in a trailing group, so an un-citied list looks exactly as it did
+    /// before cities existed.
+    func jobSitesGroupedByCity(_ sites: [JobSite]? = nil) -> [(title: String, sites: [JobSite])] {
+        let source = sites ?? jobSitesByRecency
+        let grouped = Dictionary(grouping: source, by: \.cityGroupKey)
+        return grouped
+            .map { key, value in
+                (key: key, title: value.first?.cityGroupTitle ?? "No city", sites: value)
+            }
+            .sorted { lhs, rhs in
+                // Empty key is the no-city bucket — always last.
+                if lhs.key.isEmpty != rhs.key.isEmpty { return rhs.key.isEmpty }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+            .map { (title: $0.title, sites: $0.sites) }
+    }
+
+    /// Cities already in use, for the editor's quick-pick chips. Offering the
+    /// existing spellings is what keeps "Calgary" from splitting into three
+    /// near-identical groups.
+    var knownJobSiteCities: [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for site in jobSitesByRecency {
+            let key = site.cityGroupKey
+            guard !key.isEmpty, !seen.contains(key) else { continue }
+            seen.insert(key)
+            result.append(site.city.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return result.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
     /// False when another saved site would exceed the free allowance.
     /// Users already over the limit (from before it existed, or after
     /// letting Pro lapse) keep every site they have — this only blocks

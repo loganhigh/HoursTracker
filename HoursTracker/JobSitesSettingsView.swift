@@ -28,25 +28,35 @@ struct JobSitesSettingsView: View {
                             .foregroundStyle(AppColors.subtext)
                     }
 
-                    ForEach(store.jobSitesByRecency) { site in
-                        Button {
-                            editingSite = site
-                        } label: {
-                            HStack(spacing: AppSpacing.sm) {
-                                SettingsRowLabel(
-                                    icon: site.iconName,
-                                    title: site.name,
-                                    subtitle: site.displaySubtitle
-                                )
-                                Spacer(minLength: AppSpacing.xs)
-                                SettingsChevron()
-                            }
+                    ForEach(store.jobSitesGroupedByCity(), id: \.title) { group in
+                        // One heading per city, so a list spanning several
+                        // towns reads as several short lists.
+                        if store.jobSitesGroupedByCity().count > 1 {
+                            Text(group.title)
+                                .appText(.eyebrow)
+                                .foregroundStyle(AppColors.subtext)
+                                .padding(.top, AppSpacing.xxs)
                         }
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) {
-                                pendingDelete = site
+                        ForEach(group.sites) { site in
+                            Button {
+                                editingSite = site
                             } label: {
-                                Label("Delete", systemImage: "trash")
+                                HStack(spacing: AppSpacing.sm) {
+                                    SettingsRowLabel(
+                                        icon: site.iconName,
+                                        title: site.name,
+                                        subtitle: site.displaySubtitle
+                                    )
+                                    Spacer(minLength: AppSpacing.xs)
+                                    SettingsChevron()
+                                }
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    pendingDelete = site
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
                             }
                         }
                     }
@@ -145,7 +155,11 @@ struct JobSiteEditorSheet: View {
                 ScrollView {
                     VStack(spacing: AppSpacing.md) {
                         AddShiftPanel {
-                            JobSiteFormFields(draft: $draft, nameFocused: nil)
+                            JobSiteFormFields(
+                                draft: $draft,
+                                nameFocused: nil,
+                                knownCities: store.knownJobSiteCities
+                            )
                         }
 
                         if existing != nil {

@@ -36,6 +36,12 @@ struct AddShiftLocationPickerSheet: View {
     private var filtered: [JobSite] { ordered.filter { $0.matches(query) } }
     private var recent: [JobSite] { Array(filtered.prefix(3)) }
     private var rest: [JobSite] { Array(filtered.dropFirst(3)) }
+    /// Everything past Recent, grouped by city. Recent stays ungrouped — it
+    /// is a shortcut, and splitting three rows across city headings would
+    /// bury the thing it exists to surface.
+    private var restByCity: [(title: String, sites: [JobSite])] {
+        store.jobSitesGroupedByCity(rest)
+    }
 
     var body: some View {
         NavigationStack {
@@ -55,8 +61,8 @@ struct AddShiftLocationPickerSheet: View {
                             if !recent.isEmpty {
                                 section(title: "Recent", sites: recent)
                             }
-                            if !rest.isEmpty {
-                                section(title: "All Locations / Jobs", sites: rest)
+                            ForEach(restByCity, id: \.title) { group in
+                                section(title: group.title, sites: group.sites)
                             }
                         }
 
@@ -208,7 +214,11 @@ struct AddShiftLocationPickerSheet: View {
 
                 if isAddingNew {
                     EntryRowDivider()
-                    JobSiteFormFields(draft: $draft, nameFocused: $nameFocused)
+                    JobSiteFormFields(
+                        draft: $draft,
+                        nameFocused: $nameFocused,
+                        knownCities: store.knownJobSiteCities
+                    )
                         .padding(.top, AppSpacing.sm)
                     Button("Save Location / Job", action: commitDraft)
                         .buttonStyle(SecondaryButtonStyle())
@@ -267,6 +277,7 @@ struct JobSiteDraft {
     var id: String?
     var name: String = ""
     var detail: String = ""
+    var city: String = ""
     var iconName: String = JobSite.defaultIcon
     var createdAt: Date = Date()
     var lastUsedAt: Date?
@@ -277,6 +288,7 @@ struct JobSiteDraft {
         id = site.id
         name = site.name
         detail = site.detail
+        city = site.city
         iconName = site.iconName
         createdAt = site.createdAt
         lastUsedAt = site.lastUsedAt
@@ -291,6 +303,7 @@ struct JobSiteDraft {
             id: id ?? UUID().uuidString,
             name: name,
             detail: detail,
+            city: city,
             iconName: iconName,
             createdAt: createdAt,
             lastUsedAt: lastUsedAt
@@ -303,6 +316,10 @@ struct JobSiteDraft {
 struct JobSiteFormFields: View {
     @Binding var draft: JobSiteDraft
     var nameFocused: FocusState<Bool>.Binding?
+    /// Cities already in use, offered as chips. Tapping one reuses its exact
+    /// spelling, which is what keeps a city from splitting into near-identical
+    /// groups.
+    var knownCities: [String] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
@@ -311,6 +328,24 @@ struct JobSiteFormFields: View {
                 .appText(.body)
                 .foregroundStyle(AppColors.text)
                 .tint(AppColors.accent)
+
+            TextField("City (optional)", text: $draft.city)
+                .appText(.body)
+                .foregroundStyle(AppColors.text)
+                .tint(AppColors.accent)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+
+            if !suggestedCities.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: AppSpacing.xs) {
+                        ForEach(suggestedCities, id: \.self) { city in
+                            cityChip(city)
+                        }
+                    }
+                    .padding(.horizontal, 1)
+                }
+            }
 
             Text("Icon")
                 .appText(.eyebrow)
@@ -322,6 +357,34 @@ struct JobSiteFormFields: View {
                 }
             }
         }
+    }
+
+    /// Chips for cities the user hasn't already typed.
+    private var suggestedCities: [String] {
+        let current = draft.city.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return knownCities.filter { $0.lowercased() != current }
+    }
+
+    private func cityChip(_ city: String) -> some View {
+        Button {
+            Haptics.lightTap()
+            draft.city = city
+        } label: {
+            Text(city)
+                .appText(.caption)
+                .foregroundStyle(AppColors.accent)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(AppColors.accent.opacity(0.12))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(AppColors.accent.opacity(0.25), lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
