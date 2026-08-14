@@ -127,6 +127,17 @@ final class TopTrackersService: ObservableObject {
     @Published private(set) var hasLoaded = false
     @Published private(set) var isLoadingFull = false
 
+    /// Rank deltas from the most recent live snapshot (uid → places gained,
+    /// negative = dropped). Only ever set from genuine reorderings of the
+    /// authoritative query — the first snapshot is baseline, never movement —
+    /// and cleared a beat later so the ↑/↓ chips are transient by design.
+    @Published private(set) var movements: [String: Int] = [:]
+    /// Bumped once per movement batch, so views can hook haptics/banners to
+    /// "a new batch landed" without diffing the dictionary themselves.
+    @Published private(set) var movementToken = 0
+
+    private var movementClearTask: Task<Void, Never>?
+
     private let db = Firestore.firestore()
     private var listenerKey: String?
     private var isListening = false
@@ -164,6 +175,36 @@ final class TopTrackersService: ObservableObject {
         )
     }
 
+    /// Rank deltas between two orderings, keyed by uid. Pure so the initial-
+    /// load and reorder behaviors are unit-testable. Entrants absent from
+    /// `previous` produce no movement — appearing isn't the same as climbing.
+    nonisolated static func rankMovements(previous: [TopTracker], current: [TopTracker]) -> [String: Int] {
+        guard !previous.isEmpty else { return [:] }
+        let oldRank = Dictionary(uniqueKeysWithValues: previous.map { ($0.uid, $0.rank) })
+        var moves: [String: Int] = [:]
+        for tracker in current {
+            guard let was = oldRank[tracker.uid], was != tracker.rank else { continue }
+            moves[tracker.uid] = was - tracker.rank // positive = climbed
+        }
+        return moves
+    }
+
+    /// Chips and highlights are transient: visible long enough to read
+    /// (~2.6s), then gone, leaving the plain board. A newer batch restarts
+    /// the clock rather than being cut short by the older batch's clear.
+    private func scheduleMovementClear() {
+        movementClearTask?.cancel()
+        movementClearTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_600_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.5)) {
+                    self?.movements = [:]
+                }
+            }
+        }
+    }
+
     func stopListening() {
         if let listenerKey { FirebaseListenerRegistry.shared.remove(key: listenerKey) }
         listenerKey = nil
@@ -174,6 +215,8 @@ final class TopTrackersService: ObservableObject {
         hasServerFullList = false
         isFetchingFull = false
         isLoadingFull = false
+        movementClearTask?.cancel()
+        movements = [:]
     }
 
     /// Loads the full global rankings when the server doc has not been backfilled yet.
@@ -210,7 +253,28 @@ final class TopTrackersService: ObservableObject {
     private func applyRankedProfiles(_ snapshot: QuerySnapshot?) {
         let previousAllCount = allTrackers.count
         let documents = snapshot?.documents ?? []
-        allTrackers = Self.parsePublicProfileDocuments(documents)
+        let parsed = Self.parsePublicProfileDocuments(documents)
+
+        // Cache replays on listener attach look like fresh data but are just
+        // the baseline coming back — movement only ever comes from a live,
+        // server-confirmed reordering of an already-loaded board.
+        let fromCache = snapshot?.metadata.isFromCache == true
+        let moves = (hasLoaded && !fromCache)
+            ? Self.rankMovements(previous: allTrackers, current: parsed)
+            : [:]
+
+        if moves.isEmpty {
+            allTrackers = parsed
+        } else {
+            // One coordinated transaction: every affected row slides to its
+            // new position together under the same spring.
+            withAnimation(AppMotion.Spring.podium) {
+                allTrackers = parsed
+            }
+            movements = moves
+            movementToken &+= 1
+            scheduleMovementClear()
+        }
         topTrackers = Array(allTrackers.prefix(5))
         // Fewer raw documents than the query limit means the query exhausted
         // publicProfiles — the live slice already holds every ranked user, so

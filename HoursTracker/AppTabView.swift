@@ -59,6 +59,7 @@ struct AppTabView: View {
     @State private var showingSettings = false
     @AppStorage(FriendsFeature.storageKey) private var friendsEnabled = true
     @ObservedObject private var crewService = CrewService.shared
+    @ObservedObject private var notificationRouter = NotificationRouter.shared
     @ObservedObject private var friendsService = FriendsService.shared
 
     /// Intercepting selection binding: the "+" item opens the add-shift sheet
@@ -131,6 +132,11 @@ struct AppTabView: View {
         // stranding the user on an empty screen until they force-quit.
         .onChange(of: tabRouter.selection) { _, newValue in
             if newValue == .add { tabRouter.selection = .home }
+        }
+        // The leaderboard destination lives on Home's stack — bring that tab
+        // forward before the router flag presents it.
+        .onChange(of: notificationRouter.openGlobalLeaderboard) { _, isOpen in
+            if isOpen { tabRouter.selection = .home }
         }
         .onChange(of: friendsEnabled) { _, isEnabled in
             // Friends can be the selected tab at the moment it's switched off

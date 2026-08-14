@@ -16,6 +16,7 @@
 		7A0001A12F30000100000001 /* OvertimeRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001A02F30000100000001 /* OvertimeRulesTests.swift */; };
 		7A0001A52F30000100000002 /* LiveShiftManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001A42F30000100000002 /* LiveShiftManagerTests.swift */; };
 		7A0001A72F30000100000003 /* BroadContentFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001A62F30000100000003 /* BroadContentFilterTests.swift */; };
+		7A0001A92F30000100000004 /* LeaderboardMovementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001A82F30000100000004 /* LeaderboardMovementTests.swift */; };
 		FB004MSG2F90000100000004B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = FB004MSG2F90000100000004 /* FirebaseMessaging */; };
 		FB005STG2F90000100000005B /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = FB005STG2F90000100000005 /* FirebaseStorage */; };
 		FB006FUN2F90000100000006B /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = FB006FUN2F90000100000006 /* FirebaseFunctions */; };
@@ -63,6 +64,7 @@
 		7A0001A32F30000100000001 /* HoursTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HoursTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A0001A42F30000100000002 /* LiveShiftManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveShiftManagerTests.swift; sourceTree = "<group>"; };
 		7A0001A62F30000100000003 /* BroadContentFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BroadContentFilterTests.swift; sourceTree = "<group>"; };
+		7A0001A82F30000100000004 /* LeaderboardMovementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardMovementTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -178,6 +180,7 @@
 				7A0001A02F30000100000001 /* OvertimeRulesTests.swift */,
 				7A0001A42F30000100000002 /* LiveShiftManagerTests.swift */,
 				7A0001A62F30000100000003 /* BroadContentFilterTests.swift */,
+				7A0001A82F30000100000004 /* LeaderboardMovementTests.swift */,
 			);
 			path = HoursTrackerTests;
 			sourceTree = "<group>";
@@ -350,6 +353,7 @@
 				7A0001A12F30000100000001 /* OvertimeRulesTests.swift in Sources */,
 				7A0001A52F30000100000002 /* LiveShiftManagerTests.swift in Sources */,
 				7A0001A72F30000100000003 /* BroadContentFilterTests.swift in Sources */,
+				7A0001A92F30000100000004 /* LeaderboardMovementTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

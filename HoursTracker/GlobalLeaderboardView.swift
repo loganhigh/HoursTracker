@@ -18,6 +18,11 @@ struct GlobalLeaderboardView: View {
 
     @State private var showingProofSheet = false
 
+    /// Own row's vertical position in screen space — nil while unknown. Drives
+    /// the "you moved" banner only when the row can't currently be seen.
+    @State private var ownRowY: CGFloat?
+    @State private var movementBanner: String?
+
     private var myUid: String? { authService.user?.uid }
 
     private var myTracker: TopTracker? {
@@ -80,6 +85,7 @@ struct GlobalLeaderboardView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
+            ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: AppSpacing.sm) {
                     GlobalRankHeroCard(rank: myTracker?.rank)
@@ -98,7 +104,8 @@ struct GlobalLeaderboardView: View {
                         GlobalPodiumRow(
                             entries: topTrackers.allTrackers,
                             currentUid: myUid,
-                            onlineUids: presence.onlineUids
+                            onlineUids: presence.onlineUids,
+                            movements: topTrackers.movements
                         )
                         .padding(.top, AppSpacing.xs)
                     }
@@ -110,7 +117,56 @@ struct GlobalLeaderboardView: View {
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.bottom, AppSpacing.lg)
             }
+            // A movement batch just landed. Haptics only for MY row — the
+            // board animating other people's moves should stay silent — and
+            // only here, while the board is actually on screen.
+            .onChange(of: topTrackers.movementToken) { _, _ in
+                guard let myUid, let delta = topTrackers.movements[myUid] else { return }
+                if delta > 0 { Haptics.success() } else { Haptics.mediumTap() }
+                if let rank = topTrackers.tracker(for: myUid)?.rank, ownRowOffscreen {
+                    withAnimation(AppMotion.Spring.snappy) {
+                        movementBanner = delta > 0 ? "↑ You moved to #\(rank)" : "↓ You're now #\(rank)"
+                    }
+                    Task {
+                        try? await Task.sleep(nanoseconds: 4_000_000_000)
+                        withAnimation(.easeOut(duration: 0.4)) { movementBanner = nil }
+                    }
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if let movementBanner {
+                    Button {
+                        Haptics.lightTap()
+                        if let myUid {
+                            withAnimation(AppMotion.Spring.smooth) {
+                                proxy.scrollTo(myUid, anchor: .center)
+                            }
+                        }
+                        withAnimation(.easeOut(duration: 0.3)) { self.movementBanner = nil }
+                    } label: {
+                        Text(movementBanner)
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppColors.textOnAccent)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(Capsule(style: .continuous).fill(AppColors.accent))
+                            .appShadowCard()
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, AppSpacing.md)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            }
         }
+    }
+
+    /// Best-effort visibility: the row publishes its screen-space Y; if that
+    /// sits outside the screen (or was never seen because LazyVStack hasn't
+    /// built it), the row isn't visible.
+    private var ownRowOffscreen: Bool {
+        guard let ownRowY else { return true }
+        return ownRowY < 0 || ownRowY > UIScreen.main.bounds.height
     }
 
     private var rankedList: some View {
@@ -120,8 +176,14 @@ struct GlobalLeaderboardView: View {
                     tracker: tracker,
                     currentUid: myUid,
                     // Own row skips the dot — you're by definition here.
-                    isOnline: tracker.uid != myUid && presence.onlineUids.contains(tracker.uid)
+                    isOnline: tracker.uid != myUid && presence.onlineUids.contains(tracker.uid),
+                    movement: topTrackers.movements[tracker.uid]
                 )
+                .id(tracker.uid)
+                .modifier(OwnRowGeometryReporter(
+                    isOwnRow: tracker.uid == myUid,
+                    y: $ownRowY
+                ))
                 if tracker.id != listTrackers.last?.id {
                     Divider()
                         .overlay(AppColors.stroke)
@@ -195,5 +257,25 @@ struct CountryFlagPickerView: View {
         .background(AppColors.bg.ignoresSafeArea())
         .navigationTitle("Country flag")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+
+/// Publishes the current user's row position in screen space, so the view can
+/// tell whether their movement happened outside the visible viewport.
+private struct OwnRowGeometryReporter: ViewModifier {
+    let isOwnRow: Bool
+    @Binding var y: CGFloat?
+
+    func body(content: Content) -> some View {
+        if isOwnRow {
+            content.onGeometryChange(for: CGFloat.self) {
+                $0.frame(in: .global).midY
+            } action: { midY in
+                y = midY
+            }
+        } else {
+            content
+        }
     }
 }

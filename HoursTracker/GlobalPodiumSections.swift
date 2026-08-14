@@ -14,6 +14,9 @@ struct GlobalPodiumRow: View {
     let currentUid: String?
     /// Uids with a fresh presence stamp — podium names get the online dot.
     var onlineUids: Set<String> = []
+    /// Live rank deltas from the latest reorder — podium slots show the same
+    /// transient chip the list rows do.
+    var movements: [String: Int] = [:]
 
     private var podium: [TopTracker] { Array(entries.prefix(3)) }
 
@@ -67,12 +70,19 @@ struct GlobalPodiumRow: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 
-                Text(GlobalHoursFormat.hours(entry.hours))
-                    .font(.system(size: isWinner ? 21 : 18, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(metal)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                HStack(spacing: 5) {
+                    Text(GlobalHoursFormat.hours(entry.hours))
+                        .font(.system(size: isWinner ? 21 : 18, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .animation(AppMotion.Spring.snappy, value: entry.hours)
+                        .foregroundStyle(metal)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    if let move = movements[entry.uid] {
+                        RankMovementChip(delta: move)
+                    }
+                }
 
                 if entry.streak > 0 {
                     HStack(spacing: 3) {
@@ -178,6 +188,9 @@ struct GlobalTrackerRow: View {
     let currentUid: String?
     /// Tracker is on the app right now (their presence stamp is fresh).
     var isOnline: Bool = false
+    /// Places just gained (+) or lost (−) in the latest live reorder; nil when
+    /// this row didn't move. Drives the transient chip and highlight.
+    var movement: Int? = nil
 
     private var isMe: Bool { tracker.uid == currentUid }
 
@@ -186,6 +199,10 @@ struct GlobalTrackerRow: View {
             Text("\(tracker.rank)")
                 .font(.system(size: 14, weight: .heavy, design: .rounded))
                 .monospacedDigit()
+                // Rolls the digits when the rank changes instead of swapping
+                // the whole glyph — no flicker.
+                .contentTransition(.numericText())
+                .animation(AppMotion.Spring.snappy, value: tracker.rank)
                 .foregroundStyle(isMe ? AppColors.accent : AppColors.subtext)
                 .frame(width: GlobalLeaderboardMetrics.rankColumnWidth, alignment: .leading)
 
@@ -230,9 +247,15 @@ struct GlobalTrackerRow: View {
 
             Spacer(minLength: AppSpacing.xs)
 
+            if let movement {
+                RankMovementChip(delta: movement)
+            }
+
             Text(GlobalHoursFormat.hours(tracker.hours))
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(AppMotion.Spring.snappy, value: tracker.hours)
                 .foregroundStyle(isMe ? AppColors.accent : AppColors.text)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -241,8 +264,51 @@ struct GlobalTrackerRow: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                .fill(isMe ? AppColors.accent.opacity(0.12) : Color.clear)
+                .fill(rowFill)
         )
         .contentShape(Rectangle())
+    }
+
+    /// While a movement chip is up, the row carries a whisper of green (up) or
+    /// red (down) under the usual treatment; it fades out with the chip when
+    /// the service clears movements. Own-row accent still wins visually.
+    private var rowFill: Color {
+        if let movement {
+            let tint = movement > 0 ? Color.green : Color.red
+            return isMe
+                ? AppColors.accent.opacity(0.12)
+                : tint.opacity(movement > 0 ? 0.08 : 0.05)
+        }
+        return isMe ? AppColors.accent.opacity(0.12) : Color.clear
+    }
+}
+
+// MARK: - Transient movement chip
+
+/// "↑ 2" / "↓ 1" beside the hours while a live reorder is fresh. Appears with
+/// a small spring, and disappears when TopTrackersService clears its movement
+/// batch (~2.6s) — nothing on the board carries a permanent arrow.
+struct RankMovementChip: View {
+    let delta: Int
+
+    private var up: Bool { delta > 0 }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: up ? "arrow.up" : "arrow.down")
+                .font(.system(size: 9, weight: .heavy))
+            Text("\(abs(delta))")
+                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+        }
+        .foregroundStyle(up ? Color.green : Color.red)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(
+            Capsule(style: .continuous)
+                .fill((up ? Color.green : Color.red).opacity(0.14))
+        )
+        .transition(.scale(scale: 0.6).combined(with: .opacity))
+        .accessibilityLabel(up ? "Moved up \(delta) places" : "Moved down \(abs(delta)) places")
     }
 }

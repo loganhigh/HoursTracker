@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import Combine
 import UserNotifications
 import FirebaseAuth
 import FirebaseFirestore
@@ -41,6 +42,33 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
     ) {
         completionHandler([.banner, .sound, .badge])
     }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        if let kind = userInfo["kind"] as? String, kind == "leaderboardRank" {
+            Task { @MainActor in
+                NotificationRouter.shared.openGlobalLeaderboard = true
+            }
+        }
+        completionHandler()
+    }
+}
+
+// MARK: - Notification routing
+
+/// Where a tapped push should land. Views observe and consume the flags; the
+/// delegate above only ever raises them.
+@MainActor
+final class NotificationRouter: ObservableObject {
+    static let shared = NotificationRouter()
+    /// Raised by a leaderboard-rank push; HoursHomeView presents the global
+    /// board and lowers it.
+    @Published var openGlobalLeaderboard = false
+    private init() {}
 }
 
 // MARK: - Push notification service

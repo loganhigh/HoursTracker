@@ -272,6 +272,7 @@ struct HoursHomeView: View {
     @ObservedObject private var friendsService = FriendsService.shared
     @ObservedObject private var statsListener = StatsListenerService.shared
     @ObservedObject private var topTrackers = TopTrackersService.shared
+    @ObservedObject private var notificationRouter = NotificationRouter.shared
     @EnvironmentObject private var levelUpCoordinator: LevelUpCoordinator
 
     @State private var showingAdd = false
@@ -604,6 +605,12 @@ struct HoursHomeView: View {
             .padding(.top, 12)
             }
             .scrollContentBackground(.hidden)
+        }
+        // Tapping a leaderboard push lands on the board itself, not just the
+        // app. Home owns the NavigationStack the board normally pushes onto,
+        // so the router flag drives the same destination.
+        .navigationDestination(isPresented: $notificationRouter.openGlobalLeaderboard) {
+            GlobalLeaderboardView()
         }
         .onAppear {
             store.advanceNextPaydayIfNeeded()

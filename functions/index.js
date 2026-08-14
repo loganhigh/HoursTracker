@@ -21,6 +21,7 @@ const {
   stripWrappingQuotes,
   sanitizeDisplayName,
 } = require("./src/stats/recompute");
+const rankMoves = require("./src/leaderboard/rankMoves");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
@@ -970,101 +971,76 @@ function leaderboardAlertsEnabled(data) {
 }
 
 /**
- * The closest tracker who overtook `cand` since their last-notified baseline:
- * ranked above them now, ranked below them then. Returns a display name, or
- * null when nobody actually passed (a rank can also drop because someone
- * *above* them left the board, which is not an overtake and shouldn't be
- * reported as one).
- *
- * "Closest" = the largest rank number among the overtakers, i.e. the one
- * directly ahead — the person the user has a realistic shot at recatching.
+ * Presence stamps for a batch of uids, as ms timestamps (null = no stamp).
+ * One getAll, so the cost tracks the candidate count, never the board size.
  */
-function nearestOvertaker(cand, current, prevRankByUid) {
-  let best = null;
-  for (const entry of current) {
-    if (!entry || entry.uid === cand.uid) continue;
-    if (!Number.isFinite(entry.rank) || entry.rank >= cand.rank) continue; // not above us now
-    const was = prevRankByUid.get(entry.uid);
-    // Unknown previous rank means they weren't on the broadcast slice before,
-    // so they climbed in from below — that counts as passing us.
-    const wasBelow = was === undefined || was > cand.baselineRank;
-    if (!wasBelow) continue;
-    if (!best || entry.rank > best.rank) best = entry;
+async function lastActiveByUid(uids) {
+  const out = new Map();
+  if (!uids.length) return out;
+  const refs = uids.map((uid) => db.collection("presence").doc(uid));
+  const snaps = await db.getAll(...refs);
+  snaps.forEach((snap, i) => {
+    const ms = snap.exists ? snap.data()?.lastActiveAt?.toMillis?.() : null;
+    out.set(uids[i], Number.isFinite(ms) ? ms : null);
+  });
+  return out;
+}
+
+/**
+ * Record one meaningful rank transition. Deterministic doc id, create-only —
+ * a Cloud Function retry collides on the id instead of duplicating the event.
+ * Server-only collection (no client rules), reusable for a future feed.
+ */
+async function recordLeaderboardEvent(event) {
+  try {
+    await db.collection("leaderboardEvents").doc(event.id).create({
+      ...event,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  } catch (err) {
+    if (err?.code !== 6 /* ALREADY_EXISTS */) {
+      console.warn("leaderboard event write failed:", err?.message || err);
+    }
   }
-  if (!best) return null;
-  const name = String(best.name || "").trim();
-  return name || "Someone";
 }
 
 /**
  * Push an alert to users whose global-leaderboard position changed between the
  * previous broadcast and the one just written.
  *
- * The baseline for "moved" is the rank the user was last *notified* at (kept in
- * the private `_leaderboardNotify/state` doc, no security-rules exposure), not
- * simply the previous refresh — so slow drift accumulates into one "you moved
- * up 4 spots" alert after the throttle window instead of being re-detected and
- * discarded every 15 minutes.
+ * All decisions live in src/leaderboard/rankMoves.js; this function is the
+ * I/O shell. The five-minute rule (Section: never push at someone actively
+ * using the app): a candidate whose presence stamp is fresh gets their move
+ * HELD on their state entry instead of sent — they just watched it animate.
+ * The 5-minute `leaderboardPendingFlush` schedule below delivers it once
+ * they've been gone long enough, coalesced against every move since the
+ * last-notified baseline. Users already inactive past the window are sent to
+ * immediately — a 30-minute absence doesn't earn five more minutes of delay.
  */
 async function notifyLeaderboardRankMoves(previous, current) {
   // No previous broadcast (first run) means every rank would look like a move.
   if (!Array.isArray(previous) || previous.length === 0) return;
   if (!Array.isArray(current) || current.length === 0) return;
 
-  const prevRankByUid = new Map(
-    previous
-      .filter((e) => e && typeof e.uid === "string" && Number.isFinite(e.rank))
-      .map((e) => [e.uid, e.rank])
-  );
-
   const stateRef = db.collection("_leaderboardNotify").doc("state");
   const stateSnap = await stateRef.get();
   const state = (stateSnap.exists && stateSnap.data()?.entries) || {};
   const now = Date.now();
 
-  const nextState = {};
-  const candidates = [];
+  const { candidates, nextState, prevRankByUid } = rankMoves.computeCandidates({
+    previous,
+    current,
+    state,
+    now,
+    offBoardTtlMs: LEADERBOARD_NOTIFY_STATE_TTL_MS,
+  });
 
-  for (const entry of current) {
-    const uid = entry?.uid;
-    const rank = entry?.rank;
-    if (typeof uid !== "string" || !Number.isFinite(rank)) continue;
-
-    const last = state[uid];
-    // Carry the last-notified baseline forward; only a successful (or
-    // throttled-out below) notification moves it.
-    nextState[uid] = last ? { ...last } : { rank, at: 0 };
-
-    const baseline = last ? last.rank : prevRankByUid.get(uid);
-    if (baseline === undefined) {
-      // Wasn't on the broadcast board at all last refresh: broke into the top N.
-      candidates.push({ uid, rank, delta: null, baselineRank: null, sortKey: 999 });
-    } else if (baseline !== rank) {
-      candidates.push({
-        uid,
-        rank,
-        delta: baseline - rank,
-        // Kept so a downward move can work out who came past them.
-        baselineRank: baseline,
-        sortKey: Math.abs(baseline - rank),
-      });
-    }
-  }
-
-  // Keep recent off-board entries purely for enter/exit throttling.
-  for (const [uid, last] of Object.entries(state)) {
-    if (!nextState[uid] && last && now - (last.at || 0) < LEADERBOARD_NOTIFY_STATE_TTL_MS) {
-      nextState[uid] = { ...last };
-    }
-  }
-
-  candidates.sort((a, b) => b.sortKey - a.sortKey);
+  const shortlist = candidates.slice(0, LEADERBOARD_NOTIFY_MAX_PER_RUN);
+  const presence = await lastActiveByUid(shortlist.map((c) => c.uid));
 
   let sent = 0;
-  for (const cand of candidates) {
-    if (sent >= LEADERBOARD_NOTIFY_MAX_PER_RUN) break;
-    const last = state[cand.uid];
-    if (last && now - (last.at || 0) < LEADERBOARD_NOTIFY_THROTTLE_MS) continue;
+  for (const cand of shortlist) {
+    const entry = nextState[cand.uid] || { rank: cand.rank, at: 0 };
 
     let userData = null;
     try {
@@ -1074,39 +1050,40 @@ async function notifyLeaderboardRankMoves(previous, current) {
       console.warn(`leaderboard notify: user read failed uid=${cand.uid}:`, err?.message || err);
       continue;
     }
-    if (!leaderboardAlertsEnabled(userData)) {
-      // Respect the opt-out but advance the baseline so a later opt-in doesn't
-      // unleash a backlog of stale "you moved" alerts.
-      nextState[cand.uid] = { rank: cand.rank, at: now };
-      continue;
-    }
 
-    let title;
-    let body;
-    if (cand.delta === null) {
-      title = "Global leaderboard 🏆";
-      body = `You're on the global leaderboard at #${cand.rank}!`;
-    } else if (cand.delta > 0) {
-      const spots = cand.delta === 1 ? "1 spot" : `${cand.delta} spots`;
-      title = "You're climbing! 📈";
-      body = `You moved up ${spots} to #${cand.rank} on the global leaderboard.`;
-    } else {
-      // Naming whoever actually went past is the point of a "someone passed
-      // you" alert — a bare rank number doesn't tell the user who to chase.
-      const overtaker = nearestOvertaker(cand, current, prevRankByUid);
-      title = overtaker ? `${overtaker} passed you 👀` : "Leaderboard update";
-      body = overtaker
-        ? `${overtaker} moved ahead of you — you're now #${cand.rank} on the global leaderboard.`
-        : `You slipped to #${cand.rank} on the global leaderboard — log some hours to climb back!`;
-    }
+    const overtaker = cand.delta !== null && cand.delta < 0
+      ? rankMoves.nearestOvertaker(cand, current, prevRankByUid)
+      : null;
+    const passed = cand.delta !== null && cand.delta > 0
+      ? rankMoves.passedUsers(cand, current, prevRankByUid)
+      : [];
+    const milestone = cand.delta === null || cand.delta > 0
+      ? rankMoves.milestoneCrossed(entry.best, cand.rank)
+      : null;
 
-    await sendPushToUser(cand.uid, userData, {
-      title,
-      body,
-      dataPayload: { kind: "leaderboardRank", rank: String(cand.rank) },
+    // The event is authoritative regardless of whether a push goes out now.
+    await recordLeaderboardEvent(rankMoves.buildEvent({ cand, overtaker, passed, milestone, nowMs: now }));
+
+    const verdict = rankMoves.decideCandidate({
+      cand,
+      entry,
+      now,
+      lastActiveMs: presence.get(cand.uid) ?? null,
+      alertsEnabled: leaderboardAlertsEnabled(userData),
+      throttleMs: LEADERBOARD_NOTIFY_THROTTLE_MS,
+      overtaker,
+      milestone,
     });
-    nextState[cand.uid] = { rank: cand.rank, at: now };
-    sent += 1;
+    nextState[cand.uid] = verdict.entry;
+
+    if (verdict.action === "send") {
+      await sendPushToUser(cand.uid, userData, {
+        title: verdict.notification.title,
+        body: verdict.notification.body,
+        dataPayload: { kind: "leaderboardRank", rank: String(cand.rank) },
+      });
+      sent += 1;
+    }
   }
 
   await stateRef.set(
@@ -1117,6 +1094,71 @@ async function notifyLeaderboardRankMoves(previous, current) {
     console.log(`leaderboard notify: sent=${sent} candidates=${candidates.length}`);
   }
 }
+
+/**
+ * Delivers rank-move notifications held while their user was in the app.
+ * Runs every 5 minutes but exits after two document reads when nothing is
+ * pending, so the idle cost is negligible. Sends always describe the LATEST
+ * board — someone who kept climbing gets one consolidated push, and a move
+ * that netted out to zero is dropped silently.
+ */
+exports.leaderboardPendingFlush = onSchedule(
+  { schedule: "every 5 minutes", region: "us-central1", timeoutSeconds: 120 },
+  async () => {
+    const stateRef = db.collection("_leaderboardNotify").doc("state");
+    const stateSnap = await stateRef.get();
+    const state = (stateSnap.exists && stateSnap.data()?.entries) || {};
+    const pendingUids = Object.keys(state).filter((uid) => state[uid]?.pending);
+    if (pendingUids.length === 0) return;
+
+    const boardSnap = await db.collection("leaderboards").doc("global").get();
+    const board = (boardSnap.exists && boardSnap.data()?.all) || [];
+    const rankByUid = new Map(board.map((e) => [e.uid, e.rank]));
+
+    const presence = await lastActiveByUid(pendingUids);
+    const now = Date.now();
+    let sent = 0;
+    let changed = false;
+
+    for (const uid of pendingUids) {
+      let userData = null;
+      try {
+        const userSnap = await db.collection("users").doc(uid).get();
+        userData = userSnap.exists ? userSnap.data() : null;
+      } catch (err) {
+        continue;
+      }
+
+      const verdict = rankMoves.resolvePending({
+        entry: state[uid],
+        now,
+        lastActiveMs: presence.get(uid) ?? null,
+        currentRank: rankByUid.get(uid),
+        alertsEnabled: leaderboardAlertsEnabled(userData),
+      });
+      if (verdict.action === "hold") continue;
+
+      state[uid] = verdict.entry;
+      changed = true;
+      if (verdict.action === "send") {
+        await sendPushToUser(uid, userData, {
+          title: verdict.notification.title,
+          body: verdict.notification.body,
+          dataPayload: { kind: "leaderboardRank", rank: String(verdict.entry.rank) },
+        });
+        sent += 1;
+      }
+    }
+
+    if (changed) {
+      await stateRef.set(
+        { entries: state, updatedAt: FieldValue.serverTimestamp() },
+        { merge: false }
+      );
+    }
+    if (sent > 0) console.log(`leaderboard pending flush: sent=${sent}`);
+  }
+);
 
 /**
  * Rebuild the global leaderboard on a fixed cadence rather than on every shift
