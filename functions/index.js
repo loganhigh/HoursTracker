@@ -1544,11 +1544,11 @@ exports.adminRecomputeUserStats = onCall(
 /** Shared admin gate: signed in, correct account UID, and valid passcode. */
 function assertAdmin(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+  // The pinned uid IS the security: it's backed by Firebase Auth, which a
+  // client can't forge. The passcode second factor was removed on request —
+  // it only ever guarded against someone holding the admin's unlocked phone.
   if (request.auth.uid !== ADMIN_UID) {
     throw new HttpsError("permission-denied", "Admins only.");
-  }
-  if ((request.data?.passcode || "") !== ADMIN_PASSCODE.value()) {
-    throw new HttpsError("permission-denied", "Invalid admin passcode.");
   }
 }
 

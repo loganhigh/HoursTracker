@@ -40,6 +40,19 @@ final class AnnouncementService: ObservableObject {
     /// ask is "next time they use the app", and a live push mid-session would
     /// interrupt someone mid-shift-entry for no gain.
     func checkForAnnouncement() {
+        // Dev-only rehearsal, same pattern as LEVELUP_DEMO: shows a sample
+        // announcement without touching Firestore or auth. Inert unless the
+        // launch environment carries the variable, which production never does.
+        if let demo = ProcessInfo.processInfo.environment["ANNOUNCEMENT_DEMO"], pending == nil {
+            pending = Announcement(
+                id: "demo",
+                title: "Update available!",
+                message: "Hour Tracker 2.6 is out — smart pay projections, verified marks, and a live global leaderboard. Update now to get the latest.",
+                kind: demo == "info" ? "info" : "update",
+                buttonTitle: demo == "info" ? "Got it" : "Update Now"
+            )
+            return
+        }
         guard Auth.auth().currentUser != nil, !isFetching, pending == nil else { return }
         isFetching = true
         Task { [weak self] in

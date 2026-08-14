@@ -49,8 +49,9 @@ struct AdminPanelView: View {
     @EnvironmentObject private var cloudSync: CloudSyncManager
     @Environment(\.dismiss) private var dismiss
 
-    @State private var passcode = ""
-    @State private var isUnlocked = false
+    /// Kept only as inert plumbing to the callables' legacy parameter — the
+    /// server now authorizes purely on the signed-in admin uid.
+    private let passcode = ""
     @State private var isLoading = false
     @State private var users: [AdminUser] = []
     @State private var search = ""
@@ -99,20 +100,23 @@ struct AdminPanelView: View {
             Group {
                 if !isAdmin {
                     notAuthorized
-                } else if !isUnlocked {
-                    passcodeGate
                 } else {
                     userList
                 }
             }
             .background(AppTheme.Colors.bg.ignoresSafeArea())
+            // Loads immediately — the Unlock tap that used to trigger this
+            // went with the passcode gate.
+            .task {
+                if isAdmin, users.isEmpty { await loadUsers() }
+            }
             .navigationTitle("Admin")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
-                if isUnlocked {
+                if isAdmin {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button {
                             Task { await loadUsers() }
@@ -150,67 +154,6 @@ struct AdminPanelView: View {
                 .foregroundStyle(AppTheme.Colors.text)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var passcodeGate: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Image(systemName: "person.2.badge.gearshape")
-                .font(.system(size: 44, weight: .semibold))
-                .foregroundStyle(AppTheme.Colors.accent)
-            VStack(spacing: 6) {
-                Text("Admin console")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.text)
-                Text("Enter the admin passcode to manage users.")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                    .multilineTextAlignment(.center)
-            }
-
-            SecureField("Passcode", text: $passcode)
-                .textContentType(.password)
-                .submitLabel(.go)
-                .onSubmit { Task { await loadUsers() } }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: AppDesignSystem.Radius.lg, style: .continuous)
-                        .fill(AppTheme.Colors.card)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppDesignSystem.Radius.lg, style: .continuous)
-                        .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
-                )
-
-            Button {
-                Task { await loadUsers() }
-            } label: {
-                HStack {
-                    if isLoading { ProgressView().tint(AppColors.textOnAccent) }
-                    Text(isLoading ? "Unlocking…" : "Unlock")
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
-                }
-                .foregroundStyle(AppColors.textOnAccent)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
-                .background(
-                    RoundedRectangle(cornerRadius: AppDesignSystem.Radius.lg, style: .continuous)
-                        .fill(AppTheme.Colors.accent)
-                )
-            }
-            .disabled(passcode.isEmpty || isLoading)
-
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.danger)
-                    .multilineTextAlignment(.center)
-            }
-            Spacer()
-            Spacer()
-        }
-        .padding(.horizontal, 28)
     }
 
     private var userList: some View {
@@ -368,7 +311,6 @@ struct AdminPanelView: View {
     // MARK: - Networking
 
     private func loadUsers() async {
-        guard !passcode.isEmpty else { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -386,7 +328,6 @@ struct AdminPanelView: View {
             } else {
                 listSummary = "\(users.count) users • sorted by lifetime hours"
             }
-            isUnlocked = true
         } catch {
             errorMessage = friendlyError(error)
         }
@@ -505,7 +446,7 @@ struct AdminPanelView: View {
         if ns.domain == FunctionsErrorDomain,
            let code = FunctionsErrorCode(rawValue: ns.code) {
             switch code {
-            case .permissionDenied: return "Wrong passcode or account."
+            case .permissionDenied: return "This account isn't the admin."
             case .unauthenticated: return "Sign in required."
             default: break
             }
@@ -1231,7 +1172,7 @@ struct AdminVerifiedInboxView: View {
 struct AdminAnnouncementView: View {
     let passcode: String
 
-    @State private var title = "Update available! 🚀"
+    @State private var title = "Update available!"
     @State private var message = "A new version of Hour Tracker is out with new features and fixes. Update now to get the latest."
     @State private var isUpdatePrompt = true
     @State private var isPublishing = false
