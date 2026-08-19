@@ -1711,6 +1711,11 @@ final class HoursStore: ObservableObject {
             entries.removeAll { wrongIds.contains($0.id) }
             recalculateGamification(eventHint: nil)
             save(syncProfile: false)
+            // Tombstone each cloud copy too — a local-only removal gets
+            // resurrected by the next cloud fetch's merge.
+            for entry in wrongOffDays {
+                cloudSync.deleteEntry(entry) { _ in }
+            }
         }
 
         let newEntries = AutoOffDayFiller.makeOffDayEntries(entries: entries, now: now)
