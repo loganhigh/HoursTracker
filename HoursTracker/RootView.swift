@@ -845,7 +845,9 @@ struct HoursHomeView: View {
         }
         .onChange(of: store.gamificationProfile.unlockedBadges) { old, new in
             let oldSet = Set(old)
-            guard let badge = new.first(where: { !oldSet.contains($0) && !badgeUnlockTracker.hasCelebrated($0) }) else { return }
+            // Prestige badges are already celebrated by the full-screen
+            // prestige ritual — a second confetti sheet on top is noise.
+            guard let badge = new.first(where: { !oldSet.contains($0) && !badgeUnlockTracker.hasCelebrated($0) && !$0.hasPrefix("prestige_") }) else { return }
             badgeUnlockTracker.markCelebrated(badge)
             let label = badge.replacingOccurrences(of: "_", with: " ").capitalized
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
