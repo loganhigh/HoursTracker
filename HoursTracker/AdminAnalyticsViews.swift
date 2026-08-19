@@ -30,7 +30,9 @@ struct AdminOverviewStats {
     var hoursThisWeek = 0.0
     var new7dDeltaPct: Int?
 
-    static func parse(_ dict: [String: Any]) -> AdminOverviewStats {
+    nonisolated init() {}
+
+    nonisolated static func parse(_ dict: [String: Any]) -> AdminOverviewStats {
         func int(_ key: String) -> Int {
             (dict[key] as? Int) ?? (dict[key] as? NSNumber)?.intValue ?? 0
         }
@@ -77,7 +79,7 @@ struct AdminInsightUser: Identifiable {
 
     var id: String { uid }
 
-    static func parse(_ dict: [String: Any]) -> AdminInsightUser {
+    nonisolated static func parse(_ dict: [String: Any]) -> AdminInsightUser {
         func int(_ key: String) -> Int {
             (dict[key] as? Int) ?? (dict[key] as? NSNumber)?.intValue ?? 0
         }
@@ -134,7 +136,7 @@ struct AdminAnalyticsPayload {
     let history: [AdminDailyHistory]
     let generatedAt: Date
 
-    static func parse(_ dict: [String: Any]) -> AdminAnalyticsPayload {
+    nonisolated static func parse(_ dict: [String: Any]) -> AdminAnalyticsPayload {
         let users: ([Any]?) -> [AdminInsightUser] = { raw in
             (raw ?? []).compactMap { ($0 as? [String: Any]).map(AdminInsightUser.parse) }
         }
