@@ -937,9 +937,57 @@ struct HoursHomeView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// Days from today to payday, in calendar days (start-of-day to
+    /// start-of-day, matching the widget).
+    private var daysUntilPayday: Int {
+        let cal = Calendar.current
+        return max(0, cal.dateComponents(
+            [.day],
+            from: cal.startOfDay(for: Date()),
+            to: cal.startOfDay(for: nextPayday)
+        ).day ?? 0)
+    }
+
+    /// Announcement-style payday countdown — replaces the old level strip at
+    /// the top of Home (You owns the XP bar now).
+    private var paydayBanner: some View {
+        let days = daysUntilPayday
+        let isToday = days == 0
+        return VStack(spacing: 1) {
+            Text(isToday
+                 ? "Payday is today!"
+                 : (days == 1 ? "Payday in 1 day" : "Payday in \(days) days"))
+                .font(.system(.subheadline, design: .rounded, weight: .heavy))
+                .foregroundStyle(AppTheme.Colors.text)
+            Text(nextPayday.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(AppTheme.Colors.subtext)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.vertical, AppSpacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                .fill(AppTheme.Colors.card.opacity(0.55))
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [Color(hex: 0xFFD700).opacity(isToday ? 0.7 : 0.35), AppTheme.Colors.stroke],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+        )
+        .accessibilityElement(children: .combine)
+    }
+
     private var progressionCard: some View {
         VStack(spacing: 12) {
-            HomeXPStrip(store: store)
+            paydayBanner
 
             // Either truth may earn the button: the local recompute or the
             // server-preferred displayed level (performPrestige accepts both).
