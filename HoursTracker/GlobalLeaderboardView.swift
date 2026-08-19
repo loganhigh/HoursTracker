@@ -22,6 +22,8 @@ struct GlobalLeaderboardView: View {
     /// the "you moved" banner only when the row can't currently be seen.
     @State private var ownRowY: CGFloat?
     @State private var movementBanner: String?
+    /// The tracker whose peek sheet is up — any row or podium slot opens one.
+    @State private var peekTracker: TopTracker?
 
     private var myUid: String? { authService.user?.uid }
 
@@ -51,6 +53,9 @@ struct GlobalLeaderboardView: View {
         }
         .background(AppColors.bg.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(item: $peekTracker) { tracker in
+            GlobalUserPeekSheet(tracker: tracker)
+        }
         .sheet(isPresented: $showingProofSheet) {
             VerifiedReviewProofSheet(
                 isVerified: verified.isVerified,
@@ -108,7 +113,8 @@ struct GlobalLeaderboardView: View {
                             entries: topTrackers.allTrackers,
                             currentUid: myUid,
                             onlineUids: presence.onlineUids,
-                            movements: topTrackers.movements
+                            movements: topTrackers.movements,
+                            onTap: { peekTracker = $0 }
                         )
                         .padding(.top, AppSpacing.xs)
                     }
@@ -176,13 +182,23 @@ struct GlobalLeaderboardView: View {
     private var rankedList: some View {
         VStack(spacing: 0) {
             ForEach(listTrackers) { tracker in
-                GlobalTrackerRow(
-                    tracker: tracker,
-                    currentUid: myUid,
-                    // Own row skips the dot — you're by definition here.
-                    isOnline: tracker.uid != myUid && presence.onlineUids.contains(tracker.uid),
-                    movement: topTrackers.movements[tracker.uid]
-                )
+                // Whole row is tappable — no chevron, the tap is discoverable
+                // by convention. Plain button style so the row chrome (rank
+                // roll, movement chips) stays exactly as designed.
+                Button {
+                    Haptics.lightTap()
+                    peekTracker = tracker
+                } label: {
+                    GlobalTrackerRow(
+                        tracker: tracker,
+                        currentUid: myUid,
+                        // Own row skips the dot — you're by definition here.
+                        isOnline: tracker.uid != myUid && presence.onlineUids.contains(tracker.uid),
+                        movement: topTrackers.movements[tracker.uid]
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
                 .id(tracker.uid)
                 .modifier(OwnRowGeometryReporter(
                     isOwnRow: tracker.uid == myUid,

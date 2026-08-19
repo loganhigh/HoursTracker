@@ -313,19 +313,56 @@ struct SettingsView: View {
 
                 // MARK: - Privacy & Security
                 Section {
-                    VStack(alignment: .leading, spacing: AppSpacing.md) {
-                        HStack(alignment: .top, spacing: AppSpacing.sm) {
-                            SettingsIconSquare(icon: "lock.shield.fill")
-
-                            Text("Work entries and pay settings are stored on your device. If you sign in with Apple, optional cloud sync, friends, and social features use Firebase to store the data you choose to share. We do not sell your information.")
-                                .appText(.metricLabel)
+                    // Assurance banner: one calm line instead of the old
+                    // paragraph — the footer keeps the fine print.
+                    HStack(spacing: AppSpacing.sm) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [AppColors.accent.opacity(0.28), AppColors.accent.opacity(0.10)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 40, height: 40)
+                            Image(systemName: "lock.shield.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(AppColors.accent)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Your data stays yours")
+                                .appText(.headline)
+                                .foregroundStyle(AppColors.text)
+                            Text("Entries live on this device. Only what you choose to share is synced — never sold.")
+                                .appText(.caption)
                                 .foregroundStyle(AppColors.subtext)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-
-                        LegalLinksSection()
                     }
                     .padding(.vertical, AppSpacing.xxs)
+
+                    Button {
+                        Haptics.lightTap()
+                        UIApplication.shared.open(AppLegalURLs.privacyPolicy)
+                    } label: {
+                        HStack(spacing: AppSpacing.sm) {
+                            SettingsRowLabel(icon: "hand.raised.fill", title: "Privacy Policy")
+                            Spacer(minLength: AppSpacing.xs)
+                            SettingsChevron()
+                        }
+                    }
+
+                    Button {
+                        Haptics.lightTap()
+                        UIApplication.shared.open(AppLegalURLs.termsOfUse)
+                    } label: {
+                        HStack(spacing: AppSpacing.sm) {
+                            SettingsRowLabel(icon: "doc.text.fill", title: "Terms of Use")
+                            Spacer(minLength: AppSpacing.xs)
+                            SettingsChevron()
+                        }
+                    }
                 } header: {
                     SectionEyebrow("Privacy & Security")
                 } footer: {

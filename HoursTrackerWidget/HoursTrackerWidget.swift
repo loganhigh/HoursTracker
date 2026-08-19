@@ -129,7 +129,11 @@ struct MediumWidgetView: View {
                 mediumStat(label: "This Week", value: formatHours(entry.widgetData.hoursThisWeek))
                 mediumStat(label: "Month", value: formatHours(entry.widgetData.hoursThisMonth))
                 if let payday = entry.widgetData.nextPayday {
-                    let days = max(0, Calendar.current.dateComponents([.day], from: Date(), to: payday).day ?? 0)
+                    // Calendar days, not elapsed 24h intervals: counting from
+                    // "now" to a midnight payday truncated the last partial
+                    // day and showed "1d" when payday was 2 days away.
+                    let cal = Calendar.current
+                    let days = max(0, cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: payday)).day ?? 0)
                     mediumStat(label: "Payday", value: days == 0 ? "Today!" : "\(days)d")
                 }
             }

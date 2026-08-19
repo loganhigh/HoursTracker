@@ -17,6 +17,14 @@ struct LiquidXPFill: View {
     let progress: Double
     /// Fill colors, leading → trailing.
     var colors: [Color] = [AppColors.accent, AppColors.accent.opacity(0.75)]
+    /// Keeps the surface rippling forever instead of settling to a static
+    /// frame. Costs a running 60fps clock, so opt in only where the bar is a
+    /// focal point (the You screen). Reduce Motion still wins and renders flat.
+    var ambient: Bool = false
+
+    /// Resting wave energy while ambient — enough for a visible roll, well
+    /// below a fresh pour's slosh.
+    private static let ambientEnergy = 0.22
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -67,7 +75,7 @@ struct LiquidXPFill: View {
     // MARK: Physics
 
     private func nudgeIfNeeded() {
-        guard abs(progress - displayed) > 0.0005 || energy > 0.001 else { return }
+        guard ambient || abs(progress - displayed) > 0.0005 || energy > 0.001 else { return }
         lastTick = nil
         settled = false
     }
@@ -85,10 +93,14 @@ struct LiquidXPFill: View {
         velocity += accel * dt
         displayed += velocity * dt
 
-        // Motion feeds the waves; stillness starves them.
+        // Motion feeds the waves; stillness starves them — down to the
+        // ambient floor when this bar never sleeps.
         energy = max(energy * pow(0.18, dt), min(abs(velocity) * 2.2, 1))
+        if ambient {
+            energy = max(energy, Self.ambientEnergy)
+        }
 
-        if abs(progress - displayed) < 0.0008, abs(velocity) < 0.004, energy < 0.004 {
+        if !ambient, abs(progress - displayed) < 0.0008, abs(velocity) < 0.004, energy < 0.004 {
             displayed = progress
             velocity = 0
             energy = 0

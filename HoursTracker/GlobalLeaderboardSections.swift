@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseFirestore
 
 // MARK: - Global leaderboard: header, hero rank card, stats strip
 //
@@ -308,5 +309,146 @@ struct VerifiedReviewNote: View {
         // Nothing left to earn once it's granted, so the row goes read-only.
         .disabled(isVerified)
         .accessibilityHint(isVerified ? "" : "Opens the App Store to write a review")
+    }
+}
+
+// MARK: - Tracker peek sheet
+
+/// Tap-through profile peek for any user on the global board. Deliberately
+/// small: occupation, start date, years worked, hours logged, days worked —
+/// all read from publicProfiles/{uid}, which only carries company fields when
+/// that user has hour-sharing on.
+struct GlobalUserPeekSheet: View {
+    let tracker: TopTracker
+
+    private struct Peek {
+        var occupation = ""
+        var startDate: Date?
+        var hoursLogged: Double = 0
+        var daysWorked: Int = 0
+
+        var isEmpty: Bool {
+            occupation.isEmpty && startDate == nil && hoursLogged <= 0 && daysWorked <= 0
+        }
+    }
+
+    @State private var peek: Peek?
+    @State private var failed = false
+
+    private var tint: Color {
+        tracker.prestige == 0 ? AppColors.accent : PrestigeTheme.tier(for: tracker.prestige).primary
+    }
+
+    var body: some View {
+        VStack(spacing: AppSpacing.md) {
+            VStack(spacing: AppSpacing.xs) {
+                ProfileAvatarView(
+                    name: tracker.name,
+                    size: 64,
+                    photoURL: tracker.photoURL,
+                    uid: tracker.uid
+                )
+                HStack(spacing: 5) {
+                    Text(tracker.name)
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+                    if VerifiedTracker.isVerified(reviewed: tracker.hasReviewedApp) {
+                        VerifiedBadgeView(variant: .static, size: 14)
+                    }
+                }
+            }
+            .padding(.top, AppSpacing.lg)
+
+            Group {
+                if let peek {
+                    if peek.isEmpty {
+                        AppEmptyState(
+                            icon: "lock.fill",
+                            title: "Nothing shared",
+                            message: "This user hasn't shared their work details."
+                        )
+                        .padding(.vertical, AppSpacing.md)
+                    } else {
+                        VStack(spacing: 10) {
+                            if !peek.occupation.isEmpty {
+                                FriendRecordRow(
+                                    icon: "briefcase.fill",
+                                    title: "Occupation",
+                                    value: peek.occupation,
+                                    tint: tint
+                                )
+                            }
+                            if let start = peek.startDate {
+                                FriendRecordRow(
+                                    icon: "building.2.fill",
+                                    title: "Started",
+                                    value: FriendProfileFormat.companyStartedString(from: start),
+                                    tint: tint
+                                )
+                                let years = FriendProfileFormat.yearsAtCompany(from: start)
+                                if years >= 0.1 {
+                                    FriendRecordRow(
+                                        icon: "star.fill",
+                                        title: "Years Worked",
+                                        value: String(format: "%.1f", years),
+                                        tint: AppColors.gold
+                                    )
+                                }
+                            }
+                            if peek.hoursLogged > 0 {
+                                FriendRecordRow(
+                                    icon: "clock.fill",
+                                    title: "Hours Logged",
+                                    value: FriendProfileFormat.hoursDisplay(peek.hoursLogged),
+                                    tint: AppColors.streak
+                                )
+                            }
+                            if peek.daysWorked > 0 {
+                                FriendRecordRow(
+                                    icon: "calendar",
+                                    title: "Days Worked",
+                                    value: "\(peek.daysWorked)",
+                                    tint: tint
+                                )
+                            }
+                        }
+                    }
+                } else if failed {
+                    AppEmptyState(
+                        icon: "wifi.slash",
+                        title: "Couldn't load profile"
+                    )
+                    .padding(.vertical, AppSpacing.md)
+                } else {
+                    ProgressView()
+                        .padding(.vertical, AppSpacing.xl)
+                }
+            }
+            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.bottom, AppSpacing.lg)
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(AppColors.bg)
+        .task {
+            do {
+                let doc = try await Firestore.firestore()
+                    .collection("publicProfiles").document(tracker.uid).getDocument()
+                let data = doc.data() ?? [:]
+                peek = Peek(
+                    occupation: (data["companyOccupation"] as? String ?? "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines),
+                    startDate: (data["companyStartDate"] as? Timestamp)?.dateValue(),
+                    hoursLogged: (data["companyHoursLogged"] as? NSNumber)?.doubleValue ?? 0,
+                    daysWorked: (data["companyDaysWorked"] as? NSNumber)?.intValue ?? 0
+                )
+            } catch {
+                failed = true
+            }
+        }
     }
 }

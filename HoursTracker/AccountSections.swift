@@ -66,8 +66,9 @@ struct ProfileXPCapsule: View {
                 Capsule()
                     .fill(AppColors.stroke.opacity(0.6))
                 // Liquid fill: seeds at the current value on first appearance
-                // (no replay from zero), pours and sloshes only on change.
-                LiquidXPFill(progress: displayedProgress)
+                // (no replay from zero). Ambient — the You bar is a focal
+                // point, so its surface keeps rolling instead of settling.
+                LiquidXPFill(progress: displayedProgress, ambient: true)
             }
             .frame(height: 10)
         }
