@@ -35,7 +35,7 @@ enum AutoOffDayFiller {
             return []
         }
 
-        let loggedDays = Set(entries.map { calendar.startOfDay(for: $0.date) })
+        let loggedDays = daysCovered(by: entries, calendar: calendar)
 
         var newEntries: [WorkEntry] = []
         var cursor = scanStart
@@ -49,6 +49,23 @@ enum AutoOffDayFiller {
 
         markProcessed(through: yesterday, calendar: calendar)
         return newEntries
+    }
+
+    /// Every calendar day an entry touches. An overnight shift (end clock time
+    /// before start, e.g. Sat 2pm–6am) spills into the next day, so that day
+    /// counts as worked too — it must not be auto-filled as "Off".
+    static func daysCovered(by entries: [WorkEntry], calendar: Calendar) -> Set<Date> {
+        var days = Set<Date>()
+        for entry in entries {
+            let day = calendar.startOfDay(for: entry.date)
+            days.insert(day)
+            if !entry.isOffDay,
+               entry.end.timeIntervalSince(entry.start) < 0,
+               let next = calendar.date(byAdding: .day, value: 1, to: day) {
+                days.insert(next)
+            }
+        }
+        return days
     }
 
     private static func offDayEntry(for day: Date) -> WorkEntry {

@@ -1694,10 +1694,27 @@ final class HoursStore: ObservableObject {
     func applyAutoOffDaysForForgottenShifts(now: Date = Date()) {
         guard isLoaded else { return }
 
+        let cal = Calendar.current
+
+        // Repair: earlier builds auto-filled "Off" on days that an overnight
+        // shift actually spilled into (Sat 2pm–6am left Sunday marked Off).
+        // Drop any auto "Off" entry sitting on a day a real shift covers.
+        let workedDays = AutoOffDayFiller.daysCovered(
+            by: entries.filter { !$0.isOffDay },
+            calendar: cal
+        )
+        let wrongOffDays = entries.filter {
+            $0.isOffDay && $0.offDayReason == "Off" && workedDays.contains(cal.startOfDay(for: $0.date))
+        }
+        if !wrongOffDays.isEmpty {
+            let wrongIds = Set(wrongOffDays.map(\.id))
+            entries.removeAll { wrongIds.contains($0.id) }
+            recalculateGamification(eventHint: nil)
+            save(syncProfile: false)
+        }
+
         let newEntries = AutoOffDayFiller.makeOffDayEntries(entries: entries, now: now)
         guard !newEntries.isEmpty else { return }
-
-        let cal = Calendar.current
         let toAdd = newEntries.filter { entry in
             !entries.contains(where: { cal.isDate($0.date, inSameDayAs: entry.date) })
         }
