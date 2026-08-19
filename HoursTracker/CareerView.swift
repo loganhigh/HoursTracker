@@ -1,12 +1,10 @@
 import SwiftUI
 
-/// Lifetime career overview: total hours, days worked, personal bests, level
-/// progression. Phase 9 restyle: canonical tokens throughout, standard hero
-/// anatomy without the glow (Home owns the app's single hero glow), and the
-/// shared FriendRecordRow / FriendProfileFormat building blocks instead of
-/// local duplicates. Structure (hero → stats → bests → company → history)
-/// unchanged.
-struct CareerView: View {
+/// Career sections embedded directly on the You screen (the standalone
+/// Career page is retired): personal bests, company tenure, and tracking
+/// history. The old hero and "Career stats" grid are gone — You's Lifetime
+/// grid already carries those numbers.
+struct CareerSections: View {
     @ObservedObject var store: HoursStore
     @AppStorage("company_name") private var companyName: String = ""
     @AppStorage("company_start_date_ts") private var companyStartDateTS: Double = 0
@@ -30,15 +28,6 @@ struct CareerView: View {
             return serverTotal
         }
         return workEntries.reduce(0) { $0 + $1.paidHours }
-    }
-
-    private var averageShiftHours: Double {
-        guard !workEntries.isEmpty else { return 0 }
-        return totalHours / Double(workEntries.count)
-    }
-
-    private var totalOvertimeHours: Double {
-        workEntries.reduce(0) { $0 + store.payBreakdown(for: $1).overtimeHours }
     }
 
     private var longestShiftHours: Double {
@@ -126,28 +115,7 @@ struct CareerView: View {
     // MARK: - Body
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: AppSpacing.xl) {
-                heroSummary
-
-                SectionCard(
-                    title: "Career stats",
-                    subtitle: "Long-term totals from every shift",
-                    trailing: nil,
-                    centerHeader: true
-                ) {
-                    LazyVGrid(columns: [
-                        GridItem(.flexible(), spacing: AppSpacing.sm),
-                        GridItem(.flexible(), spacing: AppSpacing.sm)
-                    ], spacing: AppSpacing.sm) {
-                        MetricDisplay(icon: "clock.fill", label: "All-Time Hours", value: FriendProfileFormat.hoursDisplay(totalHours))
-                        MetricDisplay(icon: "calendar", label: "Days Worked", value: "\(daysWorked)")
-                        MetricDisplay(icon: "chart.bar.fill", label: "Avg Shift", value: AppTheme.Format.hours(averageShiftHours))
-                        MetricDisplay(icon: "bolt.fill", label: "Overtime", value: AppTheme.Format.hours(totalOvertimeHours))
-                    }
-                    .padding(.vertical, AppSpacing.xs)
-                }
-
+        VStack(spacing: AppSpacing.xl) {
                 SectionCard(
                     title: "Personal bests",
                     subtitle: "The records to beat",
@@ -219,75 +187,7 @@ struct CareerView: View {
                     .padding(.vertical, AppSpacing.xs)
                 }
 
-            }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.top, 10)
-            .padding(.bottom, AppSpacing.xl)
         }
-        .scrollContentBackground(.hidden)
-        .background(AppColors.bg.ignoresSafeArea())
-        .navigationTitle("Career")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            // Career's lifetime hours must always match the global leaderboard,
-            // which is server-fed — make sure the server-stats listener is
-            // attached even if the sign-in callback never started it.
-            StatsListenerService.shared.ensureListening()
-        }
-    }
-
-    // MARK: - Hero (standard anatomy, no glow — Home owns the only hero glow)
-
-    private var heroSummary: some View {
-        VStack(spacing: AppSpacing.sm) {
-            SectionEyebrow("Career")
-
-            AnimatedMetricText(value: totalHours) { FriendProfileFormat.hoursDisplay($0) }
-                .font(AppTypography.heroNumber)
-                .foregroundStyle(AppColors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-
-            Text("Lifetime hours logged")
-                .appText(.caption)
-                .foregroundStyle(AppColors.faint)
-        }
-        .multilineTextAlignment(.center)
-        .frame(maxWidth: .infinity)
-        .padding(AppSpacing.lg)
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
-                    .fill(AppColors.card2)
-                RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                AppColors.accent.opacity(0.14),
-                                Color.clear,
-                                AppColors.accent.opacity(0.05)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            }
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            AppColors.accent.opacity(0.4),
-                            AppColors.accent.opacity(0.08),
-                            Color.clear
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
-        )
     }
 
     // MARK: - Company

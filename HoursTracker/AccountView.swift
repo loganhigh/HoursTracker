@@ -70,6 +70,11 @@ struct AccountView: View {
         return workEntries.reduce(0) { $0 + $1.paidHours }
     }
 
+    private var averageShiftHours: Double {
+        guard !workEntries.isEmpty else { return 0 }
+        return allTimeHours / Double(workEntries.count)
+    }
+
     private var daysWorked: Int {
         let cal = Calendar.current
         return Set(workEntries.map { cal.startOfDay(for: $0.date) }).count
@@ -95,8 +100,12 @@ struct AccountView: View {
                     .cardAppear(index: 2, group: "you")
                 navigationCard
                     .cardAppear(index: 3, group: "you")
-                accountSection
+                // The retired Career page's sections now live inline: personal
+                // bests, company tenure, and tracking history.
+                CareerSections(store: store)
                     .cardAppear(index: 4, group: "you")
+                accountSection
+                    .cardAppear(index: 5, group: "you")
                 // Note + version as one tight, centred footer group — the
                 // review line belongs to the version it sits over.
                 VStack(spacing: 2) {
@@ -106,7 +115,7 @@ struct AccountView: View {
                     versionFooter
                 }
                 .frame(maxWidth: .infinity)
-                .cardAppear(index: 5, group: "you")
+                .cardAppear(index: 6, group: "you")
             }
             .padding(.horizontal, AppSpacing.md)
             .padding(.top, AppSpacing.xs)
@@ -356,9 +365,9 @@ struct AccountView: View {
                     value: "\(daysWorked)"
                 )
                 MetricDisplay(
-                    icon: "checkmark.circle.fill",
-                    label: "Shifts Completed",
-                    value: "\(workEntries.count)"
+                    icon: "chart.bar.fill",
+                    label: "Avg Shift",
+                    value: AppTheme.Format.hours(averageShiftHours)
                 )
                 MetricDisplay(
                     icon: "flame.fill",
@@ -376,16 +385,6 @@ struct AccountView: View {
         let badgeCounts = AchievementsView.badgeCollectionCounts(for: store)
 
         return AccountRowsCard {
-            NavigationLink(destination: CareerView(store: store)) {
-                AccountNavRow(
-                    icon: "chart.line.uptrend.xyaxis",
-                    title: "Career"
-                )
-            }
-            .buttonStyle(PremiumPressStyle())
-
-            AccountRowHairline()
-
             NavigationLink(destination: AchievementsView(store: store)) {
                 AccountNavRow(
                     icon: "rosette",

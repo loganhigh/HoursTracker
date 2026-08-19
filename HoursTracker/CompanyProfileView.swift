@@ -5,7 +5,6 @@ struct CompanyProfileView: View {
 
     @AppStorage("company_name") private var companyName: String = ""
     @AppStorage("company_occupation") private var occupation: String = ""
-    @AppStorage("company_employee_id") private var employeeID: String = ""
     @AppStorage("company_hourly_rate") private var hourlyRate: Double = 0
     @AppStorage("company_start_date_ts") private var companyStartDateTS: Double = 0
 
@@ -44,7 +43,6 @@ struct CompanyProfileView: View {
                     }
 
                     field(title: "Occupation", text: $occupation, placeholder: "e.g. Asphalt / Concrete / Foreman")
-                    field(title: "Employee ID (optional)", text: $employeeID, placeholder: "e.g. EMP-12345")
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Hourly Rate (optional)")
