@@ -1286,12 +1286,20 @@ final class HoursStore: ObservableObject {
     }
 
     func performPrestige() -> Bool {
-        guard gamificationProfile.canPrestige else { return false }
         guard gamificationProfile.prestige < 10 else { return false }
+
+        // Eligibility follows the level the user is SHOWN, which is server-
+        // preferred (displayedGamificationProfile). The old flow re-derived
+        // canPrestige from local entry XP between check and act — and on
+        // accounts where the server owns XP the client can't reproduce
+        // (challenge extras, admin offsets), that recompute flipped the flag
+        // false and the tap silently did nothing while the UI kept promising
+        // a maxed level 25.
+        let eligibleByDisplayedLevel = displayedGamificationProfile().canPrestige
 
         // Recalculate first so snapshots match the current entry-derived totals.
         recalculateGamification(eventHint: nil)
-        guard gamificationProfile.canPrestige else { return false }
+        guard gamificationProfile.canPrestige || eligibleByDisplayedLevel else { return false }
 
         let hours = totalPaidWorkHours()
         gamificationProfile.prestigeXPSnapshots.append(gamificationProfile.totalXP)

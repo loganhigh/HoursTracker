@@ -939,10 +939,15 @@ struct HoursHomeView: View {
         VStack(spacing: 12) {
             HomeXPStrip(store: store)
 
-            if store.gamificationProfile.canPrestige {
-                PrestigeCallToAction(currentPrestige: store.gamificationProfile.prestige) {
+            // Either truth may earn the button: the local recompute or the
+            // server-preferred displayed level (performPrestige accepts both).
+            if store.gamificationProfile.canPrestige || store.displayedGamificationProfile().canPrestige {
+                PrestigeCallToAction(currentPrestige: store.displayedGamificationProfile().prestige) {
                     if store.performPrestige() {
                         showingPrestigeConfetti = true
+                    } else {
+                        // Whatever went wrong, a dead button is worse — say so.
+                        Haptics.error()
                     }
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
