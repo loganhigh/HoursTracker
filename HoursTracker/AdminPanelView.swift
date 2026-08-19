@@ -2,7 +2,7 @@ import SwiftUI
 import FirebaseFunctions
 
 /// A user row returned by the `adminListUsers` callable.
-private struct AdminUser: Identifiable, Equatable {
+struct AdminUser: Identifiable, Equatable {
     let uid: String
     let displayName: String
     var friendCode: String
@@ -28,6 +28,15 @@ private struct AdminUser: Identifiable, Equatable {
     var countryCode: String
     var hasReviewedApp: Bool = false
     var profilePending: Bool
+    // Engagement fields off the server profile, for list sorting/filtering.
+    var weeklyHours: Double = 0
+    var weeklyShifts: Int = 0
+    var currentStreak: Int = 0
+    var bestStreak: Int = 0
+    var totalXP: Int = 0
+    var monthHours: Double = 0
+    var photoURL: String?
+    var lastShiftAt: Date?
 
     var id: String { uid }
 
@@ -55,6 +64,12 @@ struct AdminPanelView: View {
     @State private var isLoading = false
     @State private var users: [AdminUser] = []
     @State private var search = ""
+    @State private var sort: AdminUserSort = .totalHours
+    @State private var filters: Set<AdminUserFilter> = []
+    @State private var maintenanceExpanded = false
+    /// Single-callable analytics payload feeding the overview chips and the
+    /// four insight screens. Loaded alongside the user list.
+    @State private var analytics: AdminAnalyticsPayload?
     @State private var errorMessage: String?
     @State private var editing: AdminUser?
     @State private var isBulkRefreshing = false
@@ -83,16 +98,22 @@ struct AdminPanelView: View {
 
     private var filteredUsers: [AdminUser] {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return users }
         // Friend codes get written down and read back with separators ("TH-4829",
         // "th 4829"), so match them against a stripped form of the query.
         let codeQuery = q.filter { $0.isLetter || $0.isNumber }
-        return users.filter { user in
-            user.displayName.lowercased().contains(q)
-                || user.uid.lowercased().contains(q)
-                || user.email.lowercased().contains(q)
-                || (!codeQuery.isEmpty && user.friendCode.lowercased().contains(codeQuery))
+        var result = users
+        if !q.isEmpty {
+            result = result.filter { user in
+                user.displayName.lowercased().contains(q)
+                    || user.uid.lowercased().contains(q)
+                    || user.email.lowercased().contains(q)
+                    || (!codeQuery.isEmpty && user.friendCode.lowercased().contains(codeQuery))
+            }
         }
+        for filter in filters {
+            result = result.filter { filter.matches($0) }
+        }
+        return sort.applied(to: result)
     }
 
     var body: some View {
@@ -108,7 +129,10 @@ struct AdminPanelView: View {
             // Loads immediately — the Unlock tap that used to trigger this
             // went with the passcode gate.
             .task {
-                if isAdmin, users.isEmpty { await loadUsers() }
+                guard isAdmin else { return }
+                async let list: Void = users.isEmpty ? loadUsers() : ()
+                async let stats: Void = analytics == nil ? loadAnalytics() : ()
+                _ = await (list, stats)
             }
             .navigationTitle("Admin")
             .navigationBarTitleDisplayMode(.inline)
@@ -195,41 +219,40 @@ struct AdminPanelView: View {
                     }
 
                     Section {
-                        Button {
-                            Task { await bulkRefreshAllUsers() }
-                        } label: {
-                            HStack {
-                                if isBulkRefreshing { ProgressView() }
-                                Text(isBulkRefreshing ? "Refreshing all users…" : "Refresh all users")
+                        if let analytics {
+                            AdminOverviewRow(stats: analytics.overview)
+                                .listRowBackground(Color.clear)
+                                .listRowInsets(EdgeInsets())
+                        } else {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Loading analytics…")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(AppTheme.Colors.faint)
                             }
+                            .listRowBackground(Color.clear)
                         }
-                        .disabled(isBulkRefreshing || isRefreshingLeaderboard)
-                        .listRowBackground(AppTheme.Colors.card)
+                    } header: {
+                        Text("Overview")
+                    }
 
-                        Button {
-                            Task { await refreshLeaderboard() }
-                        } label: {
-                            HStack {
-                                if isRefreshingLeaderboard { ProgressView() }
-                                Text(isRefreshingLeaderboard ? "Refreshing leaderboard…" : "Refresh global leaderboard")
+                    if let analytics {
+                        Section {
+                            insightLink("chart.bar.fill", "Top Active Users") {
+                                AdminTopActiveView(analytics: analytics)
                             }
-                        }
-                        .disabled(isBulkRefreshing || isRefreshingLeaderboard)
-                        .listRowBackground(AppTheme.Colors.card)
-
-                        Button(role: .destructive) {
-                            Task { await clearAllFloors() }
-                        } label: {
-                            HStack {
-                                if isClearingFloors { ProgressView() }
-                                Text(isClearingFloors ? "Repairing levels…" : "Repair all levels")
+                            insightLink("chart.line.uptrend.xyaxis", "User Analytics") {
+                                AdminUserAnalyticsView(analytics: analytics)
                             }
+                            insightLink("person.badge.plus", "New Users") {
+                                AdminNewUsersView(analytics: analytics)
+                            }
+                            insightLink("person.fill.questionmark", "At Risk Users") {
+                                AdminAtRiskView(analytics: analytics)
+                            }
+                        } header: {
+                            Text("User Insights")
                         }
-                        .disabled(isBulkRefreshing || isClearingFloors || isRefreshingLeaderboard)
-                        .listRowBackground(AppTheme.Colors.card)
-                    } footer: {
-                        Text(footerText)
-                            .foregroundStyle(footerColor)
                     }
 
                     Section {
@@ -240,9 +263,58 @@ struct AdminPanelView: View {
                             .listRowBackground(AppTheme.Colors.card)
                         }
                     } header: {
-                        Text(listSummary ?? "\(users.count) users • sorted by lifetime hours")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AppTheme.Colors.faint)
+                        HStack {
+                            Text("All Users • \(sort.label)\(filters.isEmpty ? "" : " • \(filters.count) filter\(filters.count == 1 ? "" : "s")")")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(AppTheme.Colors.faint)
+                            Spacer()
+                            sortFilterMenu
+                        }
+                    }
+
+                    // Dangerous/internal actions, folded away from the
+                    // analytics they used to sit above. Behaviour unchanged.
+                    Section {
+                        DisclosureGroup(isExpanded: $maintenanceExpanded) {
+                            Button {
+                                Task { await bulkRefreshAllUsers() }
+                            } label: {
+                                HStack {
+                                    if isBulkRefreshing { ProgressView() }
+                                    Text(isBulkRefreshing ? "Refreshing all users…" : "Refresh all users")
+                                }
+                            }
+                            .disabled(isBulkRefreshing || isRefreshingLeaderboard)
+
+                            Button {
+                                Task { await refreshLeaderboard() }
+                            } label: {
+                                HStack {
+                                    if isRefreshingLeaderboard { ProgressView() }
+                                    Text(isRefreshingLeaderboard ? "Refreshing leaderboard…" : "Refresh global leaderboard")
+                                }
+                            }
+                            .disabled(isBulkRefreshing || isRefreshingLeaderboard)
+
+                            Button(role: .destructive) {
+                                Task { await clearAllFloors() }
+                            } label: {
+                                HStack {
+                                    if isClearingFloors { ProgressView() }
+                                    Text(isClearingFloors ? "Repairing levels…" : "Repair all levels")
+                                }
+                            }
+                            .disabled(isBulkRefreshing || isClearingFloors || isRefreshingLeaderboard)
+                        } label: {
+                            Label("System Maintenance", systemImage: "wrench.and.screwdriver")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .listRowBackground(AppTheme.Colors.card)
+                    } footer: {
+                        if maintenanceExpanded {
+                            Text("\(listSummary ?? "")\n\(footerText)")
+                                .foregroundStyle(footerColor)
+                        }
                     }
                 }
                 .listStyle(.insetGrouped)
@@ -308,6 +380,68 @@ struct AdminPanelView: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+    }
+
+    private func insightLink<Destination: View>(
+        _ icon: String,
+        _ title: String,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(AppTheme.Colors.accent)
+                    .frame(width: 22)
+                Text(title)
+            }
+        }
+        .listRowBackground(AppTheme.Colors.card)
+    }
+
+    private var sortFilterMenu: some View {
+        Menu {
+            Picker("Sort by", selection: $sort) {
+                ForEach(AdminUserSort.allCases, id: \.self) { option in
+                    Text(option.label).tag(option)
+                }
+            }
+            Divider()
+            ForEach(AdminUserFilter.allCases, id: \.self) { filter in
+                Button {
+                    if filters.contains(filter) { filters.remove(filter) }
+                    else { filters.insert(filter) }
+                } label: {
+                    if filters.contains(filter) {
+                        Label(filter.label, systemImage: "checkmark")
+                    } else {
+                        Text(filter.label)
+                    }
+                }
+            }
+            if !filters.isEmpty {
+                Divider()
+                Button("Clear filters") { filters.removeAll() }
+            }
+        } label: {
+            Image(systemName: "line.3.horizontal.decrease.circle\(filters.isEmpty ? "" : ".fill")")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(AppTheme.Colors.accent)
+        }
+    }
+
+    private func loadAnalytics() async {
+        do {
+            let result = try await functions.httpsCallable("adminAnalytics").call(["passcode": passcode])
+            if let dict = result.data as? [String: Any] {
+                analytics = AdminAnalyticsPayload.parse(dict)
+            }
+        } catch {
+            // The console stays fully usable without analytics; the overview
+            // row keeps its loading state and a retry rides the next refresh.
+        }
     }
 
     // MARK: - Networking
@@ -477,7 +611,7 @@ private extension AdminUser {
             guard let ms = dict[key] as? NSNumber, ms.doubleValue > 0 else { return nil }
             return Date(timeIntervalSince1970: ms.doubleValue / 1000)
         }
-        return AdminUser(
+        var user = AdminUser(
             uid: dict["uid"] as? String ?? "",
             displayName: dict["displayName"] as? String ?? "",
             friendCode: (dict["friendCode"] as? String ?? "").uppercased(),
@@ -498,6 +632,15 @@ private extension AdminUser {
             hasReviewedApp: dict["hasReviewedApp"] as? Bool ?? false,
             profilePending: dict["profilePending"] as? Bool ?? false
         )
+        user.weeklyHours = double("weeklyHours")
+        user.weeklyShifts = int("weeklyShifts") ?? 0
+        user.currentStreak = int("currentStreak") ?? 0
+        user.bestStreak = int("bestStreak") ?? 0
+        user.totalXP = int("totalXP") ?? 0
+        user.monthHours = double("monthHours")
+        user.photoURL = dict["photoURL"] as? String
+        user.lastShiftAt = date("lastShiftMs")
+        return user
     }
 }
 
@@ -528,6 +671,9 @@ private struct AdminEditUserSheet: View {
     @State private var errorMessage: String?
     @State private var refreshedMessage: String?
     @State private var copiedField: String?
+    /// Merged recent activity (feed docs + leaderboard events), server-fetched.
+    @State private var timeline: [(at: Date, text: String)] = []
+    @State private var timelineLoaded = false
     @State private var verifiedDraft: Bool
     @State private var isSavingVerified = false
 
@@ -588,6 +734,39 @@ private struct AdminEditUserSheet: View {
                     }
                 } header: {
                     Text(user.displayName.isEmpty ? user.uid : user.displayName)
+                }
+
+                Section {
+                    activityRow("Last active", AdminFormat.lastActive(user.lastActiveAt))
+                    activityRow("Account created", AdminFormat.joined(user.createdAt))
+                    activityRow("Total hours", AppTheme.Format.hours(user.totalHours))
+                    activityRow("Hours this week", AppTheme.Format.hours(user.weeklyHours))
+                    activityRow("Hours this month", AppTheme.Format.hours(user.monthHours))
+                    activityRow("Shifts this week", "\(user.weeklyShifts)")
+                    activityRow("Current streak", "\(user.currentStreak) days")
+                    activityRow("Best streak", "\(user.bestStreak) days")
+                    activityRow("Total XP", "\(user.totalXP)")
+                    activityRow("Engagement score", "\(user.engagementScore)/100")
+                } header: {
+                    Text("Activity")
+                } footer: {
+                    Text("Weekly, monthly, and streak figures come from the server-computed profile — the same numbers friends see.")
+                }
+
+                if !timeline.isEmpty {
+                    Section {
+                        ForEach(Array(timeline.enumerated()), id: \.offset) { _, item in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.at.formatted(.dateTime.month(.abbreviated).day().hour().minute()))
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(AppTheme.Colors.faint)
+                                Text(item.text)
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                        }
+                    } header: {
+                        Text("Recent Activity")
+                    }
                 }
 
                 Section {
@@ -730,6 +909,11 @@ private struct AdminEditUserSheet: View {
             }
             .scrollContentBackground(.hidden)
             .background(AppTheme.Colors.bg.ignoresSafeArea())
+            .task {
+                guard !timelineLoaded else { return }
+                timelineLoaded = true
+                await loadTimeline()
+            }
             .navigationTitle("Edit user")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -762,6 +946,35 @@ private struct AdminEditUserSheet: View {
             Haptics.error()
             errorMessage = error.localizedDescription
             verifiedDraft = !verified // roll the switch back; the write failed
+        }
+    }
+
+    private func activityRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(value)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Recent activity from the collections other surfaces already write —
+    /// the user's activity feed plus their leaderboard events. No new event
+    /// system, no client scans.
+    private func loadTimeline() async {
+        do {
+            let result = try await functions.httpsCallable("adminUserActivity")
+                .call(["passcode": passcode, "targetUid": user.uid])
+            guard let dict = result.data as? [String: Any],
+                  let items = dict["items"] as? [[String: Any]] else { return }
+            timeline = items.compactMap { item in
+                guard let ms = (item["atMs"] as? Double) ?? (item["atMs"] as? NSNumber)?.doubleValue,
+                      let text = item["text"] as? String, !text.isEmpty else { return nil }
+                return (Date(timeIntervalSince1970: ms / 1000), text)
+            }
+        } catch {
+            // The sheet is fully usable without the timeline.
         }
     }
 
@@ -1272,5 +1485,107 @@ struct AdminAnnouncementView: View {
             Haptics.error()
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+// MARK: - User list sorting & filtering
+
+enum AdminUserSort: CaseIterable {
+    case recentlyActive, mostActive, totalHours, weeklyHours, level, prestige, xp, joined, longestInactive
+
+    var label: String {
+        switch self {
+        case .recentlyActive: return "Recently Active"
+        case .mostActive: return "Most Active"
+        case .totalHours: return "Total Hours"
+        case .weeklyHours: return "Hours This Week"
+        case .level: return "Level"
+        case .prestige: return "Prestige"
+        case .xp: return "XP"
+        case .joined: return "Join Date"
+        case .longestInactive: return "Longest Inactive"
+        }
+    }
+
+    func applied(to users: [AdminUser]) -> [AdminUser] {
+        switch self {
+        case .recentlyActive:
+            return users.sorted { ($0.lastActiveAt ?? .distantPast) > ($1.lastActiveAt ?? .distantPast) }
+        case .mostActive:
+            return users.sorted { $0.engagementScore > $1.engagementScore }
+        case .totalHours:
+            return users.sorted { $0.totalHours > $1.totalHours }
+        case .weeklyHours:
+            return users.sorted { $0.weeklyHours > $1.weeklyHours }
+        case .level:
+            return users.sorted { ($0.prestige, $0.level) > ($1.prestige, $1.level) }
+        case .prestige:
+            return users.sorted { $0.prestige > $1.prestige }
+        case .xp:
+            return users.sorted { $0.totalXP > $1.totalXP }
+        case .joined:
+            return users.sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
+        case .longestInactive:
+            return users.sorted { ($0.lastActiveAt ?? .distantPast) < ($1.lastActiveAt ?? .distantPast) }
+        }
+    }
+}
+
+enum AdminUserFilter: CaseIterable {
+    case activeToday, activeThisWeek, newUsers, verified, prestige, inactive7d, atRisk
+
+    var label: String {
+        switch self {
+        case .activeToday: return "Active Today"
+        case .activeThisWeek: return "Active This Week"
+        case .newUsers: return "New (7 days)"
+        case .verified: return "Verified"
+        case .prestige: return "Prestige Users"
+        case .inactive7d: return "Inactive 7+ Days"
+        case .atRisk: return "At Risk"
+        }
+    }
+
+    func matches(_ user: AdminUser) -> Bool {
+        let day: TimeInterval = 86400
+        switch self {
+        case .activeToday:
+            return (user.lastActiveAt ?? .distantPast) >= Date().addingTimeInterval(-day)
+        case .activeThisWeek:
+            return (user.lastActiveAt ?? .distantPast) >= Date().addingTimeInterval(-7 * day)
+        case .newUsers:
+            return (user.createdAt ?? .distantPast) >= Date().addingTimeInterval(-7 * day)
+        case .verified:
+            return user.hasReviewedApp
+        case .prestige:
+            return user.prestige > 0
+        case .inactive7d:
+            return (user.lastActiveAt ?? .distantPast) < Date().addingTimeInterval(-7 * day)
+        case .atRisk:
+            // Mirrors the server's rule: real history, gone quiet 3+ days.
+            let previouslyActive = user.totalHours >= 10 || user.bestStreak >= 3
+            let lastTouch = max(user.lastActiveAt ?? .distantPast, user.lastShiftAt ?? .distantPast)
+            return previouslyActive && lastTouch < Date().addingTimeInterval(-3 * day)
+        }
+    }
+}
+
+extension AdminUser {
+    /// Client mirror of the server's activity score (src/admin/analytics.js),
+    /// for sorting the full list by "Most Active" — the analytics payload only
+    /// carries the top 50, but every row has the inputs.
+    var engagementScore: Int {
+        let now = Date()
+        var score = 0.0
+        let lastTouch = max(lastActiveAt ?? .distantPast, lastShiftAt ?? .distantPast)
+        if lastTouch > .distantPast {
+            let daysAgo = max(0, now.timeIntervalSince(lastTouch) / 86400)
+            score += Swift.max(0, 35 * (1 - daysAgo / 7))
+        }
+        score += 25 * Swift.min(Double(weeklyShifts) / 5, 1)
+        score += 20 * Swift.min(weeklyHours / 40, 1)
+        score += 10 * Swift.min(Double(currentStreak) / 7, 1)
+        if let lastShiftAt, Calendar.current.isDateInToday(lastShiftAt) { score += 10 }
+        return Int(Swift.min(100, score).rounded())
     }
 }

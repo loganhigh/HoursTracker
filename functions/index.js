@@ -22,6 +22,7 @@ const {
   sanitizeDisplayName,
 } = require("./src/stats/recompute");
 const rankMoves = require("./src/leaderboard/rankMoves");
+const adminAnalytics = require("./src/admin/analytics");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
@@ -802,6 +803,16 @@ function buildAdminUserRow(uid, userData, profileData, authData, presenceData) {
       rankTitle(Number(p.level) || Number(u.level) || 1, Number(p.prestige) || Number(u.prestige) || 0),
     countryCode: String(u.countryCode || p.countryCode || "").trim().toUpperCase(),
     hasReviewedApp: p.hasReviewedApp === true || u.hasReviewedApp === true,
+    // Engagement fields, straight off the server-computed profile — the
+    // admin list and analytics sort/score on these without extra reads.
+    weeklyHours: Number(p.weeklyHours) || 0,
+    weeklyShifts: Number(p.weeklyShiftsLogged) || 0,
+    currentStreak: Number(p.currentStreak) || 0,
+    bestStreak: Number(p.bestStreak) || 0,
+    totalXP: Number(p.totalXP) || 0,
+    monthHours: Math.round((Number(p.currentMonthHours) || 0) * 100) / 100,
+    photoURL: p.profilePhotoURL || null,
+    lastShiftMs: p.lastShiftLoggedAt?.toMillis?.() ?? null,
     profilePending: !hasPublicProfile,
   };
 }
@@ -825,6 +836,28 @@ exports.dailyStatsRefresh = onSchedule(
   },
   async () => {
     await refreshAllUsersStats(db);
+    // Daily engagement snapshot for the admin dashboard's history charts.
+    // Failure here must never fail the stats refresh it rides on.
+    try {
+      const now = Date.now();
+      const { rows } = await assembleAdminRows();
+      const isoDay = new Date(now).toISOString().slice(0, 10);
+      await db.collection("adminDaily").doc(isoDay).set({
+        atMs: now,
+        totalUsers: rows.length,
+        activeToday: adminAnalytics.countWithin(rows, "lastActiveAt", 1, now),
+        active7d: adminAnalytics.countWithin(rows, "lastActiveAt", 7, now),
+        newToday: adminAnalytics.countWithin(rows, "createdAt", 1, now),
+        usersLoggedToday: rows.filter(
+          (r) => (r.lastShiftMs || 0) >= adminAnalytics.startOfUTCDay(now)
+        ).length,
+        shiftsThisWeek: rows.reduce((sum, r) => sum + (r.weeklyShifts || 0), 0),
+        hoursThisWeek:
+          Math.round(rows.reduce((sum, r) => sum + (r.weeklyHours || 0), 0) * 10) / 10,
+      });
+    } catch (err) {
+      console.warn("adminDaily snapshot failed:", err?.message || err);
+    }
   }
 );
 
@@ -1687,57 +1720,220 @@ async function clearAdminProgressionSet(db, targetUid) {
  * prefer the server-maintained publicProfiles doc, falling back to the legacy
  * mirror on users/{uid} so accounts still appear even before backfill runs.
  */
+/**
+ * One assembly used by adminListUsers, adminAnalytics, and the daily
+ * snapshot: every known account joined against its profile, presence stamp,
+ * and auth record. O(users) reads per call — acceptable for a hand-opened
+ * admin surface into the tens of thousands of users; past that, the daily
+ * adminDaily snapshots (written by dailyStatsRefresh) become the cheap
+ * history source and this assembly stays confined to explicit admin taps.
+ */
+async function assembleAdminRows() {
+  const [usersSnap, profilesSnap, presenceSnap, authUsers] = await Promise.all([
+    db.collection("users").get(),
+    db.collection("publicProfiles").get(),
+    db.collection("presence").get(),
+    listAllAuthUsers(),
+  ]);
+
+  const profileByUid = new Map(
+    profilesSnap.docs.map((doc) => [doc.id, doc.data() || {}])
+  );
+  const presenceByUid = new Map(
+    presenceSnap.docs.map((doc) => [doc.id, doc.data() || {}])
+  );
+  const authByUid = new Map(authUsers.map((user) => [user.uid, user]));
+  const firestoreUids = new Set(usersSnap.docs.map((doc) => doc.id));
+
+  const rows = usersSnap.docs.map((doc) =>
+    buildAdminUserRow(
+      doc.id,
+      doc.data(),
+      profileByUid.get(doc.id),
+      authByUid.get(doc.id),
+      presenceByUid.get(doc.id)
+    )
+  );
+
+  for (const authUser of authUsers) {
+    if (firestoreUids.has(authUser.uid)) continue;
+    const email = authUser.email || "";
+    const fallbackName = email.includes("@") ? email.split("@")[0] : "Worker";
+    rows.push(
+      buildAdminUserRow(authUser.uid, {
+        displayName: authUser.displayName || fallbackName,
+      }, null, authUser, presenceByUid.get(authUser.uid))
+    );
+  }
+
+  return {
+    rows,
+    firestoreCount: usersSnap.size,
+    authCount: authUsers.length,
+    publicProfileCount: profilesSnap.size,
+  };
+}
+
 exports.adminListUsers = onCall(
   { region: "us-central1", secrets: [ADMIN_PASSCODE] },
   async (request) => {
     assertAdmin(request);
+    const { rows, firestoreCount, authCount, publicProfileCount } = await assembleAdminRows();
+    rows.sort((a, b) => b.totalHours - a.totalHours);
+    return { ok: true, users: rows, firestoreCount, authCount, publicProfileCount };
+  }
+);
 
-    const [usersSnap, profilesSnap, presenceSnap, authUsers] = await Promise.all([
-      db.collection("users").get(),
-      db.collection("publicProfiles").get(),
-      db.collection("presence").get(),
-      listAllAuthUsers(),
-    ]);
+/**
+ * The Admin command center's single analytics read: overview counters, the
+ * activity-score leaderboard, at-risk users, new signups, signup growth
+ * buckets, and whatever daily history the adminDaily snapshots have
+ * accumulated. One callable, one payload — the client never scans anything.
+ */
+exports.adminAnalytics = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE], memory: "512MiB", timeoutSeconds: 120 },
+  async (request) => {
+    assertAdmin(request);
+    const now = Date.now();
+    const { rows } = await assembleAdminRows();
 
-    const profileByUid = new Map(
-      profilesSnap.docs.map((doc) => [doc.id, doc.data() || {}])
+    const overview = {
+      totalUsers: rows.length,
+      activeToday: adminAnalytics.countWithin(rows, "lastActiveAt", 1, now),
+      active7d: adminAnalytics.countWithin(rows, "lastActiveAt", 7, now),
+      active30d: adminAnalytics.countWithin(rows, "lastActiveAt", 30, now),
+      newToday: adminAnalytics.countWithin(rows, "createdAt", 1, now),
+      new7d: adminAnalytics.countWithin(rows, "createdAt", 7, now),
+      new30d: adminAnalytics.countWithin(rows, "createdAt", 30, now),
+      usersLoggedToday: rows.filter(
+        (r) => (r.lastShiftMs || 0) >= adminAnalytics.startOfUTCDay(now)
+      ).length,
+      shiftsThisWeek: rows.reduce((sum, r) => sum + (r.weeklyShifts || 0), 0),
+      hoursThisWeek:
+        Math.round(rows.reduce((sum, r) => sum + (r.weeklyHours || 0), 0) * 10) / 10,
+    };
+    // Week-over-week signup delta comes straight from auth creation times —
+    // the one growth comparison computable honestly without stored history.
+    const prev7d = rows.filter((r) => {
+      const ms = r.createdAt;
+      return Number.isFinite(ms)
+        && ms >= now - 14 * adminAnalytics.DAY_MS
+        && ms < now - 7 * adminAnalytics.DAY_MS;
+    }).length;
+    overview.new7dDeltaPct = prev7d > 0
+      ? Math.round(((overview.new7d - prev7d) / prev7d) * 100)
+      : null;
+
+    const compactRow = (r) => ({
+      uid: r.uid,
+      displayName: r.displayName,
+      photoURL: r.photoURL,
+      level: r.level,
+      prestige: r.prestige,
+      hasReviewedApp: r.hasReviewedApp === true,
+      weeklyHours: r.weeklyHours,
+      weeklyShifts: r.weeklyShifts,
+      monthHours: r.monthHours,
+      totalHours: r.totalHours,
+      currentStreak: r.currentStreak,
+      lastActiveAt: r.lastActiveAt,
+      lastShiftMs: r.lastShiftMs,
+      createdAt: r.createdAt,
+    });
+
+    const topActive = rows
+      .map((r) => ({ ...compactRow(r), score: adminAnalytics.activityScore(r, now) }))
+      .sort((a, b) => b.score - a.score || b.weeklyHours - a.weeklyHours)
+      .slice(0, 50);
+
+    const atRisk = rows
+      .map((r) => {
+        const info = adminAnalytics.atRiskInfo(r, now);
+        return info ? { ...compactRow(r), ...info } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.inactiveDays - b.inactiveDays)
+      .slice(0, 100);
+
+    const newUsers = rows
+      .filter((r) => Number.isFinite(r.createdAt) && r.createdAt >= now - 30 * adminAnalytics.DAY_MS)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 100)
+      .map(compactRow);
+
+    const growth = adminAnalytics.signupBuckets(
+      rows.map((r) => r.createdAt).filter(Number.isFinite),
+      90,
+      now
     );
-    const presenceByUid = new Map(
-      presenceSnap.docs.map((doc) => [doc.id, doc.data() || {}])
-    );
-    const authByUid = new Map(authUsers.map((user) => [user.uid, user]));
-    const firestoreUids = new Set(usersSnap.docs.map((doc) => doc.id));
 
-    const rows = usersSnap.docs.map((doc) =>
-      buildAdminUserRow(
-        doc.id,
-        doc.data(),
-        profileByUid.get(doc.id),
-        authByUid.get(doc.id),
-        presenceByUid.get(doc.id)
-      )
-    );
-
-    for (const authUser of authUsers) {
-      if (firestoreUids.has(authUser.uid)) continue;
-      const email = authUser.email || "";
-      const fallbackName = email.includes("@") ? email.split("@")[0] : "Worker";
-      rows.push(
-        buildAdminUserRow(authUser.uid, {
-          displayName: authUser.displayName || fallbackName,
-        }, null, authUser, presenceByUid.get(authUser.uid))
-      );
+    // Daily engagement history, as far back as the snapshots go — they start
+    // accumulating the day this ships, so charts earn real data over time.
+    let history = [];
+    try {
+      const histSnap = await db.collection("adminDaily")
+        .orderBy("atMs", "desc").limit(90).get();
+      history = histSnap.docs.map((d) => d.data()).reverse();
+    } catch (err) {
+      console.warn("adminAnalytics: history read failed:", err?.message || err);
     }
 
-    rows.sort((a, b) => b.totalHours - a.totalHours);
+    return { ok: true, generatedAtMs: now, overview, topActive, atRisk, newUsers, growth, history };
+  }
+);
 
-    return {
-      ok: true,
-      users: rows,
-      firestoreCount: usersSnap.size,
-      authCount: authUsers.length,
-      publicProfileCount: profilesSnap.size,
-    };
+/**
+ * Recent activity timeline for one user: their own activity-feed docs plus
+ * their leaderboard events, merged newest-first. Both collections already
+ * exist — no new event system, exactly the records other surfaces write.
+ */
+exports.adminUserActivity = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE] },
+  async (request) => {
+    assertAdmin(request);
+    const targetUid = request.data?.targetUid;
+    if (!targetUid || typeof targetUid !== "string") {
+      throw new HttpsError("invalid-argument", "targetUid is required.");
+    }
+
+    const items = [];
+    try {
+      const feedSnap = await db.collection("users").doc(targetUid)
+        .collection("activity").orderBy("createdAt", "desc").limit(12).get();
+      for (const doc of feedSnap.docs) {
+        const d = doc.data() || {};
+        const ms = d.createdAt?.toMillis?.();
+        if (!Number.isFinite(ms)) continue;
+        items.push({ atMs: ms, kind: String(d.kind || "activity"), text: String(d.body || "") });
+      }
+    } catch (err) {
+      console.warn(`adminUserActivity feed read failed uid=${targetUid}:`, err?.message || err);
+    }
+
+    try {
+      const evSnap = await db.collection("leaderboardEvents")
+        .where("uid", "==", targetUid).limit(50).get();
+      const events = evSnap.docs
+        .map((doc) => doc.data() || {})
+        .filter((e) => Number.isFinite(e.atMs))
+        .sort((a, b) => b.atMs - a.atMs)
+        .slice(0, 8);
+      for (const e of events) {
+        let text;
+        if (e.milestone === 1) text = "Reached #1 on the global leaderboard";
+        else if (e.milestone) text = `Entered the global Top ${e.milestone}`;
+        else if (e.type === "climb") text = `Climbed to #${e.newRank} on the global leaderboard`;
+        else if (e.type === "overtaken") text = `Passed on the leaderboard — now #${e.newRank}`;
+        else if (e.type === "entered") text = `Entered the global leaderboard at #${e.newRank}`;
+        else text = `Leaderboard rank moved to #${e.newRank}`;
+        items.push({ atMs: e.atMs, kind: "leaderboard", text });
+      }
+    } catch (err) {
+      console.warn(`adminUserActivity events read failed uid=${targetUid}:`, err?.message || err);
+    }
+
+    items.sort((a, b) => b.atMs - a.atMs);
+    return { ok: true, items: items.slice(0, 15) };
   }
 );
 
