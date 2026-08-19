@@ -98,11 +98,11 @@ struct AccountView: View {
                     .cardAppear(index: 1, group: "you")
                 lifetimeStatsSection
                     .cardAppear(index: 2, group: "you")
-                navigationCard
-                    .cardAppear(index: 3, group: "you")
                 // The retired Career page's sections now live inline: personal
                 // bests, company tenure, and tracking history.
                 CareerSections(store: store)
+                    .cardAppear(index: 3, group: "you")
+                navigationCard
                     .cardAppear(index: 4, group: "you")
                 accountSection
                     .cardAppear(index: 5, group: "you")
