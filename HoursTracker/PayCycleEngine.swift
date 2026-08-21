@@ -217,7 +217,10 @@ enum PayCycleEngine {
         let day = cal.startOfDay(for: date)
         let cycle = cycle(containing: date, settings: settings, calendar: cal)
         var labels: [String] = []
-        if day == cal.startOfDay(for: cycle.cutoff) {
+        // "Cutoff" only exists as a concept when the user turned the toggle on.
+        // Without it, `cycle.cutoff` is just payday - 1 (an internal bookkeeping
+        // value) and must not surface as a label.
+        if usesSavedCutoff(settings), day == cal.startOfDay(for: cycle.cutoff) {
             labels.append("Cutoff")
         }
         if day == cal.startOfDay(for: cycle.payday) {
