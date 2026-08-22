@@ -2849,9 +2849,12 @@ private enum GamificationEngine {
         let todayEntries = entries.filter { cal.isDate($0.date, inSameDayAs: today) }
         let hasShift = !todayEntries.isEmpty
         let hoursToday = todayEntries.reduce(0.0) { $0 + $1.paidHours }
-        let loggedBefore9PM = todayEntries.contains {
-            let comps = cal.dateComponents([.hour], from: $0.date)
-            return (comps.hour ?? 23) < 21
+        // `date` is always midnight, so checking its hour completed this for
+        // every shift ever logged. Use the creation time; entries from builds
+        // without one keep completing so nobody's XP drops on update.
+        let loggedBefore9PM = todayEntries.contains { entry in
+            guard let createdAt = entry.createdAt else { return true }
+            return cal.component(.hour, from: createdAt) < 21
         }
 
         return [

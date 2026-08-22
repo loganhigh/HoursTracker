@@ -46,6 +46,11 @@ struct AddShiftIntent: AppIntent {
 
         let cal = Calendar.current
         let day = cal.startOfDay(for: date.flatMap { cal.date(from: $0) } ?? Date())
+        // The editor and wizard cap their date pickers at today; a spoken
+        // "tomorrow" skipped that and counted unworked hours, pay and XP.
+        guard day <= cal.startOfDay(for: Date()) else {
+            return .result(dialog: "I can only log shifts for today or earlier.")
+        }
         guard let start = merge(day: day, time: startTime, calendar: cal),
               let end = merge(day: day, time: endTime, calendar: cal) else {
             return .result(dialog: "I couldn't read those times.")

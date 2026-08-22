@@ -23,6 +23,11 @@ struct WorkEntry: Identifiable, Codable, Equatable {
     /// True when this shift was worked on a statutory holiday (for holiday pay calculation).
     var isHoliday: Bool = false
 
+    /// When the entry was logged (not worked). `date` is always start-of-day,
+    /// so anything about *when the user logged* needs this. nil on entries
+    /// saved by builds that predate the field.
+    var createdAt: Date? = nil
+
     // Convenience (used throughout)
     var paidHours: Double {
         if isOffDay { return 0 }
@@ -66,12 +71,15 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         case id, date, start, end, breakMinutes, notes
         case locationName, locationURL, latitude, longitude
         case isOffDay, offDayReason, isHoliday
+        case createdAt
     }
 
     init(id: UUID = UUID(), date: Date, start: Date, end: Date, breakMinutes: Int, notes: String,
          locationName: String = "", locationURL: String = "", latitude: Double? = nil, longitude: Double? = nil,
-         isOffDay: Bool = false, offDayReason: String = "", isHoliday: Bool = false) {
+         isOffDay: Bool = false, offDayReason: String = "", isHoliday: Bool = false,
+         createdAt: Date? = Date()) {
         self.id = id
+        self.createdAt = createdAt
         self.date = date
         self.start = start
         self.end = end
@@ -101,6 +109,7 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         isOffDay = try c.decodeIfPresent(Bool.self, forKey: .isOffDay) ?? false
         offDayReason = try c.decodeIfPresent(String.self, forKey: .offDayReason) ?? ""
         isHoliday = try c.decodeIfPresent(Bool.self, forKey: .isHoliday) ?? false
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -118,5 +127,6 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         try c.encode(isOffDay, forKey: .isOffDay)
         try c.encode(offDayReason, forKey: .offDayReason)
         try c.encode(isHoliday, forKey: .isHoliday)
+        try c.encodeIfPresent(createdAt, forKey: .createdAt)
     }
 }

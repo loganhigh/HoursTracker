@@ -1585,7 +1585,11 @@ extension AdminUser {
         score += 25 * Swift.min(Double(weeklyShifts) / 5, 1)
         score += 20 * Swift.min(weeklyHours / 40, 1)
         score += 10 * Swift.min(Double(currentStreak) / 7, 1)
-        if let lastShiftAt, Calendar.current.isDateInToday(lastShiftAt) { score += 10 }
+        // Server analytics scores "shift today" on the UTC day; match it so
+        // the two rankings don't drift for shifts near midnight.
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC") ?? .current
+        if let lastShiftAt, utc.isDateInToday(lastShiftAt) { score += 10 }
         return Int(Swift.min(100, score).rounded())
     }
 }
