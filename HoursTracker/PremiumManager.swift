@@ -207,7 +207,11 @@ final class PremiumManager: ObservableObject {
                 break
             }
         }
-        guard let status = matchedStatus ?? statuses.first,
+        // `subscription.status` is group-wide: it also lists a lapsed sibling
+        // plan (an old monthly next to the live yearly). Falling back to
+        // `statuses.first` when the matching status failed verification
+        // reported that sibling's stale expiry / auto-renew as this plan's.
+        guard let status = matchedStatus,
               let transaction = try? checkVerified(status.transaction) else {
             return fallback
         }

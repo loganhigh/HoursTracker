@@ -197,9 +197,15 @@ struct LevelXPCard: View {
     @State private var displayedProgress: Double = 0
     @State private var seeded = false
 
+    /// Level is clamped at the cap while XP keeps accruing toward the (locked)
+    /// next level, so "at max level" and "can prestige" are different states:
+    /// the bar can sit at 13% on Level 25. `canPrestige` is what actually gates
+    /// the Prestige button, so the caption follows it too.
     private var isMaxLevel: Bool {
         profile.level >= GamificationLevelCalculator.maxLevelForPrestige(profile.prestige)
     }
+
+    private var isReadyToPrestige: Bool { profile.canPrestige }
 
     private var liveProgress: Double {
         guard profile.xpForNextLevel > 0 else { return 0 }
@@ -239,10 +245,14 @@ struct LevelXPCard: View {
             }
             .frame(height: 12)
 
-            if isMaxLevel {
+            if isReadyToPrestige {
                 Label("Level \(profile.level) reached — ready to Prestige", systemImage: "sparkles")
                     .appText(.caption)
                     .foregroundStyle(tint)
+            } else if isMaxLevel {
+                Text("\(xpRemaining.formatted()) XP to Prestige")
+                    .appText(.caption)
+                    .foregroundStyle(AppColors.subtext)
             } else {
                 Text("\(xpRemaining.formatted()) XP to Level \(profile.level + 1)")
                     .appText(.caption)
