@@ -62,6 +62,19 @@ struct EntryEditorView: View {
     ]
     static let holidayReason = "Holiday"
 
+    /// Reasons offered by the picker, guaranteeing the entry's CURRENT reason is
+    /// selectable. Auto-filled days (AutoOffDayFiller) and the Home "log off day"
+    /// button both write the reason "Off", which is deliberately not one of the
+    /// pickable reasons. A SwiftUI Picker whose selection matches no tag falls
+    /// back to the first option, so opening such a day silently armed "Sick" and
+    /// saving relabelled it — which also broke the `offDayReason == "Off"`
+    /// auto-off repair in HoursStore. Any unrecognised legacy reason round-trips
+    /// the same way.
+    static func reasonOptions(including current: String) -> [String] {
+        guard !current.isEmpty, !offDayReasons.contains(current) else { return offDayReasons }
+        return [current] + offDayReasons
+    }
+
     // MARK: - Init (same signature as before — all call sites unchanged)
 
     init(store: HoursStore, mode: Mode) {
@@ -108,7 +121,12 @@ struct EntryEditorView: View {
             } else {
                 _shiftKind = State(initialValue: .work)
             }
-            _offDayReason = State(initialValue: Self.offDayReasons.contains(entry.offDayReason) ? entry.offDayReason : Self.offDayReasons[0])
+            // Keep the stored reason ("Off", or anything from an older build) so
+            // saving an untouched off day cannot rewrite what it is.
+            let keepsReason = entry.isOffDay
+                && !entry.offDayReason.isEmpty
+                && entry.offDayReason != Self.holidayReason
+            _offDayReason = State(initialValue: keepsReason ? entry.offDayReason : Self.offDayReasons[0])
             _showCustomBreak = State(initialValue: entry.breakMinutes > 0 && ![15, 30, 45, 60].contains(entry.breakMinutes))
 
             yesterdayPreset = nil
@@ -141,7 +159,8 @@ struct EntryEditorView: View {
                             timesCard
                             EntryBreakSection(breakMinutes: $breakMinutes, showCustom: $showCustomBreak)
                         }
-                        EntryShiftTypeSection(kind: $shiftKind, offDayReason: $offDayReason, reasons: Self.offDayReasons)
+                        EntryShiftTypeSection(kind: $shiftKind, offDayReason: $offDayReason,
+                                              reasons: Self.reasonOptions(including: offDayReason))
                         if shiftKind == .work { summarySection }
                         EntryDetailsSection(
                             locationLabel: $locationLabel,
