@@ -129,3 +129,44 @@ final class LevelUpCoordinator: ObservableObject {
         return rewards
     }
 }
+
+
+// MARK: - Per-account celebration ratchet
+
+/// Highest level already celebrated with a Level Up card, per prestige run —
+/// keyed by account. It used to be one device-wide @AppStorage pair, so after
+/// signing out and into another account (or deleting an account, or signing in
+/// after local-only use) the ratchet belonged to the wrong person: either no
+/// Level Up card for many levels, or a phantom "Level 2 → 12" on sign-in.
+enum LevelUpRatchet {
+    static let localScope = "local"
+    private static let hwmPrefix = "level_up_celebrated_hwm_v2"
+    private static let prestigePrefix = "level_up_celebrated_prestige_v2"
+
+    static func celebratedLevelHWM(scope: String) -> Int {
+        UserDefaults.standard.integer(forKey: "\(hwmPrefix)_\(scope)")
+    }
+
+    static func setCelebratedLevelHWM(_ value: Int, scope: String) {
+        UserDefaults.standard.set(value, forKey: "\(hwmPrefix)_\(scope)")
+    }
+
+    /// -1 until the scope has been baselined, so the first evaluation for a
+    /// new account re-baselines silently instead of celebrating.
+    static func celebratedPrestige(scope: String) -> Int {
+        let key = "\(prestigePrefix)_\(scope)"
+        return UserDefaults.standard.object(forKey: key) == nil ? -1 : UserDefaults.standard.integer(forKey: key)
+    }
+
+    static func setCelebratedPrestige(_ value: Int, scope: String) {
+        UserDefaults.standard.set(value, forKey: "\(prestigePrefix)_\(scope)")
+    }
+
+    static func resetAll() {
+        let defaults = UserDefaults.standard
+        for key in defaults.dictionaryRepresentation().keys
+        where key.hasPrefix(hwmPrefix) || key.hasPrefix(prestigePrefix) {
+            defaults.removeObject(forKey: key)
+        }
+    }
+}

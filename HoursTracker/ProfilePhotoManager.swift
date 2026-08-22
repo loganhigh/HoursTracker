@@ -11,6 +11,12 @@ final class ProfilePhotoManager: ObservableObject {
 
     static let localFileName = "profile_avatar.jpg"
     private static let remoteURLKey = "profile_photo_url"
+    /// Account the local avatar was uploaded for. Sign-out leaves the local
+    /// photo in place (there is no re-download path, so clearing it would
+    /// strip the same user's avatar on re-sign-in); instead the NEXT sign-in
+    /// checks this and discards a photo that belongs to someone else — it used
+    /// to be republished as the new account's profile photo.
+    private static let ownerUIDKey = "profile_photo_owner_uid"
     private static let remotePath = "profile/avatar.jpg"
     private static let maxEdge: CGFloat = 512
     private static let jpegQuality: CGFloat = 0.82
@@ -99,6 +105,26 @@ final class ProfilePhotoManager: ObservableObject {
         }
         localImage = nil
         UserDefaults.standard.removeObject(forKey: Self.remoteURLKey)
+        UserDefaults.standard.removeObject(forKey: Self.ownerUIDKey)
+    }
+
+    /// Drops the cached avatar if it was uploaded for a different account.
+    /// A local-only photo that was never uploaded (no URL, no owner) is kept:
+    /// it migrates to this account like the rest of the device's local data.
+    func reconcileLocalPhoto(forSignedInUID uid: String) {
+        let owner = UserDefaults.standard.string(forKey: Self.ownerUIDKey)
+        let belongsToAnotherAccount: Bool
+        if let owner {
+            belongsToAnotherAccount = owner != uid
+        } else if let remote = remotePhotoURL {
+            // Pre-ownerUID builds: the Storage download URL embeds the path
+            // users/{uid}/profile/avatar.jpg (URL-encoded).
+            belongsToAnotherAccount = !(remote.contains("users%2F\(uid)%2F") || remote.contains("users/\(uid)/"))
+        } else {
+            belongsToAnotherAccount = false
+        }
+        guard belongsToAnotherAccount else { return }
+        try? removeLocalPhoto()
     }
 
     private func uploadCurrentPhoto(data: Data) async throws {
@@ -110,6 +136,7 @@ final class ProfilePhotoManager: ObservableObject {
         _ = try await ref.putDataAsync(data, metadata: metadata)
         let url = try await ref.downloadURL()
         UserDefaults.standard.set(url.absoluteString, forKey: Self.remoteURLKey)
+        UserDefaults.standard.set(uid, forKey: Self.ownerUIDKey)
     }
 
     private func deleteRemotePhotoIfNeeded() async throws {

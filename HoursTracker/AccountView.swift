@@ -451,7 +451,7 @@ struct AccountView: View {
                     // card, past everything routine, ordered least to most
                     // destructive.
                     Button {
-                        try? authService.signOut()
+                        Task { try? await authService.signOut() }
                     } label: {
                         AccountNavRow(
                             icon: "rectangle.portrait.and.arrow.right",

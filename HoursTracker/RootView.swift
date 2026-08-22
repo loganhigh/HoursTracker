@@ -373,8 +373,17 @@ struct HoursHomeView: View {
     /// boundaries, so the computed level can dip overnight and re-cross the
     /// same threshold the next shift — this ratchet ensures each level is
     /// celebrated at most once until prestige resets the run.
-    @AppStorage("level_up_celebrated_hwm_v1") private var celebratedLevelHWM = 0
-    @AppStorage("level_up_celebrated_prestige_v1") private var celebratedPrestige = -1
+    // Stored per account (see LevelUpRatchet) — only read inside
+    // evaluateLevelUpCelebration, never in body, so no view invalidation needed.
+    private var celebrationScope: String { authService.user?.uid ?? LevelUpRatchet.localScope }
+    private var celebratedLevelHWM: Int {
+        get { LevelUpRatchet.celebratedLevelHWM(scope: celebrationScope) }
+        nonmutating set { LevelUpRatchet.setCelebratedLevelHWM(newValue, scope: celebrationScope) }
+    }
+    private var celebratedPrestige: Int {
+        get { LevelUpRatchet.celebratedPrestige(scope: celebrationScope) }
+        nonmutating set { LevelUpRatchet.setCelebratedPrestige(newValue, scope: celebrationScope) }
+    }
     @State private var showOffDayToast = false
     @State private var offDayToastMessage = ""
     @State private var showingHolidayPicker = false

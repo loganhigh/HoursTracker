@@ -234,7 +234,17 @@ final class AuthService: NSObject, ObservableObject {
         GIDSignIn.sharedInstance.handle(url)
     }
 
-    func signOut() throws {
+    func signOut() async throws {
+        // The deviceTokens delete needs the signing-out user's credentials, so
+        // it has to happen BEFORE Auth.signOut(); afterwards the rules reject it
+        // and the phone keeps receiving this account's pushes. Bounded so an
+        // offline device (Firestore would wait for a server ack) still signs
+        // out promptly — in that case the token stays, exactly as before.
+        if let uid = user?.uid ?? Auth.auth().currentUser?.uid {
+            await Self.withBoundedWait(seconds: 3) {
+                await PushNotificationService.shared.clearTokenOnSignOut(uid: uid)
+            }
+        }
         try Auth.auth().signOut()
         user = nil
         discardDeviceBoundSession()
@@ -243,6 +253,16 @@ final class AuthService: NSObject, ObservableObject {
         // and the rules would reject it. The heartbeat's own stamp writes
         // no-op once signed out, and the last stamp ages out of the active
         // window on its own.
+    }
+
+    /// Runs `operation`, giving up on waiting for it after `seconds`.
+    private static func withBoundedWait(seconds: Double, _ operation: @escaping @Sendable () async -> Void) async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await operation() }
+            group.addTask { try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) }
+            await group.next()
+            group.cancelAll()
+        }
     }
 
     /// State that belongs to the account, not the device. `LiveShiftManager`
