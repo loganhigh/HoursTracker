@@ -216,6 +216,10 @@ final class AuthService: NSObject, ObservableObject {
     }
 
     func sendPasswordReset(email: String) async {
+        // A failed sign-in leaves its error on screen; the reset flow reports
+        // through the same field, so start clean or success is invisible (and
+        // every retry sends another email).
+        lastError = nil
         let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard trimmed.contains("@"), trimmed.contains(".") else {
             lastError = "Enter a valid email address."
@@ -307,12 +311,25 @@ final class AuthService: NSObject, ObservableObject {
         preferredDisplayName: String?,
         email: String?
     ) async throws {
-        var displayName = preferredDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if displayName.isEmpty {
-            displayName = firebaseUser.displayName ?? ""
+        // The name the user chose in the app outranks whatever the provider
+        // reports. It lives in users/{uid}.displayName (every device) and
+        // profile_display_name (this device); provider names used to win, so
+        // each re-sign-in silently reverted "Jono" to "Jonathan Smith" and
+        // republished it to friends and the leaderboards.
+        var displayName = ""
+        if let cloudName = try? await Firestore.firestore().collection("users").document(firebaseUser.uid)
+            .getDocument().data()?["displayName"] as? String {
+            displayName = cloudName.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         if displayName.isEmpty {
-            displayName = UserDefaults.standard.string(forKey: "profile_display_name") ?? ""
+            displayName = UserDefaults.standard.string(forKey: "profile_display_name")?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        if displayName.isEmpty {
+            displayName = preferredDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        if displayName.isEmpty {
+            displayName = firebaseUser.displayName ?? ""
         }
         if displayName.isEmpty, let email, let prefix = email.split(separator: "@").first {
             displayName = String(prefix)

@@ -10,15 +10,15 @@ enum AccountDeletionService {
 
     enum DeletionError: LocalizedError {
         case notSignedIn
-        case requiresRecentLogin
+        case requiresRecentLogin(providerLabel: String)
         case underlying(Error)
 
         var errorDescription: String? {
             switch self {
             case .notSignedIn:
                 return "You are not signed in."
-            case .requiresRecentLogin:
-                return "For security, please sign out and sign in with Apple again, then retry account deletion."
+            case .requiresRecentLogin(let providerLabel):
+                return "For security, please sign out, sign back in with \(providerLabel), and retry deleting your account within a few minutes."
             case .underlying(let error):
                 return error.localizedDescription
             }
@@ -29,6 +29,9 @@ enum AccountDeletionService {
         guard let user = Auth.auth().currentUser else {
             throw DeletionError.notSignedIn
         }
+        // Captured before delete(): the message used to tell every user to
+        // "sign in with Apple again", including Google and email accounts.
+        let providerLabel = Self.providerLabel(for: user)
 
         // Delete the Firebase Auth user FIRST — if this fails (e.g. requires
         // recent login), nothing has been destroyed yet and the user can retry.
@@ -47,7 +50,7 @@ enum AccountDeletionService {
         } catch {
             let nsError = error as NSError
             if nsError.code == AuthErrorCode.requiresRecentLogin.rawValue {
-                throw DeletionError.requiresRecentLogin
+                throw DeletionError.requiresRecentLogin(providerLabel: providerLabel)
             }
             throw DeletionError.underlying(error)
         }
@@ -65,5 +68,14 @@ enum AccountDeletionService {
         defaults.removeObject(forKey: "company_employee_id")
         defaults.removeObject(forKey: "company_hourly_rate")
         defaults.removeObject(forKey: "company_start_date_ts")
+    }
+
+    private static func providerLabel(for user: FirebaseAuth.User) -> String {
+        switch user.providerData.first?.providerID {
+        case "apple.com": return "Apple"
+        case "google.com": return "Google"
+        case "password": return "your email and password"
+        default: return "the same account"
+        }
     }
 }
