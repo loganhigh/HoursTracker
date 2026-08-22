@@ -49,6 +49,7 @@ struct OnboardingView: View {
     @State private var hasAdvanced = false
 
     @State private var nameDraft = ""
+    @State private var usernameDraft = ""
     @State private var nameValidationMessage: String?
     @FocusState private var nameFieldFocused: Bool
 
@@ -283,7 +284,7 @@ struct OnboardingView: View {
                         .foregroundStyle(AppColors.text)
                         .multilineTextAlignment(.center)
 
-                    Text("Your name appears on your profile, to friends, and on the leaderboards. You can change it any time.")
+                    Text("Your name is what your friends see. Your username is how they find you, and what shows on the global leaderboard. You can change both any time.")
                         .appText(.subheadline)
                         .foregroundStyle(AppColors.subtext)
                         .multilineTextAlignment(.center)
@@ -310,6 +311,35 @@ struct OnboardingView: View {
                             )
                     )
 
+                HStack(spacing: 2) {
+                    Text("@")
+                        .font(.system(.title3, design: .rounded, weight: .semibold))
+                        .foregroundStyle(AppColors.subtext)
+                    TextField("username", text: $usernameDraft)
+                        .font(.system(.title3, design: .rounded, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.asciiCapable)
+                        .submitLabel(.done)
+                        .onSubmit { saveNameAndFinish() }
+                        .onChange(of: usernameDraft) { _, newValue in
+                            let filtered = Username.filteredForTyping(newValue)
+                            if filtered != newValue { usernameDraft = filtered }
+                            nameValidationMessage = nil
+                        }
+                }
+                .padding(.horizontal, AppSpacing.lg)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                        .fill(AppColors.card2.opacity(0.6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                                .stroke(AppColors.stroke.opacity(0.5), lineWidth: 1)
+                        )
+                )
+
                 if let nameValidationMessage {
                     Text(nameValidationMessage)
                         .appText(.caption)
@@ -321,15 +351,27 @@ struct OnboardingView: View {
                     saveNameAndFinish()
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(trimmedNameDraft.isEmpty)
-                .opacity(trimmedNameDraft.isEmpty ? 0.6 : 1)
+                .disabled(trimmedNameDraft.isEmpty || usernameDraft.isEmpty)
+                .opacity(trimmedNameDraft.isEmpty || usernameDraft.isEmpty ? 0.6 : 1)
             }
             .padding(.horizontal, AppSpacing.xl)
 
             Spacer(minLength: 0)
         }
-        .onChange(of: nameDraft) { _, _ in nameValidationMessage = nil }
+        .onChange(of: nameDraft) { _, _ in
+            nameValidationMessage = nil
+            // Keep suggesting a handle while the user types their name, until
+            // they start editing the username themselves.
+            if !usernameEdited { usernameDraft = Username.suggestion(from: nameDraft) }
+        }
+        .onChange(of: usernameDraft) { _, newValue in
+            if newValue != Username.suggestion(from: nameDraft) { usernameEdited = true }
+        }
     }
+
+    @State private var usernameEdited = false
+
+    private var canonicalUsernameDraft: String { Username.normalize(usernameDraft) }
 
     private var trimmedNameDraft: String {
         String(nameDraft.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
@@ -342,6 +384,9 @@ struct OnboardingView: View {
         guard nameDraft.isEmpty else { return }
         let stored = UserDefaults.standard.string(forKey: "profile_display_name") ?? ""
         nameDraft = stored == "Worker" ? "" : stored
+        if usernameDraft.isEmpty, !nameDraft.isEmpty {
+            usernameDraft = Username.suggestion(from: nameDraft)
+        }
     }
 
     private func saveNameAndFinish() {
@@ -352,9 +397,16 @@ struct OnboardingView: View {
             Haptics.error()
             return
         }
+        if let problem = Username.problem(with: canonicalUsernameDraft) {
+            nameValidationMessage = problem
+            Haptics.error()
+            return
+        }
         // Stored locally only — there is no account yet at this point in the
-        // flow. `finishOnboarding` reasserts it once auth completes.
+        // flow. `finishOnboarding` reasserts the name and claims the username
+        // once auth completes (uniqueness can only be checked signed in).
         UserDefaults.standard.set(name, forKey: "profile_display_name")
+        UserDefaults.standard.set(canonicalUsernameDraft, forKey: "pending_username")
         Haptics.success()
         withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
             page = payPageIndex
@@ -638,6 +690,16 @@ struct OnboardingView: View {
                         email: user.email
                     )
                 }
+            }
+        }
+        // Claim the handle now that there is an account. If it was taken in
+        // the meantime the pending value is cleared and the first-time prompt
+        // on Home asks again, pre-filled with a fresh suggestion.
+        let pendingUsername = UserDefaults.standard.string(forKey: "pending_username") ?? ""
+        if !pendingUsername.isEmpty, authService.user != nil {
+            Task {
+                defer { UserDefaults.standard.removeObject(forKey: "pending_username") }
+                try? await FriendsService.shared.claimUsername(pendingUsername)
             }
         }
         AppTutorialStorage.markComplete()

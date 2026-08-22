@@ -22,6 +22,8 @@ struct AccountView: View {
 
     @State private var showingSettings = false
     @State private var showingNameEditor = false
+    @State private var showingUsernameEditor = false
+    @ObservedObject private var friendsService = FriendsService.shared
     @State private var showingDeleteAccountConfirm = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError: String?
@@ -139,6 +141,15 @@ struct AccountView: View {
         .sheet(isPresented: $showingNameEditor) {
             DisplayNameEditorSheet(store: store)
                 .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $showingUsernameEditor) {
+            UsernameSheet(
+                mode: friendsService.myUsername == nil ? .firstTime : .edit,
+                currentUsername: friendsService.myUsername,
+                suggestedFrom: displayName,
+                friendsService: friendsService
+            )
+            .presentationDetents([.medium])
         }
         .fullScreenCover(isPresented: Binding(
             get: { pendingCropImage != nil },
@@ -422,6 +433,22 @@ struct AccountView: View {
                         tint: AppColors.positive,
                         showsChevron: false
                     )
+
+                    AccountRowHairline()
+
+                    // The handle friends add you by. The name at the top is
+                    // what friends see; this is what the global board shows.
+                    Button {
+                        Haptics.lightTap()
+                        showingUsernameEditor = true
+                    } label: {
+                        AccountNavRow(
+                            icon: "at",
+                            title: "Username",
+                            subtitle: friendsService.myUsername.map(Username.display) ?? "Choose a username"
+                        )
+                    }
+                    .buttonStyle(PremiumPressStyle())
 
                     AccountRowHairline()
 

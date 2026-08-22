@@ -201,7 +201,7 @@ struct DisplayNameEditorSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: AppSpacing.lg) {
-                Text("Your name appears on your profile, to friends, and on the leaderboards.")
+                Text("Your name is what your friends see. The global leaderboard shows your username instead.")
                     .appText(.subheadline)
                     .foregroundStyle(AppColors.subtext)
                     .multilineTextAlignment(.center)
@@ -240,7 +240,7 @@ struct DisplayNameEditorSheet: View {
             }
             .padding(.top, AppSpacing.xl)
             .background(AppColors.bg.ignoresSafeArea())
-            .navigationTitle("Display name")
+            .navigationTitle("Your name")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

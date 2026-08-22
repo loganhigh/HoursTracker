@@ -13,6 +13,11 @@ struct RootView: View {
     @AppStorage("display_name_prompt_last_tier") private var displayNamePromptLastTier: Int = 0
     @State private var showingDisplayNamePrompt = false
     @State private var showingCountryFlagPrompt = false
+    @ObservedObject private var friendsService = FriendsService.shared
+    @State private var showingUsernamePrompt = false
+    /// Once per launch: an account with no handle is asked to pick one; "Later"
+    /// means not again until the next cold start.
+    @State private var didOfferUsername = false
     @ObservedObject private var announcements = AnnouncementService.shared
     @State private var showingCountryFlagPicker = false
     /// Root-level so the celebration overlays every tab, not just Home
@@ -20,6 +25,19 @@ struct RootView: View {
     @StateObject private var levelUpCoordinator = LevelUpCoordinator()
     /// Dev-only: presents the prestige celebration for the LEVELUP_DEMO hook.
     @State private var demoPrestige = false
+
+    /// Existing accounts predate usernames. Ask once the server has confirmed
+    /// there is none — never on a cache replay, never while onboarding's own
+    /// claim is still in flight, and at most once per launch.
+    private func offerUsernameIfNeeded() {
+        guard !didOfferUsername, !showingUsernamePrompt else { return }
+        guard authService.user != nil, AppTutorialStorage.isComplete else { return }
+        guard friendsService.hasLoadedMyProfile, friendsService.myUsername == nil else { return }
+        guard UserDefaults.standard.string(forKey: "pending_username") == nil else { return }
+        didOfferUsername = true
+        showingUsernamePrompt = true
+    }
+
 
     var body: some View {
         AppTabView()
@@ -44,6 +62,16 @@ struct RootView: View {
         .sheet(isPresented: $showingDisplayNamePrompt) {
             DisplayNamePromptSheet()
         }
+        .sheet(isPresented: $showingUsernamePrompt) {
+            UsernameSheet(
+                mode: .firstTime,
+                currentUsername: nil,
+                suggestedFrom: UserDefaults.standard.string(forKey: "profile_display_name") ?? "",
+                friendsService: friendsService
+            )
+        }
+        .onChange(of: friendsService.hasLoadedMyProfile) { _, _ in offerUsernameIfNeeded() }
+        .onChange(of: friendsService.myUsername) { _, _ in offerUsernameIfNeeded() }
         // Custom rather than `.alert` because a system alert left-aligns its
         // title and message on iOS 26 with no way to center them.
         .overlay {

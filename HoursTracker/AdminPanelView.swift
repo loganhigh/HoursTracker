@@ -5,6 +5,7 @@ import FirebaseFunctions
 struct AdminUser: Identifiable, Equatable {
     let uid: String
     let displayName: String
+    var username: String = ""
     var friendCode: String
     var email: String
     /// From the Auth profile — the provider's real name at first sign-in,
@@ -107,7 +108,7 @@ struct AdminPanelView: View {
                 user.displayName.lowercased().contains(q)
                     || user.uid.lowercased().contains(q)
                     || user.email.lowercased().contains(q)
-                    || (!codeQuery.isEmpty && user.friendCode.lowercased().contains(codeQuery))
+                    || (!codeQuery.isEmpty && (user.friendCode.lowercased().contains(codeQuery) || user.username.contains(codeQuery)))
             }
         }
         for filter in filters {
@@ -348,6 +349,11 @@ struct AdminPanelView: View {
                     Text("Prestige \(user.prestige)")
                     Text("•")
                     Text(String(format: "%.0fh", user.totalHours))
+                    if !user.username.isEmpty {
+                        Text("•")
+                        Text("@" + user.username)
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    }
                     if !user.friendCode.isEmpty {
                         Text("•")
                         Text(user.friendCode)
@@ -614,6 +620,7 @@ private extension AdminUser {
         var user = AdminUser(
             uid: dict["uid"] as? String ?? "",
             displayName: dict["displayName"] as? String ?? "",
+            username: dict["username"] as? String ?? "",
             friendCode: (dict["friendCode"] as? String ?? "").uppercased(),
             email: dict["email"] as? String ?? "",
             authName: dict["authName"] as? String ?? "",
@@ -770,6 +777,7 @@ private struct AdminEditUserSheet: View {
                 }
 
                 Section {
+                    copyRow("Username", user.username.isEmpty ? "—" : "@" + user.username, copyable: !user.username.isEmpty)
                     copyRow("Friend code", user.friendCodeDisplay, copyable: !user.friendCode.isEmpty)
                     copyRow("Email", user.email.isEmpty ? "—" : user.email, copyable: !user.email.isEmpty)
                     copyRow("Real name", user.authName.isEmpty ? "—" : user.authName, copyable: !user.authName.isEmpty)

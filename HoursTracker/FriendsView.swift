@@ -23,7 +23,7 @@ struct FriendsView: View {
     @ObservedObject private var presence = PresenceService.shared
     @ObservedObject private var verifiedStatus = VerifiedStatusService.shared
     @State private var showingVerifiedProofSheet = false
-    @State private var codeInput = ""
+    @State private var usernameInput = ""
     @State private var actionMessage: String?
     @State private var actionMessageIsError = false
     @State private var copyConfirmation = false
@@ -34,7 +34,7 @@ struct FriendsView: View {
     @State private var isSendingNudge = false
     @State private var nudgeResultMessage: String?
     @State private var showingAddFriend = false
-    @State private var showingScanner = false
+    @State private var showingUsernameSheet = false
 
     private var myName: String {
         UserDefaults.standard.string(forKey: "profile_display_name") ?? "Worker"
@@ -88,7 +88,6 @@ struct FriendsView: View {
                 Task { await friendsService.refreshFriendProfiles() }
             }
             store.syncProfileSnapshotToCloud()
-            consumePendingFriendCodeIfNeeded()
         }
         .task {
             // Online dots for the board; .task cancels with the screen.
@@ -97,13 +96,9 @@ struct FriendsView: View {
                 try? await Task.sleep(nanoseconds: 45_000_000_000)
             }
         }
-        .onChange(of: friendsService.pendingFriendCode) { _, _ in
-            consumePendingFriendCodeIfNeeded()
-        }
         .onChange(of: authService.user?.uid) { _, uid in
             if let uid {
                 friendsService.startListening(uid: uid)
-                consumePendingFriendCodeIfNeeded()
             } else {
                 friendsService.stopListening()
             }
@@ -134,14 +129,14 @@ struct FriendsView: View {
             NavigationStack {
                 ScrollView {
                     VStack(spacing: AppSpacing.md) {
-                        FriendCodeCard(
-                            code: friendsService.myFriendCode,
-                            codeInput: $codeInput,
+                        UsernameCard(
+                            username: friendsService.myUsername,
+                            usernameInput: $usernameInput,
                             isSending: isSending,
                             copyConfirmation: copyConfirmation,
-                            onCopy: { copyCode() },
+                            onCopy: { copyUsername() },
                             onAdd: { Task { await sendRequest() } },
-                            onScan: { showingScanner = true }
+                            onSetUsername: { showingUsernameSheet = true }
                         )
                         notifyCaption
                         if let actionMessage {
@@ -162,20 +157,15 @@ struct FriendsView: View {
                     }
                 }
             }
-            // .medium cut off the notify caption below the QR card once the
-            // QR block was added — .large gives the taller content room.
             .presentationDetents([.large])
             // Presented from inside the Add-a-friend sheet, so it hangs off
             // that sheet's own content rather than the Friends screen.
-            .fullScreenCover(isPresented: $showingScanner) {
-                FriendQRScannerView(
-                    onCancel: { showingScanner = false },
-                    onScan: { code in
-                        showingScanner = false
-                        // Fills the field rather than sending outright — the
-                        // user still confirms with Add, same as typing it.
-                        codeInput = code
-                    }
+            .sheet(isPresented: $showingUsernameSheet) {
+                UsernameSheet(
+                    mode: friendsService.myUsername == nil ? .firstTime : .edit,
+                    currentUsername: friendsService.myUsername,
+                    suggestedFrom: myName,
+                    friendsService: friendsService
                 )
             }
         }
@@ -368,9 +358,9 @@ struct FriendsView: View {
 
     // MARK: - Actions
 
-    private func copyCode() {
-        guard let code = friendsService.myFriendCode else { return }
-        UIPasteboard.general.string = code
+    private func copyUsername() {
+        guard let username = friendsService.myUsername else { return }
+        UIPasteboard.general.string = Username.display(username)
         Haptics.lightTap()
         withAnimation(AppMotion.animation(AppMotion.Spring.snappy, reduceMotion: reduceMotion)) {
             copyConfirmation = true
@@ -382,23 +372,10 @@ struct FriendsView: View {
         }
     }
 
-    /// Consumes a scanned-QR `add-friend` deep link by opening the Add a
-    /// friend sheet with the code pre-filled. Clears the pending code
-    /// immediately so it isn't re-consumed if this view reappears.
-    private func consumePendingFriendCodeIfNeeded() {
-        guard let code = friendsService.pendingFriendCode else { return }
-        // Signed out: the Add sheet would open but Add silently no-ops. Leave
-        // the code pending; it is consumed as soon as the user signs in.
-        guard authService.user != nil else { return }
-        friendsService.pendingFriendCode = nil
-        codeInput = code
-        showingAddFriend = true
-    }
-
     private func sendRequest() async {
         guard let uid = authService.user?.uid else { return }
-        let code = codeInput.trimmingCharacters(in: .whitespaces).uppercased()
-        guard !code.isEmpty else { return }
+        let username = Username.normalize(usernameInput)
+        guard !username.isEmpty else { return }
         isSending = true
         sendTimeoutTask?.cancel()
         sendTimeoutTask = Task { @MainActor in
@@ -415,7 +392,7 @@ struct FriendsView: View {
             isSending = false
         }
         do {
-            try await friendsService.sendFriendRequest(toCode: code, myUid: uid, myName: myName)
+            try await friendsService.sendFriendRequest(toUsername: username, myUid: uid, myName: myName)
             // Always refresh on success, even if our own 15s watchdog already
             // fired and displayed "timed out" — a slow network doesn't mean
             // the call failed, and the friendship may have been created on
@@ -429,7 +406,7 @@ struct FriendsView: View {
             actionMessage = hadAlreadyTimedOut
                 ? "You're now friends! (That took longer than expected — check your connection.)"
                 : "You're now friends!"
-            codeInput = ""
+            usernameInput = ""
             isSending = false
         } catch is CancellationError {
             return

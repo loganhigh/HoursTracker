@@ -328,8 +328,11 @@ final class TopTrackersService: ObservableObject {
             // means true, matching profiles written before the flag existed.
             guard data["showOnGlobalLeaderboard"] as? Bool ?? true else { return nil }
             rank += 1
+            // The public board shows handles; full names are for friends.
+            // Profiles that haven't claimed one yet fall back to a first name.
+            let username = Username.normalize((data["username"] as? String) ?? "")
             let displayName = (data["displayName"] as? String) ?? ""
-            let name = firstNameOnly(displayName)
+            let name = username.isEmpty ? firstNameOnly(displayName) : Username.display(username)
             let countryCode = (data["countryCode"] as? String) ?? ""
             let photo = (data["profilePhotoURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
             return TopTracker(

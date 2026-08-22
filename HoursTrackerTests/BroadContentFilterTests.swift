@@ -194,3 +194,55 @@ final class BroadContentFilterTests: XCTestCase {
         assertAllowed(["sexgod", "adminteam"])
     }
 }
+
+// MARK: - Usernames
+
+final class UsernameTests: XCTestCase {
+    private let noModeration: (String) -> Bool = { _ in false }
+
+    func testNormalizeTrimsLowercasesAndDropsAt() {
+        XCTAssertEqual(Username.normalize("  @Mike_47 "), "mike_47")
+        XCTAssertEqual(Username.normalize("@@logan"), "logan")
+    }
+
+    func testTypingFilterKeepsOnlyHandleCharacters() {
+        XCTAssertEqual(Username.filteredForTyping("Mike Thompson!"), "mikethompson")
+        XCTAssertEqual(Username.filteredForTyping("a_b-c.d"), "a_bcd")
+        XCTAssertEqual(Username.filteredForTyping(String(repeating: "x", count: 30)).count, Username.maxLength)
+    }
+
+    func testValidHandlesPass() {
+        for ok in ["abc", "mike_47", "logan", "a1_", String(repeating: "x", count: 20)] {
+            XCTAssertNil(Username.problem(with: ok, moderation: noModeration), ok)
+        }
+    }
+
+    func testProblemsAreReportedWithAReason() {
+        XCTAssertNotNil(Username.problem(with: "", moderation: noModeration))
+        XCTAssertEqual(Username.problem(with: "ab", moderation: noModeration), "Usernames need at least 3 characters.")
+        XCTAssertEqual(Username.problem(with: String(repeating: "x", count: 21), moderation: noModeration), "Usernames can be at most 20 characters.")
+        XCTAssertEqual(Username.problem(with: "47mike", moderation: noModeration), "Usernames must start with a letter.")
+        XCTAssertEqual(Username.problem(with: "_mike", moderation: noModeration), "Usernames must start with a letter.")
+        XCTAssertEqual(Username.problem(with: "mike-47", moderation: noModeration), "Use letters, numbers, and underscores only.")
+        XCTAssertEqual(Username.problem(with: "admin", moderation: noModeration), "That username is reserved.")
+        XCTAssertEqual(Username.problem(with: "hourtracker", moderation: noModeration), "That username is reserved.")
+        XCTAssertEqual(Username.problem(with: "fine_name", moderation: { _ in true }), "That username isn't allowed.")
+    }
+
+    func testModerationUsesTheSharedNameFilterByDefault() {
+        // The same impersonation screening display names get: a handle in the
+        // shared filter's reserved list (but not Username's own) is refused.
+        XCTAssertEqual(Username.problem(with: "customerservice"), "That username isn't allowed.")
+        XCTAssertNil(Username.problem(with: "mike_47"))
+    }
+
+    func testSuggestionFromDisplayName() {
+        XCTAssertEqual(Username.suggestion(from: "Mike Thompson"), "mike_thompson")
+        XCTAssertEqual(Username.suggestion(from: "  Zoë O'Brien "), "zoe_o_brien")
+        XCTAssertEqual(Username.suggestion(from: "47"), "worker")
+        XCTAssertEqual(Username.suggestion(from: "Admin"), "worker")
+        XCTAssertEqual(Username.suggestion(from: ""), "worker")
+        XCTAssertLessThanOrEqual(Username.suggestion(from: "Maximilian Alexander Bartholomew").count, Username.maxLength)
+    }
+}
+

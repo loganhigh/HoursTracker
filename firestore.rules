@@ -55,16 +55,19 @@ service cloud.firestore {
     // to every client push). The client only ever writes its own mirror copy under
     // users/{uid}/gamification/current — never this doc — so blocking it here costs
     // nothing and stops a self-issued grant from inflating level/prestige/rank.
+    // `username` is also server-only: the claimUsername callable reserves it
+    // in usernames/{name} inside a transaction, which is what makes handles
+    // unique. A client writing the field directly would skip that.
     function noAdminOnlyFieldsCreate() {
       return !request.resource.data.keys()
         .hasAny(['adminFloorLevel', 'adminFloorPrestige', 'adminEquippedTitle',
-                 'adminXPOffset']);
+                 'adminXPOffset', 'username']);
     }
 
     function noAdminOnlyFieldsUpdate() {
       return !request.resource.data.diff(resource.data).affectedKeys()
         .hasAny(['adminFloorLevel', 'adminFloorPrestige', 'adminEquippedTitle',
-                 'adminXPOffset']);
+                 'adminXPOffset', 'username']);
     }
 
     match /publicProfiles/{profileUid} {
@@ -297,6 +300,15 @@ service cloud.firestore {
     // codes — joinCrewByCode does this lookup server-side with the Admin SDK.
     match /crewInviteCodes/{code} {
       allow read, write: if false;
+    }
+
+    // Username reservations: usernames/{username} = { uid }. Readable so the
+    // app can show "taken" while the user types; written only by the
+    // claimUsername callable (Admin SDK) inside a transaction. Handles are
+    // public by design — they are how people find each other.
+    match /usernames/{username} {
+      allow read: if isSignedIn();
+      allow write: if false;
     }
   }
 }

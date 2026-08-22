@@ -1009,6 +1009,9 @@ async function recomputeUserStats(db, uid, options = {}) {
     // Verified badge. Client-owned (it records tapping through to the review
     // page), so it rides along unchanged rather than being derived here.
     hasReviewedApp: userData.hasReviewedApp === true,
+    // The public handle. Server-owned (claimUsername), so it rides along
+    // unmoderated — it was validated and filtered when it was claimed.
+    username: userData.username || null,
     friendCode: userData.friendCode || null,
     level,
     prestige,

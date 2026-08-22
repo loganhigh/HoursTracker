@@ -160,13 +160,5 @@ struct AppTabView: View {
         // Crew-join deep links are ignored while crews are paused — the
         // Settings rows that consumed them are gone, so presenting Settings
         // here would just strand the user on an unrelated screen.
-        .onChange(of: friendsService.pendingFriendCode) { _, newValue in
-            // A scanned friend QR lands here: bring the Friends tab forward
-            // so its view can consume the code and open the pre-filled
-            // Add a friend sheet.
-            if newValue != nil && friendsEnabled {
-                tabRouter.selection = .friends
-            }
-        }
     }
 }

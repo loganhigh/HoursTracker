@@ -129,11 +129,11 @@ final class FriendsService: ObservableObject {
     @Published var pendingRequests: [FriendRequestItem] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-    @Published var myFriendCode: String?
-    /// Set by an `add-friend` deep link (a scanned friend QR code). The
-    /// Friends tab consumes it: opens the Add a friend sheet with the code
-    /// pre-filled.
-    @Published var pendingFriendCode: String?
+    /// The signed-in user's handle (`users/{uid}.username`), nil until claimed.
+    @Published var myUsername: String?
+    /// True once the own-profile listener has delivered at least once, so the
+    /// first-time username prompt can tell "no username" from "not loaded yet".
+    @Published private(set) var hasLoadedMyProfile = false
 
     private let db = Firestore.firestore()
     private lazy var functions = Functions.functions(region: "us-central1")
@@ -182,22 +182,25 @@ final class FriendsService: ObservableObject {
 
         startRefreshTimer()
         startLoadingTimeout()
-        Task { await ensureFriendCode(uid: uid) }
         Task { await reconcileFriendships(uid: uid) }
 
         myProfileListener = db.collection("users").document(uid)
-            .addSnapshotListener { [weak self] snapshot, _ in
+            .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self, self.activeListeningUid == uid else { return }
-                    let code = snapshot?.data()?["friendCode"] as? String
-                    if let code, !code.isEmpty {
-                        self.myFriendCode = code
+                    guard error == nil else { return }
+                    let name = Username.normalize(snapshot?.data()?["username"] as? String ?? "")
+                    self.myUsername = name.isEmpty ? nil : name
+                    // Only a server-confirmed snapshot settles the question;
+                    // a cache replay on a fresh install has no username yet.
+                    if snapshot?.metadata.isFromCache == false {
+                        self.hasLoadedMyProfile = true
                     }
                 }
             }
         myProfileListenerKey = FirebaseListenerRegistry.shared.register(
             owner: .friendsService,
-            purpose: "myFriendCode",
+            purpose: "myProfile",
             uid: uid,
             registration: myProfileListener!
         )
@@ -392,7 +395,8 @@ final class FriendsService: ObservableObject {
         publicProfileRawCache.removeAll()
         friends = []
         pendingRequests = []
-        myFriendCode = nil
+        myUsername = nil
+        hasLoadedMyProfile = false
         isLoading = false
         errorMessage = nil
         friendAddedAtMap.removeAll()
@@ -403,107 +407,63 @@ final class FriendsService: ObservableObject {
         friendshipIdsFromB = []
     }
 
-    /// Friend codes are 2 uppercase letters + 4 digits, picked from sets that
-    /// avoid visually ambiguous characters (no I, L, O, 0, 1).
-    static func generateFriendCode() -> String {
-        let letters: [Character] = Array("ABCDEFGHJKMNPQRSTUVWXYZ")
-        let digits: [Character] = Array("23456789")
-        let l1 = letters.randomElement() ?? "A"
-        let l2 = letters.randomElement() ?? "A"
-        var code = "\(l1)\(l2)"
-        for _ in 0..<4 {
-            code.append(digits.randomElement() ?? "2")
-        }
-        return code
-    }
+    // MARK: - Username
 
-    // MARK: - Friend QR deep link
-
-    /// `<scheme>://add-friend?code=XXXXXX` — what a friend-code QR encodes.
-    /// Scanning it with the iPhone camera opens the app and pre-fills the
-    /// Add a friend sheet. Reuses the app's one registered URL scheme, same
-    /// as crew invites.
-    static func addFriendURL(code: String) -> URL? {
-        var components = URLComponents()
-        components.scheme = CrewService.deepLinkScheme
-        components.host = "add-friend"
-        components.queryItems = [URLQueryItem(name: "code", value: code)]
-        return components.url
-    }
-
-    /// Returns false for any URL it doesn't recognize so the caller falls
-    /// through to the other handlers this scheme carries.
-    @discardableResult
-    static func handleIncomingURL(_ url: URL) -> Bool {
-        guard url.host == "add-friend",
-              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let rawCode = components.queryItems?.first(where: { $0.name == "code" })?.value,
-              !rawCode.isEmpty
-        else { return false }
-
-        let code = rawCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        Task { @MainActor in
-            FriendsService.shared.pendingFriendCode = code
-        }
-        return true
-    }
-
-    /// Reads the current user's doc and stamps a `friendCode` if one isn't set yet.
-    /// Idempotent — existing codes are left untouched.
-    func ensureFriendCode(uid: String) async {
-        let ref = db.collection("users").document(uid)
+    /// Reads the reservation doc directly (rules allow signed-in reads) so the
+    /// editor can say "taken" while the user types. Offline or on error it
+    /// reports unavailable; the claim itself is the only authority.
+    func isUsernameAvailable(_ username: String) async -> Bool {
+        let name = Username.normalize(username)
+        guard Username.problem(with: name) == nil else { return false }
         do {
-            let snapshot = try await ref.getDocument()
-            // Check the user is still signed in as the same UID before writing back.
-            guard await MainActor.run(body: { self.activeListeningUid == uid }) else { return }
-            if let existing = snapshot.data()?["friendCode"] as? String, !existing.isEmpty {
-                await MainActor.run { self.myFriendCode = existing }
-                return
-            }
-            // ~2.2M possible codes and no server-side allocation: with a
-            // few thousand users a random draw collides often enough that
-            // "add by code" connected strangers. Check for an existing holder
-            // before claiming (users docs are readable by any signed-in user).
-            var newCode = Self.generateFriendCode()
-            for _ in 0..<5 {
-                let taken = try await db.collection("users")
-                    .whereField("friendCode", isEqualTo: newCode).limit(to: 1).getDocuments()
-                if taken.documents.isEmpty { break }
-                newCode = Self.generateFriendCode()
-            }
-            try await ref.setData([
-                "friendCode": newCode,
-                "updatedAt": FieldValue.serverTimestamp()
-            ], merge: true)
-            await MainActor.run {
-                guard self.activeListeningUid == uid else { return }
-                self.myFriendCode = newCode
-            }
+            let snap = try await db.collection("usernames").document(name).getDocument(source: .server)
+            guard snap.exists else { return true }
+            let holder = snap.data()?["uid"] as? String
+            return holder == activeListeningUid
         } catch {
-            await MainActor.run {
-                guard self.activeListeningUid == uid else { return }
-                self.errorMessage = error.localizedDescription
-            }
+            return false
         }
     }
 
-    func sendFriendRequest(toCode rawCode: String, myUid: String, myName: String) async throws {
-        let code = rawCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard code.count >= 4 else {
-            throw FriendsError.invalidCode
+    /// Claims (or changes to) `username` through the server, which is the
+    /// only place uniqueness is enforced. On success `myUsername` updates
+    /// immediately rather than waiting for the profile listener.
+    func claimUsername(_ username: String) async throws {
+        let name = Username.normalize(username)
+        if let problem = Username.problem(with: name) {
+            throw FriendsError.invalidUsername(problem)
         }
-        if let mine = myFriendCode, mine == code {
+        do {
+            _ = try await functions.httpsCallable("claimUsername").call(["username": name])
+            await MainActor.run { self.myUsername = name }
+        } catch {
+            let message = (error as NSError).localizedDescription.lowercased()
+            if message.contains("taken") || message.contains("already-exists") || message.contains("already exists") {
+                throw FriendsError.usernameTaken
+            } else if message.contains("reserved") || message.contains("allowed") || message.contains("invalid") {
+                throw FriendsError.invalidUsername((error as NSError).localizedDescription)
+            }
+            throw FriendsError.callableFailed(error)
+        }
+    }
+
+    func sendFriendRequest(toUsername rawUsername: String, myUid: String, myName: String) async throws {
+        let username = Username.normalize(rawUsername)
+        if let problem = Username.problem(with: username, moderation: { _ in false }) {
+            throw FriendsError.invalidUsername(problem)
+        }
+        if let mine = myUsername, mine == username {
             throw FriendsError.cannotAddSelf
         }
         do {
             _ = try await functions.httpsCallable("sendFriendRequest")
-                .call(["code": code, "myName": myName])
+                .call(["username": username, "myName": myName])
         } catch {
             let nsError = error as NSError
-            let message = nsError.localizedDescription
+            let message = nsError.localizedDescription.lowercased()
             if message.contains("already friends") || message.contains("already-exists") {
                 throw FriendsError.alreadyFriends
-            } else if message.contains("not found") || message.contains("No one found") {
+            } else if message.contains("not found") || message.contains("no one found") {
                 throw FriendsError.userNotFound
             } else if message.contains("yourself") {
                 throw FriendsError.cannotAddSelf
@@ -996,7 +956,8 @@ final class FriendsService: ObservableObject {
 }
 
 enum FriendsError: LocalizedError {
-    case invalidCode
+    case invalidUsername(String)
+    case usernameTaken
     case userNotFound
     case cannotAddSelf
     case invitesDisabled
@@ -1005,8 +966,9 @@ enum FriendsError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidCode: return "Enter a valid friend code."
-        case .userNotFound: return "No one found with that code. Double-check it and try again."
+        case .invalidUsername(let reason): return reason
+        case .usernameTaken: return "That username is taken."
+        case .userNotFound: return "No one found with that username. Double-check it and try again."
         case .cannotAddSelf: return "You can't add yourself as a friend."
         case .invitesDisabled: return "This user isn't accepting friend invites right now."
         case .alreadyFriends: return "You're already friends with this person."

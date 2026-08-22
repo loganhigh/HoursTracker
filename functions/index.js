@@ -22,6 +22,7 @@ const {
   sanitizeDisplayName,
 } = require("./src/stats/recompute");
 const rankMoves = require("./src/leaderboard/rankMoves");
+const usernames = require("./src/social/usernames");
 const adminAnalytics = require("./src/admin/analytics");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
@@ -419,9 +420,22 @@ exports.purgeDeletedUserData = functionsV1
     // owner's tree and would leave dangling friends pointing at a dead uid.
     // Read them BEFORE recursiveDelete removes the source list.
     let friendUids = [];
+    let username = "";
     await step("read friend list", async () => {
-      const snap = await db.collection("users").doc(uid).collection("friends").get();
+      const [snap, userSnap] = await Promise.all([
+        db.collection("users").doc(uid).collection("friends").get(),
+        db.collection("users").doc(uid).get(),
+      ]);
       friendUids = snap.docs.map((d) => d.id);
+      username = usernames.normalizeUsername(userSnap.data()?.username);
+    });
+
+    // Free the handle so someone else can take it.
+    await step("username reservation", async () => {
+      if (!username) return;
+      const ref = db.collection("usernames").doc(username);
+      const res = await ref.get();
+      if (res.exists && res.data()?.uid === uid) await ref.delete();
     });
 
     await step("reciprocal friend links", async () => {
@@ -884,6 +898,7 @@ function buildAdminUserRow(uid, userData, profileData, authData, presenceData) {
   return {
     uid,
     displayName: p.displayName || u.displayName || "",
+    username: String(p.username || u.username || ""),
     // Support/identification fields. friendCode is mirrored onto publicProfiles
     // by the recompute, but fall back to the users doc for anyone who hasn't
     // had a recompute since their code was stamped.
@@ -2268,6 +2283,7 @@ exports.submitVerifiedProof = onCall(
     await db.collection("verifiedInbox").doc(uid).set({
       uid,
       displayName: p.displayName || u.displayName || "",
+      username: String(p.username || u.username || ""),
       friendCode: String(p.friendCode || u.friendCode || "").toUpperCase(),
       photoURL,
       status: "pending",
@@ -2292,6 +2308,7 @@ exports.adminListVerifiedInbox = onCall(
         return {
           uid: d.uid || doc.id,
           displayName: d.displayName || "",
+          username: d.username || "",
           friendCode: d.friendCode || "",
           photoURL: d.photoURL || "",
           submittedAt: d.submittedAt?.toMillis?.() ?? null,
@@ -2518,36 +2535,105 @@ exports.backfillFriendships = onCall(
   }
 );
 
-/** Add a friend by code — validates code, checks duplicates, connects instantly. */
+// MARK: - Usernames
+
+const USERNAME_BLOCKED = (name) => sanitizeDisplayName(name, "") === "";
+
+/**
+ * Claim (or change to) a username for the caller. The `usernames/{name}`
+ * reservation doc is the uniqueness guarantee: it is read and written inside
+ * one transaction, so two people racing for the same handle can't both win,
+ * and clients can't write `username` on their own doc (security rules).
+ * Changing releases the previous reservation. Also mirrors the handle onto
+ * publicProfiles so the global leaderboard shows it without waiting for the
+ * next stats recompute.
+ */
+exports.claimUsername = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+    const uid = request.auth.uid;
+    const username = usernames.normalizeUsername(request.data?.username);
+    const problem = usernames.usernameProblem(username, USERNAME_BLOCKED);
+    if (problem) throw new HttpsError("invalid-argument", problem);
+
+    const userRef = db.collection("users").doc(uid);
+    const newRef = db.collection("usernames").doc(username);
+
+    await db.runTransaction(async (tx) => {
+      const [userSnap, newSnap] = await Promise.all([tx.get(userRef), tx.get(newRef)]);
+      const previous = usernames.normalizeUsername(userSnap.data()?.username);
+      if (newSnap.exists && newSnap.data()?.uid !== uid) {
+        throw new HttpsError("already-exists", "That username is taken.");
+      }
+      if (previous === username) return; // idempotent re-claim
+      if (previous) {
+        const prevRef = db.collection("usernames").doc(previous);
+        const prevSnap = await tx.get(prevRef);
+        if (prevSnap.exists && prevSnap.data()?.uid === uid) tx.delete(prevRef);
+      }
+      tx.set(newRef, { uid, createdAt: FieldValue.serverTimestamp() });
+      tx.set(userRef, {
+        username,
+        usernameChangedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      tx.set(db.collection("publicProfiles").doc(uid), { username }, { merge: true });
+    });
+
+    return { username };
+  }
+);
+
+/**
+ * Add a friend by username — connects instantly. Still accepts the legacy
+ * friend `code` for one release so clients that predate usernames keep
+ * working while the App Store rollout is mixed.
+ */
 exports.sendFriendRequest = onCall(
   { region: "us-central1" },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
     const myUid = request.auth.uid;
-    const code = (request.data?.code || "").trim().toUpperCase();
     const myName = request.data?.myName || "Friend";
+    const username = usernames.normalizeUsername(request.data?.username);
+    const code = (request.data?.code || "").trim().toUpperCase();
 
-    if (!code || code.length < 4) {
-      throw new HttpsError("invalid-argument", "Enter a valid friend code.");
+    let targetUid;
+    let targetDoc;
+    if (username) {
+      if (usernames.usernameProblem(username)) {
+        throw new HttpsError("invalid-argument", "Enter a valid username.");
+      }
+      const reservation = await db.collection("usernames").doc(username).get();
+      targetUid = reservation.data()?.uid;
+      if (!targetUid) {
+        throw new HttpsError("not-found", "No one found with that username.");
+      }
+      targetDoc = await db.collection("users").doc(targetUid).get();
+      if (!targetDoc.exists) {
+        throw new HttpsError("not-found", "No one found with that username.");
+      }
+    } else {
+      if (!code || code.length < 4) {
+        throw new HttpsError("invalid-argument", "Enter a valid username.");
+      }
+      const usersSnap = await db.collection("users")
+        .where("friendCode", "==", code).limit(2).get();
+      if (usersSnap.empty) {
+        throw new HttpsError("not-found", "No one found with that code.");
+      }
+      // Legacy codes were random with no uniqueness check; refuse an
+      // ambiguous one rather than friending whichever holder sorted first.
+      if (usersSnap.size > 1) {
+        throw new HttpsError(
+          "failed-precondition",
+          "That code belongs to more than one account. Ask your friend for their username instead."
+        );
+      }
+      targetDoc = usersSnap.docs[0];
+      targetUid = targetDoc.id;
     }
-
-    // Look up target user by friend code
-    const usersSnap = await db.collection("users")
-      .where("friendCode", "==", code).limit(2).get();
-    if (usersSnap.empty) {
-      throw new HttpsError("not-found", "No one found with that code.");
-    }
-    // Codes were allocated client-side with no uniqueness check for a long
-    // time. limit(1) silently picked whichever holder sorted first, so a
-    // collision friended a stranger. Refuse rather than guess.
-    if (usersSnap.size > 1) {
-      throw new HttpsError(
-        "failed-precondition",
-        "That code belongs to more than one account. Ask your friend to share their QR code instead."
-      );
-    }
-    const targetDoc = usersSnap.docs[0];
-    const targetUid = targetDoc.id;
     if (targetUid === myUid) {
       throw new HttpsError("invalid-argument", "You can't add yourself.");
     }

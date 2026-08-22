@@ -7,116 +7,64 @@ import CoreImage.CIFilterBuiltins
 // the request / friend rows.
 // All colors come from tokens; hairline strokes, flat fills, no glows.
 
-// MARK: - Friend QR code
+// MARK: - Username card
 
-/// Renders the deep-link QR for a friend code. Scanning it with the iPhone
-/// camera opens the app and pre-fills the Add a friend sheet with the code.
-enum FriendQRCode {
-    /// Dark modules on a white tile — QR readers need that contrast, so the
-    /// tile stays white in both themes rather than adopting card colors.
-    static func image(for code: String) -> UIImage? {
-        guard let url = FriendsService.addFriendURL(code: code) else { return nil }
-        let filter = CIFilter.qrCodeGenerator()
-        filter.message = Data(url.absoluteString.utf8)
-        filter.correctionLevel = "M"
-        guard let output = filter.outputImage else { return nil }
-        // The generator emits ~1pt modules; scale up so the image stays sharp
-        // instead of being bilinearly blurred at display size.
-        let scaled = output.transformed(by: CGAffineTransform(scaleX: 12, y: 12))
-        guard let cgImage = CIContext().createCGImage(scaled, from: scaled.extent) else {
-            return nil
-        }
-        return UIImage(cgImage: cgImage)
-    }
-}
-
-/// The QR block inside the friend-code card: white tile, code QR, caption.
-struct FriendQRBlock: View {
-    let code: String
-
-    /// Generated once per code — CIFilter work doesn't belong in `body`.
-    @State private var qrImage: UIImage?
-
-    var body: some View {
-        VStack(spacing: AppSpacing.xs) {
-            if let qrImage {
-                Image(uiImage: qrImage)
-                    .resizable()
-                    .interpolation(.none)
-                    .scaledToFit()
-                    .frame(width: 132, height: 132)
-                    .padding(10)
-                    .background(
-                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                            .fill(Color.white)
-                    )
-
-                Text("Scan to add me as a friend")
-                    .appText(.caption)
-                    .foregroundStyle(AppColors.faint)
-            }
-        }
-        .onAppear {
-            if qrImage == nil {
-                qrImage = FriendQRCode.image(for: code)
-            }
-        }
-        .onChange(of: code) { _, newCode in
-            qrImage = FriendQRCode.image(for: newCode)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Your friend QR code. Others can scan it with their camera to add you.")
-    }
-}
-
-// MARK: - Friend code card
-
-/// Quiet card combining the user's shareable code (tap to copy) with the
-/// add-by-code field. Behavior matches the old hero card; the dress is now
-/// flat card fill + hairline stroke instead of gradient + glow.
-struct FriendCodeCard: View {
-    let code: String?
-    @Binding var codeInput: String
+/// The user's own handle (tap to copy) plus the add-by-username field. An
+/// account that hasn't claimed a handle yet is offered the claim sheet first —
+/// nobody can add them until they have one.
+struct UsernameCard: View {
+    let username: String?
+    @Binding var usernameInput: String
     let isSending: Bool
     let copyConfirmation: Bool
     let onCopy: () -> Void
     let onAdd: () -> Void
-    let onScan: () -> Void
+    let onSetUsername: () -> Void
 
     var body: some View {
         VStack(spacing: AppSpacing.md) {
             VStack(spacing: AppSpacing.xs) {
-                Text("Your Friend Code")
+                Text("Your Username")
                     .appText(.eyebrow)
                     .foregroundStyle(AppColors.subtext)
 
-                Button(action: onCopy) {
-                    HStack(spacing: AppSpacing.sm) {
-                        Text(code ?? "—")
-                            .font(.system(size: 34, weight: .heavy, design: .rounded))
-                            .foregroundStyle(AppColors.text)
-                            .monospacedDigit()
-                        Image(systemName: copyConfirmation ? "checkmark.circle.fill" : "doc.on.doc")
-                            .font(.system(size: 19, weight: .semibold))
-                            .foregroundStyle(copyConfirmation ? AppColors.positive : AppColors.accent)
+                if let username {
+                    Button(action: onCopy) {
+                        HStack(spacing: AppSpacing.sm) {
+                            Text(Username.display(username))
+                                .font(.system(size: 30, weight: .heavy, design: .rounded))
+                                .foregroundStyle(AppColors.text)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
+                            Image(systemName: copyConfirmation ? "checkmark.circle.fill" : "doc.on.doc")
+                                .font(.system(size: 19, weight: .semibold))
+                                .foregroundStyle(copyConfirmation ? AppColors.positive : AppColors.accent)
+                        }
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(code == nil)
+                    .buttonStyle(.plain)
 
-                // Only the transient copy confirmation shows here — the idle
-                // "tap to copy" hint was removed; the code button's own
-                // doc.on.doc icon already signals it's tappable.
-                if copyConfirmation {
-                    Text("Copied to clipboard")
+                    Text(copyConfirmation ? "Copied to clipboard" : "Share it so friends can add you")
                         .appText(.caption)
-                        .foregroundStyle(AppColors.positive)
+                        .foregroundStyle(copyConfirmation ? AppColors.positive : AppColors.subtext)
+                } else {
+                    Button(action: onSetUsername) {
+                        HStack(spacing: AppSpacing.xs) {
+                            Image(systemName: "at")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("Choose a username")
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                        }
+                        .foregroundStyle(AppColors.textOnAccent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Capsule(style: .continuous).fill(AppColors.accent))
+                    }
+                    .buttonStyle(PremiumPressStyle())
+                    Text("Friends add you by your username.")
+                        .appText(.caption)
+                        .foregroundStyle(AppColors.subtext)
                 }
-            }
-
-            if let code {
-                FriendQRBlock(code: code)
             }
 
             Rectangle()
@@ -124,27 +72,6 @@ struct FriendCodeCard: View {
                 .frame(height: 1)
 
             addFriendRow
-
-            Button(action: onScan) {
-                HStack(spacing: AppSpacing.xs) {
-                    Image(systemName: "qrcode.viewfinder")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text("Scan their QR code")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                }
-                .foregroundStyle(AppColors.accent)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(AppColors.accent.opacity(0.12))
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(AppColors.accent.opacity(0.25), lineWidth: 1)
-                        )
-                )
-            }
-            .buttonStyle(PremiumPressStyle())
         }
         .padding(AppSpacing.lg)
         .background(
@@ -157,24 +84,25 @@ struct FriendCodeCard: View {
         )
     }
 
+    private var canAdd: Bool {
+        Username.problem(with: Username.normalize(usernameInput), moderation: { _ in false }) == nil
+    }
+
     private var addFriendRow: some View {
         HStack(spacing: AppSpacing.xs) {
-            HStack(spacing: AppSpacing.xs) {
-                Image(systemName: "person.crop.circle.badge.plus")
+            HStack(spacing: 4) {
+                Image(systemName: "at")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(AppColors.subtext)
-                TextField("Enter friend code", text: $codeInput)
+                TextField("friend's username", text: $usernameInput)
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .textInputAutocapitalization(.characters)
+                    .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .keyboardType(.asciiCapable)
                     .foregroundStyle(AppColors.text)
-                    .onChange(of: codeInput) { _, newValue in
-                        let sanitized = newValue
-                            .uppercased()
-                            .filter { $0.isLetter || $0.isNumber }
-                        if sanitized != newValue || sanitized.count > 8 {
-                            codeInput = String(sanitized.prefix(8))
-                        }
+                    .onChange(of: usernameInput) { _, newValue in
+                        let filtered = Username.filteredForTyping(newValue)
+                        if filtered != newValue { usernameInput = filtered }
                     }
             }
             .padding(.horizontal, 14)
@@ -205,8 +133,8 @@ struct FriendCodeCard: View {
                 .background(Capsule(style: .continuous).fill(AppColors.accent))
             }
             .buttonStyle(PremiumPressStyle())
-            .disabled(codeInput.trimmingCharacters(in: .whitespaces).isEmpty || isSending)
-            .opacity(codeInput.trimmingCharacters(in: .whitespaces).isEmpty ? 0.6 : 1.0)
+            .disabled(!canAdd || isSending)
+            .opacity(canAdd ? 1.0 : 0.6)
         }
     }
 }
