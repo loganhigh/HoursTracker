@@ -237,9 +237,25 @@ final class HoursStore: ObservableObject {
         // this O(n·m) on every remote snapshot; it's now O(n+m).
         var indexByID = [UUID: Int](minimumCapacity: merged.count)
         for (i, entry) in merged.enumerated() { indexByID[entry.id] = i }
+        // Cloud holds EVERY year's shifts, but after the yearly reset the
+        // prior years live in `yearArchives`, not `entries`. Without this map
+        // each pull re-appended every archived shift to the active list, and
+        // recalculateGamification (entries + archives) counted them twice —
+        // inflating XP/level until the next cold launch re-archived them.
+        var archiveIndexByID = [UUID: (archive: Int, entry: Int)]()
+        for (a, archive) in yearArchives.enumerated() {
+            for (e, entry) in archive.entries.enumerated() { archiveIndexByID[entry.id] = (a, e) }
+        }
         for remote in liveRemote {
             if let idx = indexByID[remote.id] {
                 merged[idx] = remote
+            } else if let loc = archiveIndexByID[remote.id] {
+                // Already archived: adopt any edit made on another device in
+                // place, so the archive stays the single copy of that shift.
+                // saveLocallyOnly() below persists yearArchives alongside entries.
+                if yearArchives[loc.archive].entries[loc.entry] != remote {
+                    yearArchives[loc.archive].entries[loc.entry] = remote
+                }
             } else {
                 indexByID[remote.id] = merged.count
                 merged.append(remote)
