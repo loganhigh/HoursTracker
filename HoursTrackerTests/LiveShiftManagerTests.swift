@@ -242,3 +242,116 @@ final class LiveShiftManagerTests: XCTestCase {
         XCTAssertTrue(shift.isStale(at: date(hour: 16, minute: 1)))
     }
 }
+
+// MARK: - Auto-off marker (per account, rewinds on backfill)
+
+final class AutoOffDayFillerTests: XCTestCase {
+    private var suiteName: String!
+    private var defaults: UserDefaults!
+    private let cal = Calendar(identifier: .gregorian)
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "AutoOffDayFillerTests-\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+    }
+
+    override func tearDown() {
+        defaults.removePersistentDomain(forName: suiteName)
+        super.tearDown()
+    }
+
+    private func day(_ y: Int, _ m: Int, _ d: Int) -> Date {
+        cal.date(from: DateComponents(year: y, month: m, day: d))!
+    }
+
+    private func shift(_ date: Date) -> WorkEntry {
+        WorkEntry(date: date, start: date, end: date.addingTimeInterval(8 * 3600), breakMinutes: 0, notes: "")
+    }
+
+    func testBackfilledEarlierShiftRescansTheGapBeforeTheOldFirstEntry() {
+        let now = day(2026, 8, 21)
+        // First run: only an Aug 20 shift → marker lands on Aug 20, first entry Aug 20.
+        let first = AutoOffDayFiller.makeOffDayEntries(entries: [shift(day(2026, 8, 20))], now: now, calendar: cal, accountScope: "u1", defaults: defaults)
+        XCTAssertTrue(first.isEmpty)
+        // Backfill a shift on Aug 5. Aug 6–19 were never scanned and must fill now.
+        let second = AutoOffDayFiller.makeOffDayEntries(entries: [shift(day(2026, 8, 20)), shift(day(2026, 8, 5))], now: now, calendar: cal, accountScope: "u1", defaults: defaults)
+        let filled = Set(second.map { cal.component(.day, from: $0.date) })
+        XCTAssertEqual(filled, Set(6...19))
+    }
+
+    func testMarkerIsScopedPerAccount() {
+        let now = day(2026, 8, 21)
+        let entries = [shift(day(2026, 8, 18))]
+        XCTAssertEqual(AutoOffDayFiller.makeOffDayEntries(entries: entries, now: now, calendar: cal, accountScope: "a", defaults: defaults).count, 2)
+        // Same day again for "a": nothing new. A different account on the same phone still gets its fill.
+        XCTAssertEqual(AutoOffDayFiller.makeOffDayEntries(entries: entries, now: now, calendar: cal, accountScope: "a", defaults: defaults).count, 0)
+        XCTAssertEqual(AutoOffDayFiller.makeOffDayEntries(entries: entries, now: now, calendar: cal, accountScope: "b", defaults: defaults).count, 2)
+    }
+
+    func testLegacyDeviceWideMarkerIsHonouredOnUpgrade() {
+        // Old builds stored one unscoped marker; keep trusting it so an upgrade
+        // does not re-fill days the user may have deliberately cleared.
+        defaults.set(day(2026, 8, 19), forKey: "auto_off_last_processed_day")
+        let out = AutoOffDayFiller.makeOffDayEntries(entries: [shift(day(2026, 8, 1))], now: day(2026, 8, 21), calendar: cal, accountScope: "u1", defaults: defaults)
+        XCTAssertEqual(out.map { cal.component(.day, from: $0.date) }, [20])
+    }
+
+    func testClearMarkersForgetsEveryScope() {
+        let now = day(2026, 8, 21)
+        let entries = [shift(day(2026, 8, 18))]
+        _ = AutoOffDayFiller.makeOffDayEntries(entries: entries, now: now, calendar: cal, accountScope: "a", defaults: defaults)
+        AutoOffDayFiller.clearMarkers(defaults: defaults)
+        XCTAssertEqual(AutoOffDayFiller.makeOffDayEntries(entries: entries, now: now, calendar: cal, accountScope: "a", defaults: defaults).count, 2)
+    }
+}
+
+// MARK: - Stored-profile forward compatibility
+
+final class GamificationProfileDecodingTests: XCTestCase {
+    func testProfileSavedBeforeAdminXPOffsetStillDecodesAndKeepsBadges() throws {
+        // Everything a pre-July-2026 build wrote, minus the later-added key.
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(GamificationProfile.defaultProfile)) as! [String: Any]
+        json["unlockedBadges"] = ["first_shift", "night_owl"]
+        json["equippedTitle"] = "Night Owl"
+        json["level"] = 7
+        json.removeValue(forKey: "adminXPOffset")
+        let data = try JSONSerialization.data(withJSONObject: json)
+        let decoded = try JSONDecoder().decode(GamificationProfile.self, from: data)
+        XCTAssertEqual(decoded.unlockedBadges, ["first_shift", "night_owl"])
+        XCTAssertEqual(decoded.equippedTitle, "Night Owl")
+        XCTAssertEqual(decoded.level, 7)
+        XCTAssertEqual(decoded.adminXPOffset, 0)
+    }
+
+    func testRoundTripIsLossless() throws {
+        var p = GamificationProfile.defaultProfile
+        p.adminXPOffset = 1234
+        p.prestige = 2
+        p.prestigeFloor = 2
+        p.streakFreezes = 3
+        let data = try JSONEncoder().encode(p)
+        let back = try JSONDecoder().decode(GamificationProfile.self, from: data)
+        XCTAssertEqual(back.adminXPOffset, 1234)
+        XCTAssertEqual(back.prestige, 2)
+        XCTAssertEqual(back.prestigeFloor, 2)
+        XCTAssertEqual(back.streakFreezes, 3)
+    }
+}
+
+// MARK: - Legacy weekly-OT field vs explicit overtimeType
+
+final class PaySettingsLegacyOvertimeDecodingTests: XCTestCase {
+    func testLegacyKeyIsIgnoredWhenOvertimeTypeIsExplicit() throws {
+        let data = Data(#"{"overtimeType":"daily","weeklyOvertimeAfterHours":40}"#.utf8)
+        let s = try JSONDecoder().decode(PaySettings.self, from: data)
+        XCTAssertEqual(s.overtimeType, .daily)
+        XCTAssertNil(s.weeklyOvertimeAfterHours, "an explicit overtimeType must not be overridden by the stale legacy key")
+    }
+
+    func testLegacyKeyStillMigratesPreEnumPayloads() throws {
+        let data = Data(#"{"weeklyOvertimeAfterHours":40}"#.utf8)
+        let s = try JSONDecoder().decode(PaySettings.self, from: data)
+        XCTAssertEqual(s.weeklyOvertimeAfterHours, 40)
+    }
+}

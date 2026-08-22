@@ -292,9 +292,25 @@ final class HoursStore: ObservableObject {
     }
 
     /// Applies pay settings from Firestore without triggering a cloud upload loop.
+    /// Cloud pay settings seen this session. `loadAsync` reads the disk copy
+    /// on a background thread; if the settings listener wins that race, the
+    /// disk copy is stale and assigning it clobbered the cloud value — and the
+    /// next save() pushed the stale copy back to Firestore, undoing a change
+    /// made on another device. Re-applied on top after the disk load, exactly
+    /// like `lastSeenCloudGamificationAnchors`.
+    private(set) var lastSeenCloudSettings: PaySettings?
+
+    /// Forget cloud state that belongs to the account that just signed out,
+    /// so a later `loadAsync` (refresh, next account) can't re-apply it.
+    func cloudSessionEnded() {
+        lastSeenCloudSettings = nil
+        lastSeenCloudGamificationAnchors = nil
+    }
+
     func applyRemoteSettings(_ remoteSettings: PaySettings) {
         paySettings = remoteSettings
         normalizePaySettings()
+        lastSeenCloudSettings = paySettings
         saveLocallyOnly()
         WidgetDataManager.shared.updateWidgetData(
             entries: entries,
@@ -354,6 +370,10 @@ final class HoursStore: ObservableObject {
             if let cloudTitle, !cloudTitle.isEmpty,
                cloudTitle != gamificationProfile.equippedTitle {
                 gamificationProfile.equippedTitle = cloudTitle
+                didUpdate = true
+            }
+            if anchors.streakFreezes > gamificationProfile.streakFreezes {
+                gamificationProfile.streakFreezes = anchors.streakFreezes
                 didUpdate = true
             }
             if let cloudOffset = anchors.adminXPOffset,
@@ -425,6 +445,13 @@ final class HoursStore: ObservableObject {
         let entriesCopy = entries
         let settingsCopy = paySettings
         let payHistoryCopy = payHistoryEntries
+        // paySettings / payHistoryEntries are only populated by loadAsync (init
+        // pre-loads entries, archives and gamification, not these). A persist
+        // that runs first — a Firestore listener, or a Siri intent launching
+        // the app with no UI — used to write PaySettings() and [] over the
+        // user's real settings and pay-rate history. Entries/archives/profile
+        // are safe to write because init already holds the real values.
+        let settingsAndHistoryLoaded = isLoaded
         let yearArchivesCopy = yearArchives
         let gamificationCopy = gamificationProfile
         let entriesKey = self.entriesKey
@@ -466,8 +493,10 @@ final class HoursStore: ObservableObject {
                 return
             }
             UserDefaults.standard.set(entriesData, forKey: entriesKey)
-            UserDefaults.standard.set(settingsData, forKey: settingsKey)
-            UserDefaults.standard.set(payHistoryData, forKey: payHistoryKey)
+            if settingsAndHistoryLoaded {
+                UserDefaults.standard.set(settingsData, forKey: settingsKey)
+                UserDefaults.standard.set(payHistoryData, forKey: payHistoryKey)
+            }
             UserDefaults.standard.set(yearArchivesData, forKey: yearArchivesKey)
             UserDefaults.standard.set(gamificationData, forKey: gamificationKey)
             WidgetDataManager.shared.updateWidgetData(
@@ -903,6 +932,15 @@ final class HoursStore: ObservableObject {
         gamificationProfile = .defaultProfile
         gamificationEventMessage = nil
         lastSeenCloudGamificationAnchors = nil
+        lastSeenCloudSettings = nil
+        // Also account data that used to survive deletion and resurface for
+        // the next account signed in on this phone (and get uploaded to it).
+        shiftTemplates.removeAll()
+        actualPayouts = [:]
+        UserDefaults.standard.removeObject(forKey: shiftTemplatesKey)
+        UserDefaults.standard.removeObject(forKey: Self.actualPayoutsKey)
+        AutoOffDayFiller.clearMarkers()
+        LevelUpRatchet.resetAll()
         isLoaded = false
         UserDefaults.standard.removeObject(forKey: entriesKey)
         UserDefaults.standard.removeObject(forKey: settingsKey)
@@ -1617,7 +1655,11 @@ final class HoursStore: ObservableObject {
         let backup = try LocalBackupService.readBackup()
 
         // --- Entries: union by ID, current entries take precedence ---
-        let existingIDs = Set(entries.map(\.id))
+        // A backup taken before New Year holds last year's shifts in
+        // `entries`; after the rollover those same ids live in yearArchives.
+        // Dedupe against both, or they come back as active and count twice.
+        let archivedIDs = Set(yearArchives.flatMap(\.entries).map(\.id))
+        let existingIDs = Set(entries.map(\.id)).union(archivedIDs)
         let newEntries = backup.entries.filter { !existingIDs.contains($0.id) }
         entries = (entries + newEntries).sorted { $0.date > $1.date }
 
@@ -1670,6 +1712,11 @@ final class HoursStore: ObservableObject {
 
         saveCertificates()
         saveAwards()
+        // Any prior-year shifts the backup restored into the active list
+        // belong in their year's archive, same as a launch-time rollover.
+        let rollover = archivePriorYearsIfNeeded(entries: entries, archives: yearArchives)
+        entries = rollover.activeEntries
+        yearArchives = rollover.archives
         save()
     }
 
@@ -1734,7 +1781,11 @@ final class HoursStore: ObservableObject {
             }
         }
 
-        let newEntries = AutoOffDayFiller.makeOffDayEntries(entries: entries, now: now)
+        let newEntries = AutoOffDayFiller.makeOffDayEntries(
+            entries: entries,
+            now: now,
+            accountScope: AuthService.shared.user?.uid ?? AutoOffDayFiller.localScope
+        )
         guard !newEntries.isEmpty else { return }
         let toAdd = newEntries.filter { entry in
             !entries.contains(where: { cal.isDate($0.date, inSameDayAs: entry.date) })
@@ -1910,6 +1961,8 @@ final class HoursStore: ObservableObject {
         let yearArchivesKey = self.yearArchivesKey
         let gamificationKey = self.gamificationKey
         let prestigeCopy = gamificationCopy.prestige
+        // Same pre-load guard as saveLocallyOnly(): see the comment there.
+        let settingsAndHistoryLoaded = isLoaded
 
         // PaySettings and GamificationProfile have main-actor-isolated Encodable
         // conformances, so they're encoded here on the main actor (tiny, so
@@ -1945,8 +1998,10 @@ final class HoursStore: ObservableObject {
             }
             AppLogger.db.debug("save: writing to UserDefaults on background")
             UserDefaults.standard.set(entriesData, forKey: entriesKey)
-            UserDefaults.standard.set(settingsData, forKey: settingsKey)
-            UserDefaults.standard.set(payHistoryData, forKey: payHistoryKey)
+            if settingsAndHistoryLoaded {
+                UserDefaults.standard.set(settingsData, forKey: settingsKey)
+                UserDefaults.standard.set(payHistoryData, forKey: payHistoryKey)
+            }
             UserDefaults.standard.set(yearArchivesData, forKey: yearArchivesKey)
             UserDefaults.standard.set(gamificationData, forKey: gamificationKey)
 
@@ -2091,7 +2146,9 @@ final class HoursStore: ObservableObject {
                     let rollover = self.archivePriorYearsIfNeeded(entries: mergedEntries, archives: normalizedArchives)
                     self.entries = rollover.activeEntries
                     self.yearArchives = rollover.archives
-                    self.paySettings = loadedSettings
+                    // Disk settings were read before the cloud listeners could
+                    // run; cloud truth seen since wins (see lastSeenCloudSettings).
+                    self.paySettings = self.lastSeenCloudSettings ?? loadedSettings
                     self.normalizePaySettings()
                     self.payHistoryEntries = loadedPayHistory.sorted { $0.year < $1.year }
                     self.certificateEntries = loadedCertificates
@@ -2120,7 +2177,8 @@ final class HoursStore: ObservableObject {
 
                     self.entries = rollover.activeEntries
                     self.yearArchives = rollover.archives
-                    self.paySettings = loadedSettings
+                    let cloudSettingsWon = self.lastSeenCloudSettings != nil
+                    self.paySettings = self.lastSeenCloudSettings ?? loadedSettings
                     self.normalizePaySettings()
                     self.payHistoryEntries = loadedPayHistory.sorted { $0.year < $1.year }
                     self.certificateEntries = loadedCertificates
@@ -2134,6 +2192,10 @@ final class HoursStore: ObservableObject {
                     self.recalculateGamification(eventHint: nil)
                     if rollover.didArchive {
                         self.save()
+                    } else if cloudSettingsWon {
+                        // Pre-load saves skip the settings keys (see save()),
+                        // so persist the adopted cloud settings now.
+                        self.saveLocallyOnly()
                     }
                 }
 
@@ -2158,6 +2220,10 @@ final class HoursStore: ObservableObject {
     }
 
     func applyYearlyResetIfNeeded() {
+        // Before loadAsync finishes, paySettings/payHistory are still defaults;
+        // the save() below would push those defaults to disk, widget and cloud
+        // on the first launch of a new year. loadAsync archives on its own.
+        guard isLoaded else { return }
         let rollover = archivePriorYearsIfNeeded(entries: entries, archives: yearArchives)
         guard rollover.didArchive else { return }
         entries = rollover.activeEntries
@@ -2399,6 +2465,62 @@ struct GamificationProfile: Codable {
         rival: nil,
         crew: nil
     )
+}
+
+/// Tolerant decoder, for the same reason PaySettings has one: synthesized
+/// Decodable throws `keyNotFound` for any non-optional property missing from
+/// stored JSON, and a default value does NOT cover a missing key. Profiles
+/// saved (or backed up) before `adminXPOffset` existed therefore failed to
+/// decode on update, and `try?` quietly replaced the whole profile — badges,
+/// titles, achievement dates, battle-pass progress — with `.defaultProfile`.
+/// Every key is read with decodeIfPresent and falls back to the default
+/// profile's value. Lives in an extension so the memberwise init survives.
+extension GamificationProfile {
+    enum CodingKeys: String, CodingKey {
+        case totalXP, level, prestige, prestigeFloor
+        case prestigeXPSnapshots, prestigeHourSnapshots, adminXPOffset
+        case xpIntoCurrentLevel, xpForNextLevel, canPrestige
+        case currentStreak, bestStreak, streakFreezes
+        case unlockedBadges, unlockedTitles, equippedTitle
+        case achievements, dailyChallenges, weeklyChallenges
+        case battlePass, activeBoosts, seasonalProgressionResets
+        case rival, crew
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = GamificationProfile.defaultProfile
+        func req<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T {
+            (try? c.decodeIfPresent(T.self, forKey: key)) ?? fallback
+        }
+        func opt<T: Decodable>(_ key: CodingKeys) -> T? {
+            try? c.decodeIfPresent(T.self, forKey: key)
+        }
+        totalXP = req(.totalXP, d.totalXP)
+        level = req(.level, d.level)
+        prestige = req(.prestige, d.prestige)
+        prestigeFloor = opt(.prestigeFloor)
+        prestigeXPSnapshots = req(.prestigeXPSnapshots, d.prestigeXPSnapshots)
+        prestigeHourSnapshots = req(.prestigeHourSnapshots, d.prestigeHourSnapshots)
+        adminXPOffset = req(.adminXPOffset, d.adminXPOffset)
+        xpIntoCurrentLevel = req(.xpIntoCurrentLevel, d.xpIntoCurrentLevel)
+        xpForNextLevel = req(.xpForNextLevel, d.xpForNextLevel)
+        canPrestige = req(.canPrestige, d.canPrestige)
+        currentStreak = req(.currentStreak, d.currentStreak)
+        bestStreak = req(.bestStreak, d.bestStreak)
+        streakFreezes = req(.streakFreezes, d.streakFreezes)
+        unlockedBadges = req(.unlockedBadges, d.unlockedBadges)
+        unlockedTitles = req(.unlockedTitles, d.unlockedTitles)
+        equippedTitle = opt(.equippedTitle)
+        achievements = req(.achievements, d.achievements)
+        dailyChallenges = req(.dailyChallenges, d.dailyChallenges)
+        weeklyChallenges = req(.weeklyChallenges, d.weeklyChallenges)
+        battlePass = req(.battlePass, d.battlePass)
+        activeBoosts = req(.activeBoosts, d.activeBoosts)
+        seasonalProgressionResets = req(.seasonalProgressionResets, d.seasonalProgressionResets)
+        rival = opt(.rival)
+        crew = opt(.crew)
+    }
 }
 
 private enum GamificationEngine {

@@ -1133,7 +1133,12 @@ final class CloudSyncManager: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let adminTitle = (adminEquippedTitle?.isEmpty == false) ? adminEquippedTitle : nil
 
-        guard prestige > 0 || highWater > 0 || !snapshots.isEmpty || bestStreak > 0 || levelOverride != nil || prestigeOverride != nil || adminFloorLevel != nil || adminFloorPrestige != nil || adminTitle != nil || adminXPOffset != nil else { return nil }
+        // equippedTitle and streakFreezes are earned independently of
+        // prestige; leaving them out of this existence check meant a
+        // low-prestige user's title and saved freezes were silently dropped
+        // on a second device / reinstall even though the cloud still had them.
+        let hasTitle = equippedTitle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        guard prestige > 0 || highWater > 0 || !snapshots.isEmpty || bestStreak > 0 || streakFreezes > 0 || hasTitle || levelOverride != nil || prestigeOverride != nil || adminFloorLevel != nil || adminFloorPrestige != nil || adminTitle != nil || adminXPOffset != nil else { return nil }
 
         return RemoteGamificationAnchors(
             prestige: max(prestige, highWater),
@@ -1200,6 +1205,9 @@ final class CloudSyncManager: ObservableObject {
         currentUID = uid
         hasAppliedRemoteEntries = false
         traceRepairGate(reason: "handleSignedIn")
+        // Before the profile push below can republish it: drop a cached avatar
+        // that belongs to a different account than the one signing in.
+        ProfilePhotoManager.shared.reconcileLocalPhoto(forSignedInUID: uid)
         migrateLocalDataIfNeeded(uid: uid)
         runDailyCloudRepairIfNeeded()
         Task { @MainActor in
@@ -1252,6 +1260,7 @@ final class CloudSyncManager: ObservableObject {
         isPulling = false
         isSyncing = false
         syncError = nil
+        hoursStore?.cloudSessionEnded()
         Task { @MainActor [weak self] in
             // Only tear the shared listener singletons down if the user is still
             // signed out. If they signed back in (even as a different account)
@@ -1270,11 +1279,12 @@ final class CloudSyncManager: ObservableObject {
                 TopTrackersService.shared.stopListening()
                 ProfilePhotoManager.shared.clearFriendCache()
             }
-            // The push token is keyed to the signing-out uid specifically, so
-            // clearing it is always correct regardless of any subsequent sign-in.
-            if let uid {
-                await PushNotificationService.shared.clearTokenOnSignOut(uid: uid)
-            }
+            // The push token is NOT cleared here: by now Auth.signOut() has
+            // run, so a Firestore delete has no credentials and the rules
+            // reject it — which is why signed-out phones kept receiving the
+            // previous user's pushes. AuthService.signOut() clears it BEFORE
+            // signing out; forced sign-outs (account deletion) are covered by
+            // the server-side purgeDeletedUserData trigger.
         }
     }
 

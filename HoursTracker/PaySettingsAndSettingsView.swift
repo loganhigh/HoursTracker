@@ -127,7 +127,13 @@ struct PaySettings: Codable, Equatable {
         weekdayOvertimeAfterHours = req(.weekdayOvertimeAfterHours, fallback.weekdayOvertimeAfterHours)
         weekdayOvertimeMultiplier = req(.weekdayOvertimeMultiplier, fallback.weekdayOvertimeMultiplier)
         weeklyOvertimeThreshold = req(.weeklyOvertimeThreshold, fallback.weeklyOvertimeThreshold)
-        weeklyOvertimeAfterHours = opt(.weeklyOvertimeAfterHours)
+        // Legacy pre-enum field. It is only meaningful on payloads written
+        // before `overtimeType` existed; once a payload carries overtimeType,
+        // that is the user's choice. The cloud doc keeps the legacy key
+        // forever (merge writes never delete it), and honouring it alongside
+        // an explicit "daily" flipped Daily OT back to Weekly on every
+        // settings snapshot — the user could never switch.
+        weeklyOvertimeAfterHours = c.contains(.overtimeType) ? nil : opt(.weeklyOvertimeAfterHours)
         saturdayOvertimeAfterHours = req(.saturdayOvertimeAfterHours, fallback.saturdayOvertimeAfterHours)
         saturdayMultiplier = req(.saturdayMultiplier, fallback.saturdayMultiplier)
         sundayMultiplier = req(.sundayMultiplier, fallback.sundayMultiplier)
