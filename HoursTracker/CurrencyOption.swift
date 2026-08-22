@@ -41,3 +41,58 @@ enum CurrencyCatalog {
         return CurrencyOption(code: code)
     }
 }
+
+// MARK: - Cheque amount parsing
+
+/// Parses a cheque total typed off a paystub. Swift's `Double("…")` only
+/// understands `.` as the decimal point, so the old `remove(",")` pre-pass
+/// turned a French-Canadian "1540,25" into 154025 — a 100× error that then
+/// trained the pay projection on every device. Separators are resolved from
+/// the text itself first and the locale only as a tie-breaker.
+enum ChequeAmountParser {
+    static func parse(_ raw: String, locale: Locale = .current) -> Double? {
+        // A cheque can't pay a negative amount; don't let the digit filter
+        // below quietly turn "-50" into 50.
+        guard !raw.contains("-") else { return nil }
+        let allowed = Set("0123456789.,")
+        let kept = String(raw.filter { allowed.contains($0) })
+        guard !kept.isEmpty else { return nil }
+
+        let commas = kept.filter { $0 == "," }.count
+        let dots = kept.filter { $0 == "." }.count
+        let localeDecimal = Character(locale.decimalSeparator ?? ".")
+
+        let normalized: String
+        switch (commas, dots) {
+        case (0, 0):
+            normalized = kept
+        case (_, 0), (0, _):
+            // One separator kind. Repeated → grouping ("1,234,567").
+            // Single → decimal unless it reads as a thousands group
+            // ("1,540" in an en locale), which the locale disambiguates.
+            let sep: Character = commas > 0 ? "," : "."
+            let count = commas > 0 ? commas : dots
+            if count > 1 {
+                normalized = kept.replacingOccurrences(of: String(sep), with: "")
+            } else {
+                let parts = kept.split(separator: sep, omittingEmptySubsequences: false)
+                let trailing = parts.count == 2 ? parts[1].count : 0
+                let isGrouping = trailing == 3 && sep != localeDecimal
+                normalized = isGrouping
+                    ? kept.replacingOccurrences(of: String(sep), with: "")
+                    : kept.replacingOccurrences(of: String(sep), with: ".")
+            }
+        default:
+            // Both present: the last one is the decimal point, the other groups.
+            let lastComma = kept.lastIndex(of: ",")!
+            let lastDot = kept.lastIndex(of: ".")!
+            let decimalIsComma = lastComma > lastDot
+            normalized = kept
+                .replacingOccurrences(of: decimalIsComma ? "." : ",", with: "")
+                .replacingOccurrences(of: ",", with: ".")
+        }
+
+        guard let value = Double(normalized), value.isFinite, value > 0 else { return nil }
+        return value
+    }
+}

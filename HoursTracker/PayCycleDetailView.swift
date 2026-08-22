@@ -170,13 +170,16 @@ struct PayCycleDetailView: View {
                 TextField("Amount", text: $payoutDraft)
                     .keyboardType(.decimalPad)
                 Button("Save") {
-                    // Tolerate "1,540.25" and "$1540" — typed off a paystub.
-                    let cleaned = payoutDraft
-                        .replacingOccurrences(of: "$", with: "")
-                        .replacingOccurrences(of: ",", with: "")
-                        .trimmingCharacters(in: .whitespaces)
-                    store.setActualPayout(Double(cleaned), for: selectedCycle)
-                    Haptics.success()
+                    // Locale-aware: "1,540.25", "$1540" and fr_CA "1540,25" all
+                    // parse to what the paystub says. Unparseable input keeps
+                    // whatever was recorded — passing nil here used to silently
+                    // DELETE the existing total on a typo.
+                    if let amount = ChequeAmountParser.parse(payoutDraft) {
+                        store.setActualPayout(amount, for: selectedCycle)
+                        Haptics.success()
+                    } else {
+                        Haptics.error()
+                    }
                 }
                 if recordedPayout != nil {
                     Button("Remove", role: .destructive) {

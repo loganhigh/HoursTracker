@@ -156,3 +156,44 @@ extension PayPredictorTests {
         XCTAssertEqual(p.netRate, (40.0 * 1 + 25.0 * 2 + 16.0 * 3) / 6.0, accuracy: 0.001)
     }
 }
+
+// MARK: - Cheque total parsing
+
+final class ChequeAmountParserTests: XCTestCase {
+    private let en = Locale(identifier: "en_US")
+    private let fr = Locale(identifier: "fr_CA")
+
+    func testPlainAndDollarSign() {
+        XCTAssertEqual(ChequeAmountParser.parse("1540", locale: en), 1540)
+        XCTAssertEqual(ChequeAmountParser.parse("$1540.25", locale: en), 1540.25)
+        XCTAssertEqual(ChequeAmountParser.parse(" 1540.25 ", locale: en), 1540.25)
+    }
+
+    func testEnglishGroupingComma() {
+        XCTAssertEqual(ChequeAmountParser.parse("1,540.25", locale: en), 1540.25)
+        XCTAssertEqual(ChequeAmountParser.parse("1,540", locale: en), 1540)
+        XCTAssertEqual(ChequeAmountParser.parse("1,234,567", locale: en), 1_234_567)
+    }
+
+    func testFrenchDecimalComma_regressionFor100xBug() {
+        XCTAssertEqual(ChequeAmountParser.parse("1540,25", locale: fr), 1540.25)
+        XCTAssertEqual(ChequeAmountParser.parse("1 540,25", locale: fr), 1540.25)
+        XCTAssertEqual(ChequeAmountParser.parse("1.540,25", locale: fr), 1540.25)
+        // Comma IS the decimal point in fr — three trailing digits are cents-ish, not a group.
+        XCTAssertEqual(ChequeAmountParser.parse("1,540", locale: fr), 1.54)
+        // A pasted English-style value still parses sensibly in a fr locale.
+        XCTAssertEqual(ChequeAmountParser.parse("1540.25", locale: fr), 1540.25)
+    }
+
+    func testBothSeparators_lastOneIsDecimal() {
+        XCTAssertEqual(ChequeAmountParser.parse("1.234.567,89", locale: en), 1_234_567.89)
+        XCTAssertEqual(ChequeAmountParser.parse("1,234,567.89", locale: fr), 1_234_567.89)
+    }
+
+    func testInvalidInputReturnsNilInsteadOfZeroOrDeleting() {
+        XCTAssertNil(ChequeAmountParser.parse("", locale: en))
+        XCTAssertNil(ChequeAmountParser.parse("abc", locale: en))
+        XCTAssertNil(ChequeAmountParser.parse("0", locale: en))
+        XCTAssertNil(ChequeAmountParser.parse("-50", locale: en))
+    }
+}
