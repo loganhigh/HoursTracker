@@ -1873,7 +1873,7 @@ private struct ProfileSnapshotInputs {
                 "acceptInvites": acceptInvites
             ],
             "acceptInvites": acceptInvites,
-            "friendShiftAlerts": friendShiftAlerts,
+            // friendShiftAlerts is deliberately NOT here: see uploadToken.
             "clientSyncBuild": "repair-diagnostics-v4",
             "updatedAt": FieldValue.serverTimestamp(),
             "lookupEmail": FieldValue.delete(),

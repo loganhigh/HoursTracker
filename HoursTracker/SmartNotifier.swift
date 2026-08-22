@@ -145,6 +145,21 @@ class SmartNotifier: ObservableObject {
         }
     }
 
+    /// Takes the account's alert preferences from users/{uid} without pushing
+    /// them back (the setters above sync to the cloud; this is the inverse).
+    func adoptCloudAlertPreferences(friendShift: Bool?, leaderboard: Bool?) {
+        var changed = false
+        if let friendShift, friendShift != friendShiftNotificationsEnabled {
+            UserDefaults.standard.set(friendShift, forKey: "notifications_friend_shift_enabled")
+            changed = true
+        }
+        if let leaderboard, leaderboard != leaderboardAlertsEnabled {
+            UserDefaults.standard.set(leaderboard, forKey: "notifications_leaderboard_enabled")
+            changed = true
+        }
+        if changed { objectWillChange.send() }
+    }
+
     private let notificationManager = NotificationManager.shared
     private static let friendShiftPrefix = "friend_shift_"
     

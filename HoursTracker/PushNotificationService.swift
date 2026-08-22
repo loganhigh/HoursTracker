@@ -153,11 +153,17 @@ final class PushNotificationService {
                     "token": token,
                     "updatedAt": FieldValue.serverTimestamp()
                 ], merge: true)
-            try await db.collection("users").document(uid).setData([
-                "friendShiftAlerts": SmartNotifier.shared.friendShiftNotificationsEnabled,
-                "leaderboardAlerts": SmartNotifier.shared.leaderboardAlertsEnabled,
-                "pushSettingsUpdatedAt": FieldValue.serverTimestamp()
-            ], merge: true)
+            // Alert preferences are written ONLY when the user flips a toggle
+            // (syncAlertPreferenceToCloud). This used to push this device's
+            // local values on every foreground, so merely opening the app on
+            // a second device (or reinstalling) silently re-enabled alerts the
+            // user had turned off elsewhere. Adopt the cloud values instead.
+            if let data = try? await db.collection("users").document(uid).getDocument().data() {
+                await SmartNotifier.shared.adoptCloudAlertPreferences(
+                    friendShift: data["friendShiftAlerts"] as? Bool,
+                    leaderboard: data["leaderboardAlerts"] as? Bool
+                )
+            }
             #if DEBUG
             print("FCM token synced for device \(deviceId.prefix(8))…")
             #endif
