@@ -331,10 +331,10 @@ final class AuthService: NSObject, ObservableObject {
         if displayName.isEmpty {
             displayName = firebaseUser.displayName ?? ""
         }
-        if displayName.isEmpty, let email, let prefix = email.split(separator: "@").first {
-            displayName = String(prefix)
-        }
-        if displayName.isEmpty {
+        // No email-local-part fallback: "john.smith1984" is not a name the
+        // user chose and it was published to friends and the leaderboards.
+        let isPlaceholder = displayName.isEmpty
+        if isPlaceholder {
             displayName = "Worker"
         }
         // Same moderation as the Apple path — provider and email-derived
@@ -349,7 +349,9 @@ final class AuthService: NSObject, ObservableObject {
             try? await change.commitChanges()
         }
 
-        if !displayName.isEmpty {
+        // Only a real name is remembered locally; storing the placeholder
+        // would silence the pick-a-display-name prompt that fixes it.
+        if !isPlaceholder {
             UserDefaults.standard.set(displayName, forKey: "profile_display_name")
         }
 

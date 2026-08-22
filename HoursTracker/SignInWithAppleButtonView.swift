@@ -15,6 +15,11 @@ struct SignInWithAppleButtonView: View {
             case .success(let authorization):
                 Task { await authService.handleAppleAuthorization(authorization) }
             case .failure(let error):
+                // Cancelling the sheet is not a failure — Google's path already
+                // stays silent on cancel; this one showed a raw "error 1001".
+                if let authError = error as? ASAuthorizationError, authError.code == .canceled {
+                    return
+                }
                 authService.lastError = error.localizedDescription
             }
         }

@@ -25,6 +25,7 @@ struct AccountView: View {
     @State private var showingDeleteAccountConfirm = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError: String?
+    @State private var photoError: String?
     @ObservedObject private var verifiedStatus = VerifiedStatusService.shared
     @State private var photoPickerItem: PhotosPickerItem?
     @State private var isUpdatingPhoto = false
@@ -524,6 +525,14 @@ struct AccountView: View {
         } message: {
             Text(deleteAccountError ?? "")
         }
+        .alert("Couldn't save photo", isPresented: Binding(
+            get: { photoError != nil },
+            set: { if !$0 { photoError = nil } }
+        )) {
+            Button("OK", role: .cancel) { photoError = nil }
+        } message: {
+            Text(photoError ?? "")
+        }
     }
 
     // MARK: - Footer
@@ -584,7 +593,8 @@ struct AccountView: View {
             Haptics.success()
         } catch {
             Haptics.error()
-            deleteAccountError = error.localizedDescription
+            // Its own alert: this used to land under "Couldn't delete account".
+            photoError = error.localizedDescription
         }
     }
 }

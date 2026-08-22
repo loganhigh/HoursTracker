@@ -198,7 +198,10 @@ struct LiveShiftTrackingView: View {
     private func performClockOut() {
         guard let entry = liveShift.clockOut(at: Date(), into: store) else {
             Haptics.error()
-            clockOutMessage = "Shift too short to save yet — keep going, or discard it."
+            let worked = liveShift.activeShift?.elapsedWorked(at: Date()) ?? 0
+            clockOutMessage = worked > 24 * 3600
+                ? "This shift is over 24 hours, so it can't be saved. Discard it and log the hours by hand."
+                : "Shift too short to save yet — keep going, or discard it."
             return
         }
         _ = entry

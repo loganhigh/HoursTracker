@@ -39,7 +39,7 @@ struct ProfessionalReportsSheet: View {
                 } header: {
                     SectionEyebrow("Professional Reports")
                 } footer: {
-                    Text("PDF reports with your company name and logo, ready to share with clients or for your records. Add a name and logo in Company Profile.")
+                    Text("PDF reports with your company name, ready to share with clients or for your records. Set your company name in Company Profile.")
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
                 }

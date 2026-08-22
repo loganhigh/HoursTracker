@@ -46,7 +46,14 @@ struct CreateCrewSheet: View {
             TextField("Crew name", text: $name)
                 .textInputAutocapitalization(.words)
                 .onChange(of: name) { _, newValue in
-                    if newValue.count > 60 { name = String(newValue.prefix(60)) }
+                    // The server measures JS string length (UTF-16 units), so
+                    // clip in the same units — 31 emoji passed a 60-character
+                    // count and were rejected as 62.
+                    if newValue.utf16.count > 60 {
+                        var clipped = newValue
+                        while clipped.utf16.count > 60 { clipped.removeLast() }
+                        name = clipped
+                    }
                 }
 
             Button {

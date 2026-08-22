@@ -95,7 +95,9 @@ final class CrewService: ObservableObject {
     }
 
     private static func mapError(_ error: Error, fallbackIsJoin: Bool) -> CrewError {
-        let message = (error as NSError).localizedDescription
+        // Lower-cased: the server says "Crew name is too long." and the old
+        // case-sensitive "crew name" check fell through to a connection error.
+        let message = (error as NSError).localizedDescription.lowercased()
         if message.contains("already a member") || message.contains("already-exists") {
             return .alreadyMember
         } else if message.contains("wasn't found") || message.contains("no longer exists") || message.contains("not-found") {
