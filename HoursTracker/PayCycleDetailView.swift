@@ -100,13 +100,6 @@ struct PayCycleDetailView: View {
         store.actualPayout(for: selectedCycle)
     }
 
-    private static let payoutCurrency: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.maximumFractionDigits = 2
-        return f
-    }()
-
     /// Records what the cheque really paid. This is the training data for the
     /// projection on History's In Progress row: each recorded total teaches
     /// the predictor the real net rate — taxes, tips, and bonuses included —
@@ -144,7 +137,7 @@ struct PayCycleDetailView: View {
                     Spacer(minLength: 0)
 
                     if let recordedPayout {
-                        Text(Self.payoutCurrency.string(from: NSNumber(value: recordedPayout)) ?? "")
+                        Text(formattedCurrency(recordedPayout))
                             .font(.system(size: 16, weight: .heavy, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(AppTheme.Colors.success)

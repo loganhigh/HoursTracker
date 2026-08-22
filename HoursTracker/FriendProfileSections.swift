@@ -275,14 +275,16 @@ enum FriendProfileFormat {
         let startParts = cal.dateComponents([.month, .day], from: start)
         guard let month = startParts.month, let day = startParts.day else { return nil }
 
-        var thisYear = cal.dateComponents([.year], from: today)
-        thisYear.month = month
-        thisYear.day = day
-        guard var anniversary = cal.date(from: thisYear) else { return nil }
-        if cal.startOfDay(for: anniversary) < today {
-            anniversary = cal.date(byAdding: .year, value: 1, to: anniversary) ?? anniversary
-        }
-        return anniversary
+        // Next calendar occurrence of month/day on or after today. A Feb 29
+        // start lands on Mar 1 in common years and back on Feb 29 in leap
+        // years; building {year, 2, 29} and adding a year drifted to Mar 1
+        // permanently (and the countdown with it).
+        guard let justBeforeToday = cal.date(byAdding: .second, value: -1, to: today) else { return nil }
+        return cal.nextDate(
+            after: justBeforeToday,
+            matching: DateComponents(month: month, day: day),
+            matchingPolicy: .nextTime
+        )
     }
 
     static func tenureAtCompanyString(from start: Date) -> String {

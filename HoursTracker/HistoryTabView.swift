@@ -11,8 +11,14 @@ import SwiftUI
 struct HistoryTabView: View {
     @EnvironmentObject private var store: HoursStore
 
-    /// Hard stop on the backward walk (roughly two years of bi-weekly cheques).
-    private static let maxWalkedCycles = 60
+    /// Hard stop on the backward walk. The loop normally ends at the earliest
+    /// entry; this only bounds the worst case, so it scales with the period —
+    /// a fixed 60 cut weekly-paid users off after ~14 months and numbered
+    /// their oldest visible cheque "1st".
+    private var maxWalkedCycles: Int {
+        let span = max(1, PayCycleEngine.spanDays(for: store.paySettings.payPeriodType))
+        return max(60, Int((Double(5 * 366) / Double(span)).rounded(.up)))
+    }
 
     /// One row of the list: a pay cycle, its ordinal within its year, and
     /// whether it is the live one.
@@ -102,7 +108,7 @@ struct HistoryTabView: View {
     /// the user has typed totals in.
     private func accentLine(for row: ChequeRow) -> (text: String, tint: Color)? {
         guard let recorded = store.actualPayout(for: row.cycle) else { return nil }
-        return (Self.currency(recorded), AppColors.positive)
+        return (currency(recorded), AppColors.positive)
     }
 
     /// The live cheque's projection, once at least two totals exist. The
@@ -119,9 +125,12 @@ struct HistoryTabView: View {
         store.currentChequeProjection()
     }
 
-    private static func currency(_ amount: Double) -> String {
+    private func currency(_ amount: Double) -> String {
+        // Same currency as every other amount on this screen — the device
+        // locale's symbol sat next to the pay-settings one ("$" vs "CA$").
         let f = NumberFormatter()
         f.numberStyle = .currency
+        f.currencyCode = store.paySettings.currencyCode
         f.maximumFractionDigits = 2
         return f.string(from: NSNumber(value: amount)) ?? String(format: "$%.2f", amount)
     }
@@ -178,7 +187,7 @@ struct HistoryTabView: View {
         guard let earliest = store.entries.map(\.date).min() else { return [] }
         var walked: [PayCycle] = []
         var cursor = current
-        for _ in 0..<Self.maxWalkedCycles {
+        for _ in 0..<maxWalkedCycles {
             cursor = PayCycleEngine.previousCycle(before: cursor, settings: store.paySettings)
             walked.append(cursor)
             // This cycle's start is on/before the earliest entry, so — since

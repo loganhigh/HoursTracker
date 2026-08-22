@@ -630,6 +630,7 @@ exports.notifyFriendsOnWorkAnniversary = onSchedule(
     const today = new Date();
     const todayMonth = today.getUTCMonth() + 1;
     const todayDay = today.getUTCDate();
+    const isLeapYear = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 
     // Fetch every user that has a companyStartDate stored
     const usersSnap = await db
@@ -644,11 +645,16 @@ exports.notifyFriendsOnWorkAnniversary = onSchedule(
       const companyStartDate = userData.companyStartDate?.toDate?.();
       if (!companyStartDate) continue;
 
-      // Only act if today is the month/day of their start date
-      if (
-        companyStartDate.getUTCMonth() + 1 !== todayMonth ||
-        companyStartDate.getUTCDate() !== todayDay
-      ) continue;
+      // Only act if today is the month/day of their start date. A Feb 29
+      // start is observed on Mar 1 in common years (it used to match only
+      // every fourth year).
+      let startMonth = companyStartDate.getUTCMonth() + 1;
+      let startDay = companyStartDate.getUTCDate();
+      if (startMonth === 2 && startDay === 29 && !isLeapYear(today.getUTCFullYear())) {
+        startMonth = 3;
+        startDay = 1;
+      }
+      if (startMonth !== todayMonth || startDay !== todayDay) continue;
 
       // Don't fire on the day they joined — only on actual anniversaries
       const years = today.getUTCFullYear() - companyStartDate.getUTCFullYear();

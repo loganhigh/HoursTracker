@@ -76,11 +76,14 @@ struct ShiftTemplate: Identifiable, Codable, Equatable, Hashable {
     /// applies, so a 6 PM – 2 AM template reads as 8 hours.
     var paidHours: Double {
         var span = Double(endMinutes - startMinutes)
-        if span <= 0 { span += Double(Self.minutesInDay) }
+        // Equal times are not a 24-hour shift: applying such a template fills
+        // a 0h shift the wizard rejects, so the editor must reject it too.
+        if span == 0 { return 0 }
+        if span < 0 { span += Double(Self.minutesInDay) }
         return max(0, (span - Double(breakMinutes)) / 60.0)
     }
 
-    var isOvernight: Bool { endMinutes <= startMinutes }
+    var isOvernight: Bool { endMinutes < startMinutes }
 
     var timeRangeText: String {
         let range = "\(Self.timeText(startMinutes)) – \(Self.timeText(endMinutes))"
@@ -97,9 +100,15 @@ struct ShiftTemplate: Identifiable, Codable, Equatable, Hashable {
 
     /// Formats minutes-from-midnight in the user's locale ("6:00 AM").
     static func timeText(_ minutes: Int) -> String {
+        // Wall-clock components, not "today's midnight + N minutes": minute
+        // addition is elapsed time, so on clock-change days the label was an
+        // hour off the time the template actually fills in.
         let cal = Calendar.current
-        let base = cal.startOfDay(for: Date())
-        let date = cal.date(byAdding: .minute, value: clampMinutes(minutes), to: base) ?? base
+        let clamped = clampMinutes(minutes)
+        var comps = cal.dateComponents([.year, .month, .day], from: Date())
+        comps.hour = clamped / 60
+        comps.minute = clamped % 60
+        let date = cal.date(from: comps) ?? Date()
         return date.formatted(date: .omitted, time: .shortened)
     }
 
