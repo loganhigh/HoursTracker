@@ -52,4 +52,35 @@ final class LeaderboardMovementTests: XCTestCase {
         XCTAssertNil(moves["new"])
         XCTAssertEqual(moves["b"], -1)
     }
+
+    // MARK: - Live slice merge (regression: top-100 snapshot truncated the 500-row board)
+
+    func testLiveSliceKeepsDeeperRowsAndRenumbers() {
+        let limit = 3
+        let full = (1...6).map { tracker("u\($0)", rank: $0) }
+        // Live top-3 arrives with u2 and u1 swapped.
+        let live = [tracker("u2", rank: 1), tracker("u1", rank: 2), tracker("u3", rank: 3)]
+        let merged = TopTrackersService.mergeLiveSlice(live, into: full, liveLimit: limit)
+        XCTAssertEqual(merged.map(\.uid), ["u2", "u1", "u3", "u4", "u5", "u6"])
+        XCTAssertEqual(merged.map(\.rank), [1, 2, 3, 4, 5, 6])
+    }
+
+    func testLiveSliceDropsRowThatClimbedIntoIt() {
+        let limit = 3
+        let full = (1...6).map { tracker("u\($0)", rank: $0) }
+        // u5 climbs into the top 3; u3 falls out of the live slice.
+        let live = [tracker("u1", rank: 1), tracker("u5", rank: 2), tracker("u2", rank: 3)]
+        let merged = TopTrackersService.mergeLiveSlice(live, into: full, liveLimit: limit)
+        XCTAssertEqual(merged.map(\.uid), ["u1", "u5", "u2", "u4", "u6"])
+        XCTAssertEqual(merged.map(\.rank), [1, 2, 3, 4, 5])
+    }
+
+    func testLiveSliceIsAuthoritativeWhenNoDeeperRowsExist() {
+        let live = [tracker("a", rank: 1), tracker("b", rank: 2)]
+        XCTAssertEqual(TopTrackersService.mergeLiveSlice(live, into: [], liveLimit: 100).map(\.uid), ["a", "b"])
+        // A short live list (fewer than the limit) means the query exhausted
+        // the collection — the existing longer list is stale, so replace it.
+        let stale = (1...5).map { tracker("s\($0)", rank: $0) }
+        XCTAssertEqual(TopTrackersService.mergeLiveSlice(live, into: stale, liveLimit: 100).map(\.uid), ["a", "b"])
+    }
 }

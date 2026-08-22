@@ -263,13 +263,15 @@ final class TopTrackersService: ObservableObject {
             ? Self.rankMovements(previous: allTrackers, current: parsed)
             : [:]
 
+        let next = Self.mergeLiveSlice(parsed, into: allTrackers, liveLimit: Self.liveRankLimit)
+
         if moves.isEmpty {
-            allTrackers = parsed
+            allTrackers = next
         } else {
             // One coordinated transaction: every affected row slides to its
             // new position together under the same spring.
             withAnimation(AppMotion.Spring.podium) {
-                allTrackers = parsed
+                allTrackers = next
             }
             movements = moves
             movementToken &+= 1
@@ -281,6 +283,31 @@ final class TopTrackersService: ObservableObject {
         // ensureFullLeaderboardLoaded() has nothing deeper to page in.
         hasServerFullList = documents.count < Self.liveRankLimit
         AppLogger.leaderboard.info("publicProfiles leaderboard snapshot: ranked \(previousAllCount, privacy: .public) -> \(self.allTrackers.count, privacy: .public), leader hours \(String(format: "%.2f", self.topTrackers.first?.hours ?? 0), privacy: .public) (fromCache: \(snapshot?.metadata.isFromCache == true, privacy: .public))")
+    }
+
+    /// The live listener only covers the top `liveLimit` rows, but
+    /// `ensureFullLeaderboardLoaded()` can have paged a 500-row board into
+    /// `allTrackers`. Assigning the live slice straight over it silently
+    /// truncated everyone ranked below the limit the moment any top-100 user
+    /// logged a shift. Keep the deeper rows, drop any that just climbed into
+    /// the live slice, and re-number ranks so they stay contiguous.
+    nonisolated static func mergeLiveSlice(_ live: [TopTracker], into existing: [TopTracker], liveLimit: Int) -> [TopTracker] {
+        guard existing.count > live.count, live.count >= liveLimit else { return live }
+        let liveUIDs = Set(live.map(\.uid))
+        let tail = existing.dropFirst(liveLimit).filter { !liveUIDs.contains($0.uid) }
+        guard !tail.isEmpty else { return live }
+        var rank = live.count
+        let renumbered = tail.map { t -> TopTracker in
+            rank += 1
+            var copy = TopTracker(uid: t.uid, name: t.name, hours: t.hours, countryCode: t.countryCode, rank: rank)
+            copy.photoURL = t.photoURL
+            copy.level = t.level
+            copy.prestige = t.prestige
+            copy.streak = t.streak
+            copy.hasReviewedApp = t.hasReviewedApp
+            return copy
+        }
+        return live + renumbered
     }
 
     private static func parsePublicProfileDocuments(_ documents: [QueryDocumentSnapshot]) -> [TopTracker] {
