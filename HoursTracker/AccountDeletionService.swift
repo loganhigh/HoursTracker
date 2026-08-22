@@ -1,6 +1,5 @@
 import Foundation
 import FirebaseAuth
-import FirebaseFirestore
 
 /// Centralised account-deletion flow. Apple App Review Guideline 5.1.1(v)
 /// requires apps that offer account creation to also offer in-app account
@@ -30,11 +29,19 @@ enum AccountDeletionService {
         guard let user = Auth.auth().currentUser else {
             throw DeletionError.notSignedIn
         }
-        let uid = user.uid
-        let db = Firestore.firestore()
 
-        // Delete Firebase Auth user FIRST — if this fails (e.g. requires
-        // recent login), no Firestore data is lost and user can retry.
+        // Delete the Firebase Auth user FIRST — if this fails (e.g. requires
+        // recent login), nothing has been destroyed yet and the user can retry.
+        //
+        // Cloud data is purged by the `purgeDeletedUserData` Auth onDelete
+        // trigger in functions/index.js, NOT here. It cannot be done from the
+        // client: `User.delete()` calls `signOutByForce` before this call even
+        // returns, so every subsequent Firestore/Storage request would go out
+        // unauthenticated and be rejected — and `publicProfiles/{uid}` and
+        // `users/{uid}/stats` are `allow write: if false` for clients in any
+        // case. The cleanup that used to live here silently failed on every
+        // single deletion, leaving the account's hours, profile, friend links
+        // and leaderboard entry live in Firestore forever.
         do {
             try await user.delete()
         } catch {
@@ -45,25 +52,9 @@ enum AccountDeletionService {
             throw DeletionError.underlying(error)
         }
 
-        // Auth succeeded — now clean up Firestore data. Failures here are
-        // non-fatal since the account is already deleted.
-        await removeReciprocalFriendLinks(db: db, uid: uid)
-        await deleteBoardPosts(db: db, uid: uid)
+        // Local-only teardown. These need no credentials, so unlike the cloud
+        // deletes they do still work after the forced sign-out.
         await ProfilePhotoManager.shared.deleteAllPhotoData()
-        await deleteSubcollection(db: db, uid: uid, name: "entries")
-        await deleteSubcollection(db: db, uid: uid, name: "timeEntries")
-        await deleteSubcollection(db: db, uid: uid, name: "paySettings")
-        await deleteSubcollection(db: db, uid: uid, name: "friends")
-        await deleteSubcollection(db: db, uid: uid, name: "friendRequests")
-        await deleteSubcollection(db: db, uid: uid, name: "activity")
-        await deleteSubcollection(db: db, uid: uid, name: "shiftNudges")
-        await deleteSubcollection(db: db, uid: uid, name: "deviceTokens")
-        await deleteSubcollection(db: db, uid: uid, name: "stats")
-        await deleteSubcollection(db: db, uid: uid, name: "gamification")
-        try? await db.collection("users").document(uid).delete()
-        try? await db.collection("publicProfiles").document(uid).delete()
-        try? await db.collection("presence").document(uid).delete()
-
         store.deleteAllData()
 
         let defaults = UserDefaults.standard
@@ -74,76 +65,5 @@ enum AccountDeletionService {
         defaults.removeObject(forKey: "company_employee_id")
         defaults.removeObject(forKey: "company_hourly_rate")
         defaults.removeObject(forKey: "company_start_date_ts")
-    }
-
-    private static func removeReciprocalFriendLinks(db: Firestore, uid: String) async {
-        do {
-            let friendsSnap = try await db.collection("users").document(uid).collection("friends").getDocuments()
-            for doc in friendsSnap.documents {
-                let friendUid = doc.documentID
-                try? await db.collection("users").document(friendUid).collection("friends").document(uid).delete()
-            }
-        } catch {
-            #if DEBUG
-            print("AccountDeletionService: reciprocal friend cleanup error — \(error.localizedDescription)")
-            #endif
-        }
-    }
-
-    private static func deleteBoardPosts(db: Firestore, uid: String) async {
-        let postsRef = db.collection("users").document(uid).collection("boardPosts")
-        var keepGoing = true
-        while keepGoing {
-            do {
-                let snapshot = try await postsRef.limit(to: 25).getDocuments()
-                if snapshot.documents.isEmpty {
-                    keepGoing = false
-                    break
-                }
-                for post in snapshot.documents {
-                    await deleteSubcollectionAt(post.reference.collection("comments"))
-                    try? await post.reference.delete()
-                }
-                if snapshot.documents.count < 25 {
-                    keepGoing = false
-                }
-            } catch {
-                #if DEBUG
-                print("AccountDeletionService: boardPosts cleanup error — \(error.localizedDescription)")
-                #endif
-                return
-            }
-        }
-    }
-
-    private static func deleteSubcollection(db: Firestore, uid: String, name: String) async {
-        let ref = db.collection("users").document(uid).collection(name)
-        await deleteSubcollectionAt(ref)
-    }
-
-    private static func deleteSubcollectionAt(_ ref: CollectionReference) async {
-        var keepGoing = true
-        while keepGoing {
-            do {
-                let snapshot = try await ref.limit(to: 100).getDocuments()
-                if snapshot.documents.isEmpty {
-                    keepGoing = false
-                    break
-                }
-                let batch = ref.firestore.batch()
-                for doc in snapshot.documents {
-                    batch.deleteDocument(doc.reference)
-                }
-                try await batch.commit()
-                if snapshot.documents.count < 100 {
-                    keepGoing = false
-                }
-            } catch {
-                #if DEBUG
-                print("AccountDeletionService: subcollection cleanup error — \(error.localizedDescription)")
-                #endif
-                return
-            }
-        }
     }
 }

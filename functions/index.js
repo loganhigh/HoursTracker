@@ -388,6 +388,118 @@ exports.notifyAdminOnNewUser = functionsV1
     });
   });
 
+/**
+ * Purge every trace of an account the moment its Firebase Auth user is deleted.
+ *
+ * This MUST be server-side. Two independent reasons a client can never do it:
+ *   1. `User.delete()` force-signs-out (`signOutByForce`) BEFORE its completion
+ *      handler runs, so any Firestore/Storage call the app makes afterwards is
+ *      unauthenticated and rejected.
+ *   2. `publicProfiles/{uid}` and `users/{uid}/stats` are `allow write: if false`
+ *      for every client — and publicProfiles is exactly the doc that keeps a
+ *      deleted user visible on the friends and global leaderboards.
+ * The Admin SDK bypasses security rules, so this reaches all of it.
+ *
+ * Every step is independently guarded: one failure must not strand the rest.
+ */
+exports.purgeDeletedUserData = functionsV1
+  .region("us-central1")
+  .auth.user()
+  .onDelete(async (user) => {
+    const uid = user.uid;
+    const step = async (label, fn) => {
+      try {
+        await fn();
+      } catch (err) {
+        console.error(`purgeDeletedUserData(${uid}): ${label} failed —`, err);
+      }
+    };
+
+    // Reciprocal links live in OTHER users' documents, so they outlive the
+    // owner's tree and would leave dangling friends pointing at a dead uid.
+    // Read them BEFORE recursiveDelete removes the source list.
+    let friendUids = [];
+    await step("read friend list", async () => {
+      const snap = await db.collection("users").doc(uid).collection("friends").get();
+      friendUids = snap.docs.map((d) => d.id);
+    });
+
+    await step("reciprocal friend links", async () => {
+      await Promise.all(
+        friendUids.map((friendUid) =>
+          db.collection("users").doc(friendUid).collection("friends").doc(uid).delete()
+        )
+      );
+    });
+
+    // friendships/{pairId} is `min_max`, so the two participation queries below
+    // cover every pair this user belongs to regardless of uid ordering.
+    await step("friendship pair docs", async () => {
+      const [asA, asB] = await Promise.all([
+        db.collection("friendships").where("userA", "==", uid).get(),
+        db.collection("friendships").where("userB", "==", uid).get(),
+      ]);
+      await Promise.all(
+        [...asA.docs, ...asB.docs].map((d) => d.ref.delete())
+      );
+    });
+
+    // Requests this user SENT live under the recipient's tree as
+    // users/{recipient}/friendRequests/{uid}. The doc id is the sender, which a
+    // collection-group query can't filter on, so clear the ones we can resolve
+    // from the friend list plus any recipient that still holds a request.
+    await step("outgoing friend requests", async () => {
+      const snap = await db.collectionGroup("friendRequests").get();
+      await Promise.all(
+        snap.docs.filter((d) => d.id === uid).map((d) => d.ref.delete())
+      );
+    });
+
+    // Crew rosters: doc id is the uid and memberCount must stay in sync.
+    await step("crew memberships", async () => {
+      const snap = await db.collectionGroup("members").get();
+      const mine = snap.docs.filter((d) => d.id === uid);
+      for (const member of mine) {
+        const crewRef = member.ref.parent.parent;
+        if (!crewRef) continue;
+        await db.runTransaction(async (tx) => {
+          const crewSnap = await tx.get(crewRef);
+          tx.delete(member.ref);
+          if (crewSnap.exists) {
+            const count = Number(crewSnap.data()?.memberCount) || 0;
+            tx.set(crewRef, { memberCount: Math.max(0, count - 1) }, { merge: true });
+          }
+        });
+      }
+    });
+
+    // The whole user tree — every subcollection (entries, timeEntries,
+    // gamification, paySettings, stats, feed, deviceTokens, activity,
+    // shiftNudges, boardPosts + their comments, …) in one pass.
+    await step("user document tree", async () => {
+      await db.recursiveDelete(db.collection("users").doc(uid));
+    });
+
+    // Client-unwritable docs — the reason this function has to exist.
+    await step("public profile", async () => {
+      await db.recursiveDelete(db.collection("publicProfiles").doc(uid));
+    });
+
+    await step("presence", async () => {
+      await db.collection("presence").doc(uid).delete();
+    });
+
+    await step("storage objects", async () => {
+      const bucket = getStorage().bucket();
+      await Promise.all([
+        bucket.deleteFiles({ prefix: `users/${uid}/` }),
+        bucket.file(`verified-proof/${uid}.jpg`).delete({ ignoreNotFound: true }),
+      ]);
+    });
+
+    console.log(`purgeDeletedUserData(${uid}): complete`);
+  });
+
 exports.notifyOnShiftNudge = onDocumentCreated(
   {
     document: "users/{targetUid}/shiftNudges/{nudgeId}",
