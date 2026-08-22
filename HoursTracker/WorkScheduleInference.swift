@@ -13,7 +13,10 @@ enum WorkScheduleInference {
         guard lookbackDays > 0, minOccurrences > 0 else { return [] }
         guard let cutoff = calendar.date(byAdding: .day, value: -lookbackDays, to: now) else { return [] }
 
-        let recent = entries.filter { $0.date >= cutoff }
+        // Auto-filled "Off" days are entries too; counting them made every
+        // weekday "usual" after a few weeks, so the "Did you work today?"
+        // reminder fired on weekends and holidays.
+        let recent = entries.filter { !$0.isOffDay && $0.date >= cutoff }
         var countByWeekday: [Int: Int] = (1...7).reduce(into: [:]) { $0[$1] = 0 }
         for entry in recent {
             let weekday = calendar.component(.weekday, from: entry.date)

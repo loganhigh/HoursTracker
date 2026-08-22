@@ -334,6 +334,29 @@ class SmartNotifier: ObservableObject {
         }
     }
     
+    // MARK: - One-shot "today at H:00" trigger
+
+    /// A calendar trigger whose fully-specified date has already passed has
+    /// `nextTriggerDate() == nil` and is silently never delivered — so any
+    /// reminder scheduled for today's H:00 after H:00 (app opened in the
+    /// evening) was dropped. Past the hour, nudge 15 minutes from now instead,
+    /// so it lands once the user has put the phone down; past `latestHour`
+    /// the day is effectively over and nothing is scheduled.
+    private static func todayTrigger(hour: Int, calendar: Calendar, now: Date = Date(), latestHour: Int = 23) -> UNNotificationTrigger? {
+        let today = calendar.startOfDay(for: now)
+        var comps = DateComponents()
+        comps.year = calendar.component(.year, from: today)
+        comps.month = calendar.component(.month, from: today)
+        comps.day = calendar.component(.day, from: today)
+        comps.hour = hour
+        comps.minute = 0
+        if let target = calendar.date(from: comps), target > now {
+            return UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+        }
+        guard calendar.component(.hour, from: now) < latestHour else { return nil }
+        return UNTimeIntervalNotificationTrigger(timeInterval: 15 * 60, repeats: false)
+    }
+
     // MARK: - "Did you work today?" (forgot hours) reminder
     
     private static let forgotHoursIdentifier = "forgot_hours_reminder"
@@ -368,12 +391,7 @@ class SmartNotifier: ObservableObject {
             
             cancelForgotHoursReminder()
             
-            var dateComponents = DateComponents()
-            dateComponents.year = calendar.component(.year, from: today)
-            dateComponents.month = calendar.component(.month, from: today)
-            dateComponents.day = calendar.component(.day, from: today)
-            dateComponents.hour = dailyReminderHour
-            dateComponents.minute = 0
+            guard let trigger = Self.todayTrigger(hour: dailyReminderHour, calendar: calendar) else { return }
             
             let content = UNMutableNotificationContent()
             content.title = "Did you work today?"
@@ -381,7 +399,6 @@ class SmartNotifier: ObservableObject {
             content.sound = .default
             content.badge = 1
             
-            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
             let request = UNNotificationRequest(
                 identifier: Self.forgotHoursIdentifier,
                 content: content,
@@ -558,21 +575,14 @@ class SmartNotifier: ObservableObject {
 
             // --- Streak at risk: fire tonight if they haven't logged today and have an active streak ---
             cancelStreakAtRisk()
-            if currentStreak >= 1 && !hasEntryToday {
-                var dateComponents = DateComponents()
-                dateComponents.year = calendar.component(.year, from: today)
-                dateComponents.month = calendar.component(.month, from: today)
-                dateComponents.day = calendar.component(.day, from: today)
-                dateComponents.hour = 20
-                dateComponents.minute = 0
-
+            if currentStreak >= 1 && !hasEntryToday,
+               let trigger = Self.todayTrigger(hour: 20, calendar: calendar) {
                 let content = UNMutableNotificationContent()
                 content.title = "Your streak is at risk! 🔥"
                 content.body = "You have a \(currentStreak)-day streak. Log a shift today to keep it alive."
                 content.sound = .default
                 content.badge = 1
 
-                let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
                 let request = UNNotificationRequest(identifier: Self.streakAtRiskIdentifier, content: content, trigger: trigger)
                 do {
                     try await UNUserNotificationCenter.current().add(request)
