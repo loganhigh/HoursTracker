@@ -2527,9 +2527,18 @@ exports.sendFriendRequest = onCall(
 
     // Look up target user by friend code
     const usersSnap = await db.collection("users")
-      .where("friendCode", "==", code).limit(1).get();
+      .where("friendCode", "==", code).limit(2).get();
     if (usersSnap.empty) {
       throw new HttpsError("not-found", "No one found with that code.");
+    }
+    // Codes were allocated client-side with no uniqueness check for a long
+    // time. limit(1) silently picked whichever holder sorted first, so a
+    // collision friended a stranger. Refuse rather than guess.
+    if (usersSnap.size > 1) {
+      throw new HttpsError(
+        "failed-precondition",
+        "That code belongs to more than one account. Ask your friend to share their QR code instead."
+      );
     }
     const targetDoc = usersSnap.docs[0];
     const targetUid = targetDoc.id;

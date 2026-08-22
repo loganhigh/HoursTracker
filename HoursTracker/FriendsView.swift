@@ -58,7 +58,8 @@ struct FriendsView: View {
                 .reduce(0) { $0 + $1.paidHours },
             myPhotoURL: ProfilePhotoManager.shared.remotePhotoURL,
             myIsVerified: verifiedStatus.isVerified,
-            friends: friendsService.friends
+            friends: friendsService.friends,
+            isLoaded: !friendsService.isLoading
         )
     }
 

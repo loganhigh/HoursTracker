@@ -62,7 +62,11 @@ enum LeaderboardRankMemory {
 
     /// Applies movement to `entries` and rolls the stored snapshot forward
     /// once the calendar day changes.
-    static func annotate(_ entries: [LeaderboardEntry]) -> [LeaderboardEntry] {
+    /// `allowSnapshot` is false while the friends list is still loading: the
+    /// first render of a new day used to snapshot a board holding only the
+    /// signed-in user (rank 1), so once friends arrived the user wore a red
+    /// "dropped N places" arrow all day and nobody else had any.
+    static func annotate(_ entries: [LeaderboardEntry], allowSnapshot: Bool = true) -> [LeaderboardEntry] {
         let stored = defaults.dictionary(forKey: ranksKey) as? [String: Int] ?? [:]
         let storedDay = defaults.string(forKey: dayKey)
         let today = todayStamp()
@@ -75,7 +79,7 @@ enum LeaderboardRankMemory {
             }
         }
 
-        if storedDay != today {
+        if allowSnapshot, storedDay != today {
             let snapshot = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0.rank) })
             defaults.set(snapshot, forKey: ranksKey)
             defaults.set(today, forKey: dayKey)
@@ -108,7 +112,8 @@ extension LeaderboardEntry {
         myPayPeriodHours: Double,
         myPhotoURL: String?,
         myIsVerified: Bool,
-        friends: [FriendProfile]
+        friends: [FriendProfile],
+        isLoaded: Bool = true
     ) -> [LeaderboardEntry] {
         var entries: [LeaderboardEntry] = [
             LeaderboardEntry(
@@ -152,6 +157,6 @@ extension LeaderboardEntry {
         }
         var ranked = sorted
         for index in ranked.indices { ranked[index].rank = index + 1 }
-        return LeaderboardRankMemory.annotate(ranked)
+        return LeaderboardRankMemory.annotate(ranked, allowSnapshot: isLoaded)
     }
 }

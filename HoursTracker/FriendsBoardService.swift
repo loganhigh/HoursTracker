@@ -174,8 +174,13 @@ final class FriendsBoardService: ObservableObject {
 
     func refresh(uid: String, friendUids: [String]) async {
         isRefreshing = true
+        // stopListening drops every comment listener; any thread the user has
+        // expanded must come back, or it shows "No comments yet" (and swallows
+        // their next reply) until they collapse and re-expand it.
+        let expanded = posts.filter { trackedCommentPosts.contains($0.compositeKey) }
         stopListening()
         startListening(uid: uid, friendUids: friendUids)
+        for post in expanded { startListeningToComments(for: post) }
         try? await Task.sleep(nanoseconds: 350_000_000)
         isRefreshing = false
     }

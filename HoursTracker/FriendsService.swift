@@ -460,7 +460,17 @@ final class FriendsService: ObservableObject {
                 await MainActor.run { self.myFriendCode = existing }
                 return
             }
-            let newCode = Self.generateFriendCode()
+            // ~2.2M possible codes and no server-side allocation: with a
+            // few thousand users a random draw collides often enough that
+            // "add by code" connected strangers. Check for an existing holder
+            // before claiming (users docs are readable by any signed-in user).
+            var newCode = Self.generateFriendCode()
+            for _ in 0..<5 {
+                let taken = try await db.collection("users")
+                    .whereField("friendCode", isEqualTo: newCode).limit(to: 1).getDocuments()
+                if taken.documents.isEmpty { break }
+                newCode = Self.generateFriendCode()
+            }
             try await ref.setData([
                 "friendCode": newCode,
                 "updatedAt": FieldValue.serverTimestamp()

@@ -123,7 +123,11 @@ struct FriendBadgesCard: View {
             .sorted { $0.order > $1.order }
             .prefix(3)
             .map { $0 }
-        let displayCount = earned.isEmpty ? friend.badgeCount : earned.count
+        // The grid is capped at three per kind; the subtitle is the real
+        // total (the published summaries carry every badge) — it used to read
+        // "3 badges unlocked" for anyone with more than three.
+        let publishedTotal = friend.unlockedBadgeSummaries.count
+        let displayCount = publishedTotal > 0 ? max(publishedTotal, friend.badgeCount) : friend.badgeCount
 
         return SectionCard(
             title: "Badges",
