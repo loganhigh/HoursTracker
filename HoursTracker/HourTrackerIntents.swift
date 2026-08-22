@@ -100,7 +100,12 @@ struct HoursThisWeekIntent: AppIntent {
         guard let store = HoursStore.current else {
             return .result(dialog: needsLaunchDialog)
         }
-        guard let weekInterval = Calendar.current.dateInterval(of: .weekOfYear, for: Date()) else {
+        // Home, the widget and weekly overtime all use a Monday-start week;
+        // Calendar.current follows the locale (Sunday in en_US/en_CA), which
+        // made Siri's number disagree with the Home tile.
+        var cal = Calendar.current
+        cal.firstWeekday = 2
+        guard let weekInterval = cal.dateInterval(of: .weekOfYear, for: Date()) else {
             return .result(dialog: "Couldn't figure out this week's range.")
         }
         var total: Double = 0

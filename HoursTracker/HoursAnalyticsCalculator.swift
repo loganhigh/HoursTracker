@@ -53,11 +53,11 @@ struct HoursAnalyticsCalculator {
         overtimeHours: (WorkEntry) -> Double,
         payPeriodInterval: (start: Date, end: Date)? = nil,
         payPeriodFallbackDays: Int = 14,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        now: Date = Date()
     ) -> Result {
         var cal = calendar
         cal.firstWeekday = 2 // Monday
-        let now = Date()
         let (rangeStart, rangeEnd) = interval(for: range, now: now, payPeriodInterval: payPeriodInterval, payPeriodFallbackDays: payPeriodFallbackDays, calendar: cal)
         let inRange = entries.filter { !$0.isOffDay && $0.date >= rangeStart && $0.date < rangeEnd }
 
@@ -130,9 +130,23 @@ struct HoursAnalyticsCalculator {
     private static func previousInterval(for range: TimeRange, now: Date, payPeriodInterval: (start: Date, end: Date)?, payPeriodFallbackDays: Int, calendar: Calendar) -> (start: Date, end: Date) {
         let (currStart, currEnd) = interval(for: range, now: now, payPeriodInterval: payPeriodInterval, payPeriodFallbackDays: payPeriodFallbackDays, calendar: calendar)
         let span = currEnd.timeIntervalSince(currStart)
-        let prevEnd = currStart
-        let prevStart = prevEnd.addingTimeInterval(-span)
-        return (prevStart, prevEnd)
+        switch range {
+        case .thisWeek, .thisMonth:
+            // "This week" / "this month" are to-date windows. The comparison
+            // is the SAME stretch of the previous period (Mon–Wed vs last
+            // Mon–Wed), not the equal-length window immediately before —
+            // which for a Wednesday was last Fri–Sun, so a steady Mon–Fri
+            // worker saw "+200%" midweek and "—" on Tuesdays.
+            let step: (Calendar.Component, Int) = range == .thisWeek ? (.day, -7) : (.month, -1)
+            guard let prevStart = calendar.date(byAdding: step.0, value: step.1, to: currStart) else {
+                return (currStart.addingTimeInterval(-span), currStart)
+            }
+            // Cap at the previous period's end (a 31-day month vs a 30-day one).
+            let prevEnd = min(prevStart.addingTimeInterval(span), currStart)
+            return (prevStart, prevEnd)
+        case .thisPayPeriod:
+            return (currStart.addingTimeInterval(-span), currStart)
+        }
     }
 
     private static func percentChange(current: Double, previous: Double) -> Int? {
