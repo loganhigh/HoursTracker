@@ -50,14 +50,21 @@ service cloud.firestore {
 
     // Fields on users/{uid} that only the admin Cloud Functions (Admin SDK)
     // may set. Clients must never write these or they could self-boost.
+    // `adminXPOffset` is the AUTHORITATIVE admin XP grant (applyAdminProgressionSet
+    // writes it here with the Admin SDK; resolveTotalXP in recompute.js re-adds it
+    // to every client push). The client only ever writes its own mirror copy under
+    // users/{uid}/gamification/current — never this doc — so blocking it here costs
+    // nothing and stops a self-issued grant from inflating level/prestige/rank.
     function noAdminOnlyFieldsCreate() {
       return !request.resource.data.keys()
-        .hasAny(['adminFloorLevel', 'adminFloorPrestige', 'adminEquippedTitle']);
+        .hasAny(['adminFloorLevel', 'adminFloorPrestige', 'adminEquippedTitle',
+                 'adminXPOffset']);
     }
 
     function noAdminOnlyFieldsUpdate() {
       return !request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(['adminFloorLevel', 'adminFloorPrestige', 'adminEquippedTitle']);
+        .hasAny(['adminFloorLevel', 'adminFloorPrestige', 'adminEquippedTitle',
+                 'adminXPOffset']);
     }
 
     match /publicProfiles/{profileUid} {
