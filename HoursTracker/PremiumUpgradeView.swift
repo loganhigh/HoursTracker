@@ -14,9 +14,12 @@ struct PremiumUpgradeView: View {
     // Siri & Shortcuts is deliberately absent: the feature ships and works,
     // it just doesn't sell a subscription — people buy outcomes, not input
     // methods. Every row here is a job the free tier can't finish.
+    //
+    // Live Shift Tracking / Live Activities are absent too, for the opposite
+    // reason: Clock In was removed from Add Shift (c051bfb), so there is no
+    // way to start a live shift and nothing for a subscriber to receive.
+    // Restore those rows only together with reverting that commit.
     private let benefits: [(icon: String, title: String, subtitle: String)] = [
-        ("clock.badge.checkmark.fill", "Live Shift Tracking", "Clock in and out with a running timer."),
-        ("lock.iphone", "Live Activities & Dynamic Island", "Watch your shift run on the Lock Screen — no need to open the app."),
         ("square.on.square", "Shift Templates", "Save the shift you always work and log it in one tap."),
         ("doc.richtext.fill", "Professional PDF Reports", "Send polished, branded hours straight to payroll or your foreman."),
         ("mappin.and.ellipse", "Unlimited Locations", "Free saves \(JobSite.freeLimit) job sites. Pro saves every yard, plant, and site.")
