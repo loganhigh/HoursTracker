@@ -103,6 +103,7 @@ struct FriendsView: View {
         .onChange(of: authService.user?.uid) { _, uid in
             if let uid {
                 friendsService.startListening(uid: uid)
+                consumePendingFriendCodeIfNeeded()
             } else {
                 friendsService.stopListening()
             }
@@ -386,6 +387,9 @@ struct FriendsView: View {
     /// immediately so it isn't re-consumed if this view reappears.
     private func consumePendingFriendCodeIfNeeded() {
         guard let code = friendsService.pendingFriendCode else { return }
+        // Signed out: the Add sheet would open but Add silently no-ops. Leave
+        // the code pending; it is consumed as soon as the user signs in.
+        guard authService.user != nil else { return }
         friendsService.pendingFriendCode = nil
         codeInput = code
         showingAddFriend = true

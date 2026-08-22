@@ -121,7 +121,9 @@ struct PayPeriodPodiumCard: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
 
-                Text(AppTheme.Format.hours(entry.payPeriodHours))
+                // Same rule as the rank rows: a friend who hides hours shows
+                // "—", never a bold "0h".
+                Text(entry.hoursHidden ? "—" : AppTheme.Format.hours(entry.payPeriodHours))
                     .font(.system(size: isWinner ? 22 : 18, weight: .heavy, design: .rounded))
                     .foregroundStyle(color)
                     .monospacedDigit()
@@ -190,12 +192,12 @@ struct PayPeriodPodiumCard: View {
         let mine = me.payPeriodHours
         guard me.rank > 1 else {
             // Leading: show the cushion over second place instead of a gap.
-            guard let second = entries.first(where: { $0.rank == 2 }) else { return nil }
+            guard let second = entries.first(where: { $0.rank == 2 }), !second.hoursHidden else { return nil }
             let lead = mine - second.payPeriodHours
             guard lead > 0 else { return ("You're in the lead", 1) }
             return ("You're \(AppTheme.Format.hours(lead)) ahead", 1)
         }
-        guard let above = entries.first(where: { $0.rank == me.rank - 1 }) else { return nil }
+        guard let above = entries.first(where: { $0.rank == me.rank - 1 }), !above.hoursHidden else { return nil }
         let theirs = above.payPeriodHours
         let gap = theirs - mine
         guard gap > 0, theirs > 0 else { return nil }

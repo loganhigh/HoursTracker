@@ -483,9 +483,11 @@ struct FriendsBoardView: View {
 
     private func avatarTint(for uid: String) -> Color {
         if uid == currentUid { return theme.accent }
-        let hash = abs(uid.hashValue)
+        // Not String.hashValue: Swift seeds Hasher per process, so colours
+        // reshuffled on every launch and nobody could learn a friend's colour.
+        let hash = uid.unicodeScalars.reduce(5381) { ($0 &* 33) &+ Int($1.value) }
         let hues: [Color] = [.purple, .blue, .orange, .pink, .teal, .mint]
-        return hues[hash % hues.count]
+        return hues[abs(hash) % hues.count]
     }
 
     private var emptyState: some View {

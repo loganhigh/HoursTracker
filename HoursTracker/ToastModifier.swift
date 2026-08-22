@@ -3,6 +3,7 @@ import SwiftUI
 private let toastAutoDismissSeconds: Double = 1.35
 
 struct ToastModifier: ViewModifier {
+    @State private var dismissWork: DispatchWorkItem?
     @Binding var isPresented: Bool
     var message: String
     var showsCheckmark: Bool = false
@@ -63,10 +64,20 @@ struct ToastModifier: ViewModifier {
         .onChange(of: isPresented) { _, newValue in
             guard newValue else { return }
             if showsCheckmark { Haptics.success() }
-            DispatchQueue.main.asyncAfter(deadline: .now() + toastAutoDismissSeconds) {
-                isPresented = false
-            }
+            scheduleDismiss()
         }
+        // A second toast while one is showing only changes the text (the
+        // binding is already true), so the first timer used to cut it short.
+        .onChange(of: message) { _, _ in
+            if isPresented { scheduleDismiss() }
+        }
+    }
+
+    private func scheduleDismiss() {
+        dismissWork?.cancel()
+        let work = DispatchWorkItem { isPresented = false }
+        dismissWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + toastAutoDismissSeconds, execute: work)
     }
 }
 

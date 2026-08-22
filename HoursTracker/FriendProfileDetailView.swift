@@ -52,10 +52,22 @@ struct FriendProfileDetailView: View {
         Group {
             if let friend {
                 profileContent(friend: friend)
-            } else {
+            } else if friendsService.isLoading {
                 AppLoadingState(message: "Loading profile…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(AppColors.bg.ignoresSafeArea())
+            } else {
+                // The list has loaded and they are not in it: they removed
+                // you while this was open. An endless spinner said nothing.
+                AppEmptyState(
+                    icon: "person.crop.circle.badge.xmark",
+                    title: "No longer friends",
+                    message: "This person is no longer in your friends list.",
+                    actionTitle: "Back to Friends",
+                    action: { dismiss() }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(AppColors.bg.ignoresSafeArea())
             }
         }
         .navigationTitle(friend?.displayName ?? "Profile")

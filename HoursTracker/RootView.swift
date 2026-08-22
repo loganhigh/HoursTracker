@@ -24,18 +24,6 @@ struct RootView: View {
     var body: some View {
         AppTabView()
         .environmentObject(levelUpCoordinator)
-        // Above everything, including the country prompt: reaching a new
-        // level should never render underneath another overlay.
-        .overlay {
-            if let celebration = levelUpCoordinator.current,
-               let player = levelUpCoordinator.animationPlayer {
-                LevelUpCelebrationView(
-                    celebration: celebration,
-                    animationPlayer: player,
-                    onContinue: { levelUpCoordinator.dismiss() }
-                )
-            }
-        }
         .onChange(of: store.entries.count) { _, newCount in
             if newCount >= 5 && !hasPromptedRateAfter5 {
                 hasPromptedRateAfter5 = true
@@ -76,6 +64,19 @@ struct RootView: View {
                         announcements.markSeen()
                     }
                 }
+            }
+        }
+        // Attached AFTER the prompt overlays: a later .overlay draws above an
+        // earlier one, so this is what actually puts the celebration on top of
+        // the country/announcement prompts (it used to sit underneath them).
+        .overlay {
+            if let celebration = levelUpCoordinator.current,
+               let player = levelUpCoordinator.animationPlayer {
+                LevelUpCelebrationView(
+                    celebration: celebration,
+                    animationPlayer: player,
+                    onContinue: { levelUpCoordinator.dismiss() }
+                )
             }
         }
         // Choosing a country is required — no Cancel, no swipe-to-dismiss.
