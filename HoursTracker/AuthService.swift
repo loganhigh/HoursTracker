@@ -237,11 +237,22 @@ final class AuthService: NSObject, ObservableObject {
     func signOut() throws {
         try Auth.auth().signOut()
         user = nil
+        discardDeviceBoundSession()
         onSignedOut?()
         // No presence cleanup here: a delete after sign-out has no auth token
         // and the rules would reject it. The heartbeat's own stamp writes
         // no-op once signed out, and the last stamp ages out of the active
         // window on its own.
+    }
+
+    /// State that belongs to the account, not the device. `LiveShiftManager`
+    /// persists an in-progress shift in UserDefaults.standard with no uid on
+    /// it, so without this a shift clocked in by one account was presented
+    /// to — and on clock-out saved into the hours and pay of — whoever signed
+    /// in next on the same phone. Runs on explicit sign-out and on any forced
+    /// sign-out (account deletion, revoked token) alike.
+    private func discardDeviceBoundSession() {
+        LiveShiftManager.shared.discard()
     }
 
     // MARK: - Profile doc
@@ -365,6 +376,7 @@ final class AuthService: NSObject, ObservableObject {
         guard let firebaseUser else {
             user = nil
             if previousUID != nil {
+                discardDeviceBoundSession()
                 onSignedOut?()
             }
             return
