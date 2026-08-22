@@ -562,10 +562,12 @@ struct HoursHomeView: View {
     private func checkPaydayConfetti() {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
-        let payday = cal.startOfDay(for: nextPayday)
-        guard today == payday else { return }
+        // Not `today == nextPayday`: advanceNextPaydayIfNeeded runs first and
+        // moves nextPayday past today on payday morning, so that comparison
+        // never held and the confetti (and "Payday is today!") never showed.
+        guard PayCycleEngine.isPayday(today, settings: store.paySettings, calendar: cal) else { return }
         // Key is unique per payday date so it only shows once
-        let key = "payday_confetti_shown_\(Int(payday.timeIntervalSince1970))"
+        let key = "payday_confetti_shown_\(Int(today.timeIntervalSince1970))"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         UserDefaults.standard.set(true, forKey: key)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
@@ -961,14 +963,17 @@ struct HoursHomeView: View {
     /// the top of Home (You owns the XP bar now).
     private var paydayBanner: some View {
         let days = daysUntilPayday
-        let isToday = days == 0
+        // See checkPaydayConfetti: nextPayday has already rolled on payday
+        // morning, so "today" comes from the schedule, not the countdown.
+        let isToday = PayCycleEngine.isPayday(Date(), settings: store.paySettings)
+        let shownDate = isToday ? Date() : nextPayday
         return VStack(spacing: 1) {
             Text(isToday
                  ? "Payday is today!"
                  : (days == 1 ? "Payday in 1 day" : "Payday in \(days) days"))
                 .font(.system(.subheadline, design: .rounded, weight: .heavy))
                 .foregroundStyle(AppTheme.Colors.text)
-            Text(nextPayday.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+            Text(shownDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
                 .font(.system(.caption, design: .rounded, weight: .semibold))
                 .foregroundStyle(AppTheme.Colors.subtext)
         }

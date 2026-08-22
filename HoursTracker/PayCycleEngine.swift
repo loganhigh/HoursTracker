@@ -85,12 +85,36 @@ enum PayCycleEngine {
         guard usesSavedCutoff(settings),
               let cutoff = settings.nextCutoff,
               let payday = settings.nextPayday else { return 0 }
-        let lag = cal.dateComponents(
+        var lag = cal.dateComponents(
             [.day],
             from: cal.startOfDay(for: cutoff),
             to: cal.startOfDay(for: payday)
         ).day ?? 0
+        // A cutoff AFTER the saved payday is a legitimate way to describe the
+        // schedule (onboarded between cutoff and payday: "my next payday is
+        // Aug 28, my next cutoff is Sep 5"). The payday then belongs to the
+        // cheque whose cutoff came one period earlier, so the lag is that
+        // period's worth later — not 0, which made every payday equal its
+        // cutoff and reported cheques as paid a week before they were.
+        let span = spanDays(for: settings.payPeriodType)
+        while lag < 0, span > 0 { lag += span }
         return max(0, lag)
+    }
+
+    /// Whether `date` is a payday in the user's schedule — independent of
+    /// `nextPayday`, which is deliberately advanced past today on payday
+    /// morning (the cycle rolls at payday), so comparing against it can
+    /// never match "today". Paydays sit at or after the END of the cycle they
+    /// pay for, so walk from the cycle containing `date` back a few cycles.
+    static func isPayday(_ date: Date, settings: PaySettings, calendar: Calendar = .current) -> Bool {
+        let cal = calendar
+        let day = cal.startOfDay(for: date)
+        var cycle = cycle(containing: day, settings: settings, calendar: cal)
+        for _ in 0..<4 {
+            if cal.startOfDay(for: cycle.payday) == day { return true }
+            cycle = previousCycle(before: cycle, settings: settings, calendar: cal)
+        }
+        return false
     }
 
     private static func payday(forCutoff cutoff: Date, settings: PaySettings, calendar: Calendar = .current) -> Date {
@@ -223,7 +247,9 @@ enum PayCycleEngine {
         if usesSavedCutoff(settings), day == cal.startOfDay(for: cycle.cutoff) {
             labels.append("Cutoff")
         }
-        if day == cal.startOfDay(for: cycle.payday) {
+        // The containing cycle's payday is always after this day (it pays
+        // for hours already cut off), so compare against the schedule instead.
+        if isPayday(day, settings: settings, calendar: cal) {
             labels.append("PayDay")
         }
         return labels
