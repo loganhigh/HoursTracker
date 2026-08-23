@@ -84,18 +84,16 @@ struct GlobalPodiumRow: View {
                     }
                 }
 
-                if entry.streak > 0 {
-                    HStack(spacing: 3) {
-                        Text("🔥").font(.system(size: 10))
-                        Text("\(entry.streak) day streak")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(AppColors.subtext)
-                    }
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                // Occupation under the hours, in place of the old day-streak
+                // line. The empty case still reserves the height so a winner
+                // with no job title doesn't sit shorter than the runners-up.
+                if !entry.occupation.isEmpty {
+                    Text(entry.occupation)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 } else {
-                    // Holds the column's baseline so a streakless winner
-                    // doesn't sit shorter than the runners-up.
                     Color.clear.frame(height: 13)
                 }
             }

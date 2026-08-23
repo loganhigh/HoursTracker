@@ -10,6 +10,8 @@ import SwiftUI
 
 struct HistoryTabView: View {
     @EnvironmentObject private var store: HoursStore
+    /// Top-right switch: off hides the "Projected ~" line on unpaid cheques.
+    @AppStorage("history_show_projected_pay") private var showProjectedPay = true
 
     /// Hard stop on the backward walk. The loop normally ends at the earliest
     /// entry; this only bounds the worst case, so it scales with the period —
@@ -42,6 +44,7 @@ struct HistoryTabView: View {
             // scroll away with them, not stick to the top and trail the user
             // down through later years.
             LazyVStack(spacing: AppSpacing.md) {
+                header
                 if store.entries.isEmpty {
                     AppEmptyState(
                         icon: "calendar",
@@ -74,6 +77,29 @@ struct HistoryTabView: View {
         .background(AppColors.bg.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack {
+            Text("History")
+                .appText(.title)
+                .foregroundStyle(AppColors.text)
+            Spacer()
+            Toggle(isOn: $showProjectedPay) {
+                Text("Projected pay")
+                    .appText(.caption)
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .toggleStyle(.switch)
+            .tint(AppColors.accent)
+            .labelsHidden()
+            .accessibilityLabel("Show projected pay")
+            .onChange(of: showProjectedPay) { _, _ in Haptics.lightTap() }
+        }
+        .padding(.horizontal, AppSpacing.xs)
+        .padding(.bottom, AppSpacing.xs)
     }
 
     // MARK: - Rows
@@ -115,10 +141,11 @@ struct HistoryTabView: View {
     /// the live one AND a closed one still waiting on payday. It stays on
     /// the row until they type in what it actually paid. The amount rides
     /// AnimatedMetricText so it rolls when hours change.
-    private func projection(for row: ChequeRow) -> (amount: Double, currencyCode: String, caption: String)? {
+    private func projection(for row: ChequeRow) -> (amount: Double, currencyCode: String)? {
+        guard showProjectedPay else { return nil }
         guard store.actualPayout(for: row.cycle) == nil else { return nil }
         guard let prediction = store.chequeProjection(for: row.cycle) else { return nil }
-        return (prediction.amount, store.paySettings.currencyCode, prediction.confidence.label)
+        return (prediction.amount, store.paySettings.currencyCode)
     }
 
     private func currency(_ amount: Double) -> String {

@@ -57,12 +57,9 @@ struct AccountView: View {
 
     // MARK: - Lifetime stats
 
-    private var workEntries: [WorkEntry] {
-        // Span the year archive: archivePriorYearsIfNeeded moves prior-year
-        // entries out of `store.entries`, so reading `entries` alone would drop
-        // every year before the current one after the Jan-1 rollover.
-        store.allEntriesIncludingArchive().filter { !$0.isOffDay }
-    }
+    /// Spans the year archive and is cached by the store — one pass, not one
+    /// full-history scan per stat on every re-render.
+    private var lifetime: LifetimeWorkStats { store.lifetimeWorkStats() }
 
     private var allTimeHours: Double {
         // Prefer the server-computed total so this grid, Career, and the
@@ -70,18 +67,16 @@ struct AccountView: View {
         if let serverTotal = statsListener.lifetimeStats?.totalHours, serverTotal > 0 {
             return serverTotal
         }
-        return workEntries.reduce(0) { $0 + $1.paidHours }
+        return lifetime.localTotalHours
     }
 
     private var averageShiftHours: Double {
-        guard !workEntries.isEmpty else { return 0 }
-        return allTimeHours / Double(workEntries.count)
+        let count = lifetime.shiftCount
+        guard count > 0 else { return 0 }
+        return allTimeHours / Double(count)
     }
 
-    private var daysWorked: Int {
-        let cal = Calendar.current
-        return Set(workEntries.map { cal.startOfDay(for: $0.date) }).count
-    }
+    private var daysWorked: Int { lifetime.daysWorked }
 
     // MARK: - Body
 
@@ -273,7 +268,7 @@ struct AccountView: View {
                 HStack(spacing: 6) {
                     // Shown as a handle ("@logan") once claimed; the prompt
                     // and any legacy name stay bare.
-                    Text(friendsService.myUsername.map(Username.display) ?? displayName)
+                    Text(friendsService.myUsername.map { Username.display($0) } ?? displayName)
                         .appText(.title)
                         .foregroundStyle(friendsService.myUsername == nil ? AppColors.accent : AppColors.text)
                         .multilineTextAlignment(.center)

@@ -55,9 +55,16 @@ final class HoursStore: ObservableObject {
         didSet {
             weekEntriesCache = nil
             monthHoursCache = nil
+            allEntriesCache = nil
+            lifetimeWorkStatsCache = nil
         }
     }
-    @Published var yearArchives: [YearArchive] = []
+    @Published var yearArchives: [YearArchive] = [] {
+        didSet {
+            allEntriesCache = nil
+            lifetimeWorkStatsCache = nil
+        }
+    }
     @Published var paySettings: PaySettings = PaySettings()
     @Published var payHistoryEntries: [PayHistoryEntry] = []
     @Published var certificateEntries: [CertificateEntry] = []
@@ -1226,12 +1233,32 @@ final class HoursStore: ObservableObject {
 
     // MARK: - Filtering helpers
 
+    // Memoized merge of the archive + live entries, invalidated by the didSets
+    // on `entries` / `yearArchives`. The You tab's lifetime stats used to call
+    // this (flatMap + dedup + full sort) a dozen times per body evaluation,
+    // and the body re-evaluates on every store/listener publish — enough to
+    // stutter the tab's entrance animation on a long history.
+    private var allEntriesCache: [WorkEntry]?
+    private var lifetimeWorkStatsCache: LifetimeWorkStats?
+
     func allEntriesIncludingArchive() -> [WorkEntry] {
+        if let cached = allEntriesCache { return cached }
         let archived = yearArchives.flatMap(\.entries)
         var merged = archived + entries
         var seen = Set<UUID>()
         merged = merged.filter { seen.insert($0.id).inserted }
-        return merged.sorted { $0.date > $1.date }
+        merged.sort { $0.date > $1.date }
+        allEntriesCache = merged
+        return merged
+    }
+
+    /// Single-pass lifetime aggregates over every worked (non-off-day) entry,
+    /// archive included. Cached with the merged list above.
+    func lifetimeWorkStats() -> LifetimeWorkStats {
+        if let cached = lifetimeWorkStatsCache { return cached }
+        let stats = LifetimeWorkStats(entries: allEntriesIncludingArchive())
+        lifetimeWorkStatsCache = stats
+        return stats
     }
 
     func entries(inMonth monthDate: Date) -> [WorkEntry] {

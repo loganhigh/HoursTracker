@@ -14,12 +14,9 @@ struct CareerSections: View {
 
     // MARK: - Source data
 
-    private var workEntries: [WorkEntry] {
-        // Lifetime/all-time stats must span the year archive: archivePriorYearsIfNeeded
-        // moves prior-year entries out of `store.entries`, so reading `entries` alone
-        // silently drops every year before the current one after the Jan-1 rollover.
-        store.allEntriesIncludingArchive().filter { !$0.isOffDay }
-    }
+    /// Lifetime stats span the year archive and are cached by the store —
+    /// one pass over history, not one full scan per stat per re-render.
+    private var lifetime: LifetimeWorkStats { store.lifetimeWorkStats() }
 
     private var totalHours: Double {
         // Prefer server-computed total so Career and Leaderboard always match.
@@ -27,29 +24,13 @@ struct CareerSections: View {
         if let serverTotal = statsListener.lifetimeStats?.totalHours, serverTotal > 0 {
             return serverTotal
         }
-        return workEntries.reduce(0) { $0 + $1.paidHours }
+        return lifetime.localTotalHours
     }
 
-    private var longestShiftHours: Double {
-        workEntries.map(\.paidHours).max() ?? 0
-    }
-
-    private var daysWorked: Int {
-        let cal = Calendar.current
-        return Set(workEntries.map { cal.startOfDay(for: $0.date) }).count
-    }
-
-    private var monthsTracked: Int {
-        let cal = Calendar.current
-        let months = Set(workEntries.map { entry -> DateComponents in
-            cal.dateComponents([.year, .month], from: entry.date)
-        })
-        return months.count
-    }
-
-    private var firstEntryDate: Date? {
-        workEntries.map(\.date).min()
-    }
+    private var longestShiftHours: Double { lifetime.longestShiftHours }
+    private var daysWorked: Int { lifetime.daysWorked }
+    private var monthsTracked: Int { lifetime.monthsTracked }
+    private var firstEntryDate: Date? { lifetime.firstEntryDate }
 
     private var yearsTracked: Double {
         guard let first = firstEntryDate else { return 0 }
@@ -76,40 +57,17 @@ struct CareerSections: View {
 
     private var companyHoursLogged: Double {
         guard let start = companyStartDate else { return totalHours }
-        let cal = Calendar.current
-        let startDay = cal.startOfDay(for: start)
-        return workEntries
-            .filter { cal.startOfDay(for: $0.date) >= startDay }
-            .reduce(0) { $0 + $1.paidHours }
+        return lifetime.hours(since: start)
     }
 
     private var companyDaysWorked: Int {
         guard let start = companyStartDate else { return daysWorked }
-        let cal = Calendar.current
-        let startDay = cal.startOfDay(for: start)
-        let days = Set(
-            workEntries
-                .filter { cal.startOfDay(for: $0.date) >= startDay }
-                .map { cal.startOfDay(for: $0.date) }
-        )
-        return days.count
+        return lifetime.daysWorked(since: start)
     }
 
     private var bestMonthEntry: (label: String, hours: Double)? {
-        guard !workEntries.isEmpty else { return nil }
-        let cal = Calendar.current
-        var byMonth: [DateComponents: Double] = [:]
-        for entry in workEntries {
-            let key = cal.dateComponents([.year, .month], from: entry.date)
-            byMonth[key, default: 0] += entry.paidHours
-        }
-        guard let top = byMonth.max(by: { $0.value < $1.value }) else { return nil }
-        var comps = DateComponents()
-        comps.year = top.key.year
-        comps.month = top.key.month
-        comps.day = 1
-        guard let date = cal.date(from: comps) else { return nil }
-        return (FriendProfileFormat.companyStartedString(from: date), top.value)
+        guard let best = lifetime.bestMonth else { return nil }
+        return (FriendProfileFormat.companyStartedString(from: best.start), best.hours)
     }
 
     // MARK: - Body

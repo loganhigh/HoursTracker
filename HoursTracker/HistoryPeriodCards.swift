@@ -63,7 +63,7 @@ struct ChequeTableRow<Destination: View>: View {
     var accentLine: (text: String, tint: Color)? = nil
     /// Live projection line with a rolling-digits amount. Takes precedence
     /// over `accentLine` when both are set.
-    var projection: (amount: Double, currencyCode: String, caption: String)? = nil
+    var projection: (amount: Double, currencyCode: String)? = nil
     /// Staggers this row's entrance so a card's rows arrive in sequence.
     let index: Int
     @ViewBuilder let destination: () -> Destination
@@ -97,7 +97,6 @@ struct ChequeTableRow<Destination: View>: View {
                             Text("Projected ~")
                             AnimatedMetricText(currency: projection.amount, code: projection.currencyCode)
                                 .monospacedDigit()
-                            Text("· \(projection.caption)")
                         }
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundStyle(AppColors.accent)
