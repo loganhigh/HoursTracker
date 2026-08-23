@@ -100,10 +100,8 @@ struct UsernameCard: View {
                     .autocorrectionDisabled()
                     .keyboardType(.asciiCapable)
                     .foregroundStyle(AppColors.text)
-                    .onChange(of: usernameInput) { _, newValue in
-                        let filtered = Username.filteredForTyping(newValue)
-                        if filtered != newValue { usernameInput = filtered }
-                    }
+                    // Not rewritten while typing (any rewrite drops keystrokes
+                    // under fast input); Add stays disabled until it's valid.
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)

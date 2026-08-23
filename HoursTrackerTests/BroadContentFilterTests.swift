@@ -205,12 +205,6 @@ final class UsernameTests: XCTestCase {
         XCTAssertEqual(Username.normalize("@@logan"), "logan")
     }
 
-    func testTypingFilterKeepsOnlyHandleCharacters() {
-        XCTAssertEqual(Username.filteredForTyping("Mike Thompson!"), "mikethompson")
-        XCTAssertEqual(Username.filteredForTyping("a_b-c.d"), "a_bcd")
-        XCTAssertEqual(Username.filteredForTyping(String(repeating: "x", count: 30)).count, Username.maxLength)
-    }
-
     func testValidHandlesPass() {
         for ok in ["abc", "mike_47", "logan", "a1_", String(repeating: "x", count: 20)] {
             XCTAssertNil(Username.problem(with: ok, moderation: noModeration), ok)

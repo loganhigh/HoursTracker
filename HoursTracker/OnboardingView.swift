@@ -323,9 +323,10 @@ struct OnboardingView: View {
                         .keyboardType(.asciiCapable)
                         .submitLabel(.done)
                         .onSubmit { saveNameAndFinish() }
-                        .onChange(of: usernameDraft) { _, newValue in
-                            let filtered = Username.filteredForTyping(newValue)
-                            if filtered != newValue { usernameDraft = filtered }
+                        .onChange(of: usernameDraft) { _, _ in
+                            // Never rewritten while typing (any rewrite drops
+                            // keystrokes under fast input); Continue validates
+                            // and explains bad characters instead.
                             nameValidationMessage = nil
                         }
                 }

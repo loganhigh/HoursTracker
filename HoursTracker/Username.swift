@@ -25,14 +25,6 @@ enum Username {
         return s
     }
 
-    /// What a text field should keep as the user types: lowercase, allowed
-    /// characters only, capped at the max length.
-    static func filteredForTyping(_ raw: String) -> String {
-        let lowered = raw.lowercased()
-        let kept = lowered.filter { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_") }
-        return String(kept.prefix(maxLength))
-    }
-
     /// nil when `username` (canonical) is acceptable, else a user-facing reason.
     /// `moderation` defaults to the shared name filter so handles get the same
     /// slur / impersonation screening as display names.

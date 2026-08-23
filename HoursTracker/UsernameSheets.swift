@@ -58,9 +58,10 @@ struct UsernameSheet: View {
                         .submitLabel(.done)
                         .focused($fieldFocused)
                         .onSubmit { if canSave { save() } }
-                        .onChange(of: draft) { _, newValue in
-                            let filtered = Username.filteredForTyping(newValue)
-                            if filtered != newValue { draft = filtered; return }
+                        .onChange(of: draft) { _, _ in
+                            // Never rewritten while typing (any rewrite drops
+                            // keystrokes under fast input); the status line
+                            // explains bad characters instead.
                             scheduleAvailabilityCheck()
                         }
                 }
