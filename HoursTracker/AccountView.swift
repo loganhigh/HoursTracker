@@ -445,7 +445,7 @@ struct AccountView: View {
                         AccountNavRow(
                             icon: "at",
                             title: "Username",
-                            subtitle: friendsService.myUsername.map(Username.display) ?? "Choose a username"
+                            subtitle: friendsService.myUsername.map { Username.display($0) } ?? "Choose a username"
                         )
                     }
                     .buttonStyle(PremiumPressStyle())

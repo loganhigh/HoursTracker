@@ -159,7 +159,7 @@ final class PushNotificationService {
             // a second device (or reinstalling) silently re-enabled alerts the
             // user had turned off elsewhere. Adopt the cloud values instead.
             if let data = try? await db.collection("users").document(uid).getDocument().data() {
-                await SmartNotifier.shared.adoptCloudAlertPreferences(
+                SmartNotifier.shared.adoptCloudAlertPreferences(
                     friendShift: data["friendShiftAlerts"] as? Bool,
                     leaderboard: data["leaderboardAlerts"] as? Bool
                 )
