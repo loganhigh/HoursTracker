@@ -245,8 +245,8 @@ struct GlobalTrackerRow: View {
                     if isMe { YouChip() }
                 }
 
-                if !tracker.levelLine.isEmpty {
-                    Text(tracker.levelLine)
+                if !tracker.detailLine.isEmpty {
+                    Text(tracker.detailLine)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.faint)
                         .lineLimit(1)

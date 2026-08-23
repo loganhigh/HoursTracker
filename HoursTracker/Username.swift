@@ -68,4 +68,27 @@ enum Username {
 
     /// "@mike_47" for display.
     static func display(_ username: String) -> String { "@" + username }
+
+    /// The name with every emoji removed and whitespace collapsed. Usernames
+    /// can't contain emoji (ASCII only), but names from before the username
+    /// switch could — this is what brings "Jake 🔥" back to "Jake" on the
+    /// next login. Keeps ordinary text symbols (©, ™, digits, #) intact.
+    static func strippingEmoji(_ raw: String) -> String {
+        let kept = raw.unicodeScalars.filter { scalar in
+            let v = scalar.value
+            // Joiners, variation selectors, skin tones, and tag characters
+            // only ever travel with an emoji; drop them with it.
+            if v == 0x200D || v == 0xFE0E || v == 0xFE0F { return false }
+            if (0x1F3FB...0x1F3FF).contains(v) || (0xE0020...0xE007F).contains(v) { return false }
+            let props = scalar.properties
+            if props.isEmojiPresentation { return false }
+            // Digits, #, *, ©, ® report isEmoji but are ordinary text;
+            // everything above the ⎌ block that claims emoji status isn't.
+            if props.isEmoji && v > 0x238C { return false }
+            return true
+        }
+        return String(String.UnicodeScalarView(kept))
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+    }
 }

@@ -1770,7 +1770,14 @@ private struct ProfileSnapshotInputs {
     @MainActor
     static func capture(from store: HoursStore) -> ProfileSnapshotInputs {
         let profile = store.gamificationProfile
-        let displayName = UserDefaults.standard.string(forKey: "profile_display_name") ?? "Worker"
+        let storedName = UserDefaults.standard.string(forKey: "profile_display_name") ?? "Worker"
+        var displayName = Username.strippingEmoji(storedName)
+        if displayName.isEmpty { displayName = "Worker" }
+        if displayName != storedName {
+            // Legacy emoji name: persist the cleaned form so every later
+            // publish and the Home greeting agree with what went out.
+            UserDefaults.standard.set(displayName, forKey: "profile_display_name")
+        }
         let privacy = SocialPrivacyStore.shared.flags
         let companyName = UserDefaults.standard.string(forKey: "company_name")?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -1884,7 +1891,7 @@ private struct ProfileSnapshotInputs {
         } else {
             fields["countryCode"] = FieldValue.delete()
         }
-        // Company PII (name/occupation/start-date) is written to users/{uid}, which
+        // Company PII (name/start-date) is written to users/{uid}, which
         // is world-readable to any signed-in user. Only publish it when the user has
         // opted into hour-sharing; when shareHours is off, actively delete any values
         // a prior build may have left behind so opted-out users stop leaking their
@@ -1894,7 +1901,10 @@ private struct ProfileSnapshotInputs {
         } else {
             fields["companyName"] = FieldValue.delete()
         }
-        if shareHours && !companyOccupation.isEmpty {
+        // Job title is public (the company name stays private): it shows
+        // beside every name on the global board, so it's published regardless
+        // of hour-sharing.
+        if !companyOccupation.isEmpty {
             fields["companyOccupation"] = companyOccupation
         } else {
             fields["companyOccupation"] = FieldValue.delete()

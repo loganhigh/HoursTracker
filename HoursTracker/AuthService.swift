@@ -329,6 +329,9 @@ final class AuthService: NSObject, ObservableObject {
         // Apple profile name, email) is ever published as a name: until the
         // user claims a handle the name is a placeholder.
         _ = preferredDisplayName
+        // Emoji are no longer allowed in names; a legacy "Jake 🔥" reverts
+        // to "Jake" here and is republished below on this sign-in.
+        displayName = Username.strippingEmoji(displayName)
         let isPlaceholder = displayName.isEmpty
         if isPlaceholder {
             displayName = "Worker"

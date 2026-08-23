@@ -168,8 +168,20 @@ function nameIsBlocked(raw) {
 }
 
 /** The display name as other users may see it: fallback when moderated. */
+// Emoji plus the invisible characters that only travel with them (ZWJ,
+// variation selectors, skin tones, tag characters). Digits/#/* are excluded
+// from Extended_Pictographic already, so plain text survives.
+const EMOJI_RE = /[\p{Extended_Pictographic}\u200D\uFE0E\uFE0F\u{1F3FB}-\u{1F3FF}\u{1F1E6}-\u{1F1FF}\u{E0020}-\u{E007F}]/gu;
+
+/** Strips emoji and collapses whitespace: "Jake 🔥" → "Jake". */
+function stripEmoji(raw) {
+  return String(raw || "").replace(EMOJI_RE, "").split(/\s+/).filter(Boolean).join(" ");
+}
+
 function sanitizeDisplayName(raw, fallback) {
-  const trimmed = String(raw || "").trim();
+  // Emoji aren't allowed in names any more; legacy ones revert to the plain
+  // text on the next recompute, before the user even signs in again.
+  const trimmed = stripEmoji(raw);
   if (!trimmed) return fallback;
   return nameIsBlocked(trimmed) ? fallback : trimmed;
 }
@@ -1056,7 +1068,9 @@ async function recomputeUserStats(db, uid, options = {}) {
     // profile fields so it is not written for users who have not opted in; a
     // subsequent recompute scrubs any value previously written while ungated.
     companyName: privacy.shareHours ? (userData.companyName || "") : "",
-    companyOccupation: privacy.shareHours ? (userData.companyOccupation || "") : "",
+    // Job title is public — it sits beside every name on the global board —
+    // so unlike companyName it isn't gated on hour-sharing.
+    companyOccupation: String(userData.companyOccupation || "").trim(),
     companyStartDate: privacy.shareHours ? (userData.companyStartDate || null) : null,
     companyHoursLogged: privacy.shareHours ? companyHoursLogged : 0,
     companyDaysWorked: privacy.shareHours ? companyDaysWorked : 0,
@@ -1454,6 +1468,7 @@ module.exports = {
   recomputeUserStats,
   stripWrappingQuotes,
   sanitizeDisplayName,
+  stripEmoji,
   rankTitle,
   updateGlobalLeaderboard,
   applyLeaderboardDeltaForUser,

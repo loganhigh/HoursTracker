@@ -22,6 +22,9 @@ struct TopTracker: Identifiable, Equatable {
     /// Earns the verified badge. Defaulted false for profiles published
     /// before the flag existed.
     var hasReviewedApp: Bool = false
+    /// Job title, shown beside the level on the global board. Empty when the
+    /// user hasn't entered one.
+    var occupation: String = ""
 
     var id: String { uid }
 
@@ -30,6 +33,12 @@ struct TopTracker: Identifiable, Equatable {
     var levelLine: String {
         guard level > 0 else { return "" }
         return prestige > 0 ? "Level \(level) • P\(prestige)" : "Level \(level)"
+    }
+
+    /// "Level 16 • P1 • Electrician" — the level line with the occupation
+    /// trailing it, or just the occupation when the profile predates levels.
+    var detailLine: String {
+        [levelLine, occupation].filter { !$0.isEmpty }.joined(separator: " • ")
     }
 }
 
@@ -305,6 +314,7 @@ final class TopTrackersService: ObservableObject {
             copy.prestige = t.prestige
             copy.streak = t.streak
             copy.hasReviewedApp = t.hasReviewedApp
+            copy.occupation = t.occupation
             return copy
         }
         return live + renumbered
@@ -346,7 +356,9 @@ final class TopTrackersService: ObservableObject {
                 level: intValue(data["level"]),
                 prestige: intValue(data["prestige"]),
                 streak: intValue(data["currentStreak"]),
-                hasReviewedApp: data["hasReviewedApp"] as? Bool ?? false
+                hasReviewedApp: data["hasReviewedApp"] as? Bool ?? false,
+                occupation: ((data["companyOccupation"] as? String) ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
             )
         }
     }
