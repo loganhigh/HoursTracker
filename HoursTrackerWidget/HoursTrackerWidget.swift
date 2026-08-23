@@ -67,7 +67,7 @@ struct SmallWidgetView: View {
                 .foregroundStyle(.white)
                 .widgetFittingText(minScale: 0.45)
 
-            Text("this pay period")
+            Text("this pay cheque")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.65))
                 .widgetFittingText(minScale: 0.7)
@@ -99,7 +99,7 @@ struct MediumWidgetView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "clock.fill")
                         .font(.system(size: 11, weight: .semibold))
-                    Text("PAY PERIOD")
+                    Text("PAY CHEQUE")
                         .font(.system(size: 10, weight: .black))
                         .tracking(1)
                         .widgetFittingText(minScale: 0.7)

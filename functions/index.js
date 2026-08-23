@@ -543,8 +543,8 @@ exports.notifyOnShiftNudge = onDocumentCreated(
     );
 
     await sendPushToUser(targetUid, targetData, {
-      title: `${kind.emoji} ${fromName}`,
-      body: renderNudgeMessage(kind.messageTemplate, firstName),
+      title: fromName,
+      body: `${kind.emoji} ${renderNudgeMessage(kind.messageTemplate, firstName)}`,
       dataPayload: {
         type: "friend_nudge",
         nudgeId: event.params.nudgeId,

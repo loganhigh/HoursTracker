@@ -74,6 +74,8 @@ struct CareerSections: View {
 
     var body: some View {
         VStack(spacing: AppSpacing.xl) {
+                companyCard
+
                 SectionCard(
                     title: "Personal bests",
                     subtitle: "The records to beat",
@@ -111,8 +113,6 @@ struct CareerSections: View {
                     }
                     .padding(.vertical, AppSpacing.xs)
                 }
-
-                companyCard
 
                 SectionCard(
                     title: "Tracking history",
@@ -162,7 +162,7 @@ struct CareerSections: View {
     private var companyCardEmpty: some View {
         SectionCard(
             title: "Company",
-            subtitle: "Track tenure, anniversaries, and hours at work",
+            subtitle: "Track your start date, anniversaries, and hours at work",
             trailing: nil,
             centerHeader: true
         ) {
@@ -171,7 +171,7 @@ struct CareerSections: View {
                     .font(.largeTitle.weight(.semibold))
                     .foregroundStyle(AppColors.accent.opacity(0.85))
 
-                Text("Add your company to see start date, tenure, and work anniversaries here.")
+                Text("Add your company to see start date, time worked, and work anniversaries here.")
                     .appText(.subheadline)
                     .foregroundStyle(AppColors.subtext)
                     .multilineTextAlignment(.center)

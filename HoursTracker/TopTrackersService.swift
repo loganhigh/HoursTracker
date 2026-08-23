@@ -28,6 +28,14 @@ struct TopTracker: Identifiable, Equatable {
 
     var id: String { uid }
 
+    /// Trimmed, with the first letter capitalised — "electrician" and
+    /// "Electrician" read the same on the board regardless of how it was typed.
+    static func displayOccupation(_ raw: String?) -> String {
+        let trimmed = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = trimmed.first else { return "" }
+        return first.uppercased() + trimmed.dropFirst()
+    }
+
     /// "Level 16" / "Level 14 • P1". Empty when the profile predates levels,
     /// so the row collapses to just a name instead of reading "Level 0".
     var levelLine: String {
@@ -357,8 +365,7 @@ final class TopTrackersService: ObservableObject {
                 prestige: intValue(data["prestige"]),
                 streak: intValue(data["currentStreak"]),
                 hasReviewedApp: data["hasReviewedApp"] as? Bool ?? false,
-                occupation: ((data["companyOccupation"] as? String) ?? "")
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                occupation: TopTracker.displayOccupation(data["companyOccupation"] as? String)
             )
         }
     }
