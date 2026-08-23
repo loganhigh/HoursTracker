@@ -133,30 +133,40 @@ struct GlobalRankHeroCard: View {
 /// A small "live" indicator: a solid dot with a ring expanding and fading out
 /// behind it, on a loop. The SwiftUI equivalent of the reference component's
 /// `animate-ping` span. Holds still under Reduce Motion.
+///
+/// Driven by the clock rather than a `repeatForever` animation on `@State`:
+/// that version only started in `onAppear`, so when the header scrolled back
+/// into view (or the tab was revisited) the flag was already flipped, nothing
+/// animated, and the ring sat frozen — and any `withAnimation` running on the
+/// board (rank-move springs) could hijack its timing. Time-based output is
+/// stateless, so it's correct on every frame no matter how it got there.
 struct LivePulseDot: View {
     var color: Color = AppColors.positive
     var size: CGFloat = 9
+    /// Seconds per ping.
+    var period: TimeInterval = 1.5
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pinging = false
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(color)
-                .frame(width: size, height: size)
-                .scaleEffect(pinging ? 2.6 : 1)
-                .opacity(pinging ? 0 : 0.75)
+            if !reduceMotion {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                    let elapsed = timeline.date.timeIntervalSinceReferenceDate
+                    let phase = elapsed.truncatingRemainder(dividingBy: period) / period
+                    // ease-out: the ring leaves fast and lingers as it fades.
+                    let eased = 1 - pow(1 - phase, 3)
+                    Circle()
+                        .fill(color)
+                        .frame(width: size, height: size)
+                        .scaleEffect(1 + 1.6 * eased)
+                        .opacity(0.75 * (1 - eased))
+                }
+            }
 
             Circle()
                 .fill(color)
                 .frame(width: size, height: size)
-        }
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
-                pinging = true
-            }
         }
         .accessibilityHidden(true)
     }
