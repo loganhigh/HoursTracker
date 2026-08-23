@@ -46,12 +46,14 @@ struct UsernameSheet: View {
                 .padding(.horizontal, AppSpacing.xl)
 
                 HStack(spacing: 2) {
+                    Spacer(minLength: 0)
                     Text("@")
                         .font(.system(.title3, design: .rounded, weight: .semibold))
                         .foregroundStyle(AppColors.subtext)
                     TextField("username", text: $draft)
                         .font(.system(.title3, design: .rounded, weight: .semibold))
                         .foregroundStyle(AppColors.text)
+                        .fixedSize(horizontal: true, vertical: false)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.asciiCapable)
@@ -64,6 +66,7 @@ struct UsernameSheet: View {
                             // explains bad characters instead.
                             scheduleAvailabilityCheck()
                         }
+                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, AppSpacing.lg)
                 .padding(.vertical, 14)
@@ -75,6 +78,10 @@ struct UsernameSheet: View {
                                 .stroke(AppColors.stroke.opacity(0.5), lineWidth: 1)
                         )
                 )
+                // The centered field only spans its text; the whole box
+                // should focus it.
+                .contentShape(Rectangle())
+                .onTapGesture { fieldFocused = true }
                 .padding(.horizontal, AppSpacing.xl)
 
                 statusLine

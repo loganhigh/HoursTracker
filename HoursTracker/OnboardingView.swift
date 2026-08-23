@@ -52,6 +52,7 @@ struct OnboardingView: View {
     @State private var usernameDraft = ""
     @State private var nameValidationMessage: String?
     @FocusState private var nameFieldFocused: Bool
+    @FocusState private var usernameFieldFocused: Bool
 
     @State private var payPeriodDraft: PayPeriodType = .biWeekly
     @State private var paydayDraft = OnboardingView.defaultPayday()
@@ -312,16 +313,19 @@ struct OnboardingView: View {
                     )
 
                 HStack(spacing: 2) {
+                    Spacer(minLength: 0)
                     Text("@")
                         .font(.system(.title3, design: .rounded, weight: .semibold))
-                        .foregroundStyle(AppColors.subtext)
-                    TextField("username", text: $usernameDraft)
+                        .foregroundStyle(usernameDraft.isEmpty ? AppColors.subtext : AppColors.text)
+                    TextField("", text: $usernameDraft)
                         .font(.system(.title3, design: .rounded, weight: .semibold))
                         .foregroundStyle(AppColors.text)
+                        .fixedSize(horizontal: true, vertical: false)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.asciiCapable)
                         .submitLabel(.done)
+                        .focused($usernameFieldFocused)
                         .onSubmit { saveNameAndFinish() }
                         .onChange(of: usernameDraft) { _, _ in
                             // Never rewritten while typing (any rewrite drops
@@ -329,6 +333,7 @@ struct OnboardingView: View {
                             // and explains bad characters instead.
                             nameValidationMessage = nil
                         }
+                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, AppSpacing.lg)
                 .padding(.vertical, 14)
@@ -340,6 +345,10 @@ struct OnboardingView: View {
                                 .stroke(AppColors.stroke.opacity(0.5), lineWidth: 1)
                         )
                 )
+                // The centered field only spans its text; the whole box
+                // should focus it, like the full-width name field above.
+                .contentShape(Rectangle())
+                .onTapGesture { usernameFieldFocused = true }
 
                 if let nameValidationMessage {
                     Text(nameValidationMessage)
@@ -359,18 +368,8 @@ struct OnboardingView: View {
 
             Spacer(minLength: 0)
         }
-        .onChange(of: nameDraft) { _, _ in
-            nameValidationMessage = nil
-            // Keep suggesting a handle while the user types their name, until
-            // they start editing the username themselves.
-            if !usernameEdited { usernameDraft = Username.suggestion(from: nameDraft) }
-        }
-        .onChange(of: usernameDraft) { _, newValue in
-            if newValue != Username.suggestion(from: nameDraft) { usernameEdited = true }
-        }
+        .onChange(of: nameDraft) { _, _ in nameValidationMessage = nil }
     }
-
-    @State private var usernameEdited = false
 
     private var canonicalUsernameDraft: String { Username.normalize(usernameDraft) }
 
@@ -385,9 +384,6 @@ struct OnboardingView: View {
         guard nameDraft.isEmpty else { return }
         let stored = UserDefaults.standard.string(forKey: "profile_display_name") ?? ""
         nameDraft = stored == "Worker" ? "" : stored
-        if usernameDraft.isEmpty, !nameDraft.isEmpty {
-            usernameDraft = Username.suggestion(from: nameDraft)
-        }
     }
 
     private func saveNameAndFinish() {
