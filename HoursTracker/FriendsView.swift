@@ -348,7 +348,7 @@ struct FriendsView: View {
             Image(systemName: "bell.fill")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(AppColors.accent)
-            Text("You'll be connected instantly")
+            Text("They'll get a request to accept")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(AppColors.text)
         }
@@ -392,20 +392,23 @@ struct FriendsView: View {
             isSending = false
         }
         do {
-            try await friendsService.sendFriendRequest(toUsername: username, myUid: uid, myName: myName)
-            // Always refresh on success, even if our own 15s watchdog already
+            let connected = try await friendsService.sendFriendRequest(toUsername: username, myUid: uid, myName: myName)
+            // Always report success, even if our own 15s watchdog already
             // fired and displayed "timed out" — a slow network doesn't mean
-            // the call failed, and the friendship may have been created on
-            // the server moments after we gave up waiting for it locally.
+            // the call failed, and the request may have landed on the
+            // server moments after we gave up waiting for it locally.
             let hadAlreadyTimedOut = !isSending
             store.syncProfileSnapshotToCloud()
-            await friendsService.refreshFriendIds()
-            await friendsService.refreshFriendProfiles()
             Haptics.success()
             actionMessageIsError = false
+            // Instant connection only happens when they had already asked
+            // us; otherwise they get a request to accept or decline.
+            let message = connected
+                ? "You're now friends!"
+                : "Request sent to \(username). You'll be connected once they accept."
             actionMessage = hadAlreadyTimedOut
-                ? "You're now friends! (That took longer than expected — check your connection.)"
-                : "You're now friends!"
+                ? "\(message) (That took longer than expected — check your connection.)"
+                : message
             usernameInput = ""
             isSending = false
         } catch is CancellationError {
@@ -425,7 +428,7 @@ struct FriendsView: View {
     private func accept(_ request: FriendRequestItem) async {
         guard let uid = authService.user?.uid else { return }
         do {
-            try await friendsService.acceptRequest(fromUid: request.fromUid, myUid: uid)
+            try await friendsService.acceptRequest(fromUid: request.fromUid, myUid: uid, myName: myName)
             // Re-attach listeners so the new friend appears immediately
             friendsService.startListening(uid: uid)
             store.syncProfileSnapshotToCloud()

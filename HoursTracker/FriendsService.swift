@@ -453,7 +453,11 @@ final class FriendsService: ObservableObject {
         }
     }
 
-    func sendFriendRequest(toUsername rawUsername: String, myUid: String, myName: String) async throws {
+    /// Sends a friend request. Returns `true` when the server connected the
+    /// two of you immediately — that only happens when the other person had
+    /// already sent you a request, so both sides have opted in.
+    @discardableResult
+    func sendFriendRequest(toUsername rawUsername: String, myUid: String, myName: String) async throws -> Bool {
         let username = Username.normalize(rawUsername)
         if let problem = Username.problem(with: username, moderation: { _ in false }) {
             throw FriendsError.invalidUsername(problem)
@@ -462,8 +466,15 @@ final class FriendsService: ObservableObject {
             throw FriendsError.cannotAddSelf
         }
         do {
-            _ = try await functions.httpsCallable("sendFriendRequest")
+            let result = try await functions.httpsCallable("sendFriendRequest")
                 .call(["username": username, "myName": myName])
+            let payload = result.data as? [String: Any]
+            let autoAccepted = payload?["autoAccepted"] as? Bool ?? false
+            if autoAccepted {
+                await refreshFriendIds()
+                await refreshFriendProfiles()
+            }
+            return autoAccepted
         } catch {
             let nsError = error as NSError
             let message = nsError.localizedDescription.lowercased()
@@ -480,10 +491,10 @@ final class FriendsService: ObservableObject {
         }
     }
 
-    func acceptRequest(fromUid: String, myUid: String) async throws {
+    func acceptRequest(fromUid: String, myUid: String, myName: String) async throws {
         do {
             _ = try await functions.httpsCallable("acceptFriendRequest")
-                .call(["fromUid": fromUid])
+                .call(["fromUid": fromUid, "myName": myName])
             await refreshFriendIds()
             await refreshFriendProfiles()
         } catch {

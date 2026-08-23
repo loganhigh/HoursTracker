@@ -2659,40 +2659,68 @@ exports.sendFriendRequest = onCall(
       throw new HttpsError("permission-denied", "This user isn't accepting invites.");
     }
 
-    // Adding by code connects instantly — no pending approval step. Create
-    // the friendship on both sides right away, and clean up any stray
-    // pending-request docs left over from before this became instant.
-    const batch = db.batch();
-    const now = FieldValue.serverTimestamp();
-    batch.set(db.collection("users").doc(myUid).collection("friends").doc(targetUid),
-      { friendUid: targetUid, addedAt: now });
-    batch.set(db.collection("users").doc(targetUid).collection("friends").doc(myUid),
-      { friendUid: myUid, addedAt: now });
-    batch.delete(db.collection("users").doc(myUid).collection("friendRequests").doc(targetUid));
-    batch.delete(db.collection("users").doc(targetUid).collection("friendRequests").doc(myUid));
-    const sorted = [myUid, targetUid].sort();
-    const pairId = `${sorted[0]}_${sorted[1]}`;
-    batch.set(db.collection("friendships").doc(pairId), {
-      userA: sorted[0],
-      userB: sorted[1],
-      createdAt: now,
-      createdBy: myUid,
-    });
-    await batch.commit();
+    const myRequestRef = db.collection("users").doc(targetUid)
+      .collection("friendRequests").doc(myUid);
+    const theirRequestRef = db.collection("users").doc(myUid)
+      .collection("friendRequests").doc(targetUid);
+    const [myRequest, theirRequest] = await Promise.all([
+      myRequestRef.get(),
+      theirRequestRef.get(),
+    ]);
 
-    await sendPushToUser(targetUid, targetData, {
-      title: "New friend added",
-      body: `${myName} added you as a friend`,
-      dataPayload: {
-        type: "friend_added",
-        fromUid: myUid,
-        fromName: myName,
-      },
+    // They already asked us — both sides want it, so connect right away
+    // instead of leaving two requests dangling at each other.
+    if (theirRequest.exists) {
+      await createFriendship(myUid, targetUid);
+      await sendPushToUser(targetUid, targetData, {
+        title: "Friend request accepted",
+        body: `${myName} accepted your friend request`,
+        dataPayload: { type: "friend_accepted", fromUid: myUid, fromName: myName },
+      });
+      return { ok: true, targetUid, autoAccepted: true };
+    }
+
+    // Sending twice is a no-op: the original request stays pending and the
+    // recipient isn't pinged again.
+    if (myRequest.exists) {
+      return { ok: true, targetUid, autoAccepted: false, alreadyPending: true };
+    }
+
+    // Adding by username is a request, not an instant connection: the
+    // recipient has to accept before either side sees the other's content.
+    // notifyOnFriendRequest pushes "New friend request" when this doc lands.
+    await myRequestRef.set({
+      fromUid: myUid,
+      fromName: myName,
+      sentAt: FieldValue.serverTimestamp(),
     });
 
-    return { ok: true, targetUid, autoAccepted: true };
+    return { ok: true, targetUid, autoAccepted: false };
   }
 );
+
+/**
+ * Creates the two-sided friendship (legacy friend links + friendships pair
+ * doc) and clears any pending request in either direction.
+ */
+async function createFriendship(uidA, uidB) {
+  const batch = db.batch();
+  const now = FieldValue.serverTimestamp();
+  batch.set(db.collection("users").doc(uidA).collection("friends").doc(uidB),
+    { friendUid: uidB, addedAt: now });
+  batch.set(db.collection("users").doc(uidB).collection("friends").doc(uidA),
+    { friendUid: uidA, addedAt: now });
+  batch.delete(db.collection("users").doc(uidA).collection("friendRequests").doc(uidB));
+  batch.delete(db.collection("users").doc(uidB).collection("friendRequests").doc(uidA));
+  const sorted = [uidA, uidB].sort();
+  batch.set(db.collection("friendships").doc(`${sorted[0]}_${sorted[1]}`), {
+    userA: sorted[0],
+    userB: sorted[1],
+    createdAt: now,
+    createdBy: uidA,
+  });
+  await batch.commit();
+}
 
 /** Accept a friend request — creates both friend links, friendships doc, cleans up requests. */
 exports.acceptFriendRequest = onCall(
@@ -2700,6 +2728,7 @@ exports.acceptFriendRequest = onCall(
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
     const myUid = request.auth.uid;
+    const myName = request.data?.myName || "Your friend";
     const fromUid = request.data?.fromUid;
     if (!fromUid || typeof fromUid !== "string") {
       throw new HttpsError("invalid-argument", "fromUid is required.");
@@ -2711,27 +2740,16 @@ exports.acceptFriendRequest = onCall(
       throw new HttpsError("not-found", "Friend request not found.");
     }
 
-    const batch = db.batch();
-    const now = FieldValue.serverTimestamp();
+    await createFriendship(myUid, fromUid);
 
-    batch.set(db.collection("users").doc(myUid).collection("friends").doc(fromUid),
-      { friendUid: fromUid, addedAt: now });
-    batch.set(db.collection("users").doc(fromUid).collection("friends").doc(myUid),
-      { friendUid: myUid, addedAt: now });
-
-    batch.delete(db.collection("users").doc(myUid).collection("friendRequests").doc(fromUid));
-    batch.delete(db.collection("users").doc(fromUid).collection("friendRequests").doc(myUid));
-
-    const sorted = [myUid, fromUid].sort();
-    const pairId = `${sorted[0]}_${sorted[1]}`;
-    batch.set(db.collection("friendships").doc(pairId), {
-      userA: sorted[0],
-      userB: sorted[1],
-      createdAt: now,
-      createdBy: myUid,
+    // Tell the person who asked — they've been waiting on this.
+    const requester = await db.collection("users").doc(fromUid).get();
+    await sendPushToUser(fromUid, requester.data() || {}, {
+      title: "Friend request accepted",
+      body: `${myName} accepted your friend request`,
+      dataPayload: { type: "friend_accepted", fromUid: myUid, fromName: myName },
     });
 
-    await batch.commit();
     return { ok: true };
   }
 );
