@@ -500,7 +500,7 @@ struct OnboardingView: View {
                             .foregroundStyle(AppColors.text)
                             .multilineTextAlignment(.center)
 
-                        Text("Shown on your profile and used for your work anniversary. All optional — you can add or change it later in Settings.")
+                        Text("Company name is only displayed to you. Your job title is shown publicly.")
                             .appText(.subheadline)
                             .foregroundStyle(AppColors.subtext)
                             .multilineTextAlignment(.center)
