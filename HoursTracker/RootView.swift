@@ -10,8 +10,6 @@ struct RootView: View {
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var cloudSync: CloudSyncManager
     @AppStorage("has_prompted_rate_after_5") private var hasPromptedRateAfter5 = false
-    @AppStorage("display_name_prompt_last_tier") private var displayNamePromptLastTier: Int = 0
-    @State private var showingDisplayNamePrompt = false
     @State private var showingCountryFlagPrompt = false
     @ObservedObject private var friendsService = FriendsService.shared
     @State private var showingUsernamePrompt = false
@@ -49,18 +47,6 @@ struct RootView: View {
                     AppActions.rateApp()
                 }
             }
-            let displayName = UserDefaults.standard.string(forKey: "profile_display_name") ?? ""
-            guard displayName.trimmingCharacters(in: .whitespaces).isEmpty,
-                  newCount >= 10 else { return }
-            let tier = newCount / 10
-            guard tier > displayNamePromptLastTier else { return }
-            displayNamePromptLastTier = tier
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                showingDisplayNamePrompt = true
-            }
-        }
-        .sheet(isPresented: $showingDisplayNamePrompt) {
-            DisplayNamePromptSheet()
         }
         .sheet(isPresented: $showingUsernamePrompt) {
             UsernameSheet(
@@ -269,85 +255,6 @@ private struct CountryFlagPromptOverlay: View {
     }
 }
 
-// MARK: - Display Name Prompt (shown after every 10 logs when name is empty)
-private struct DisplayNamePromptSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @AppStorage("profile_display_name") private var displayName: String = ""
-
-    // Edits land in a draft and are moderated on Done — binding the field
-    // straight to @AppStorage stored whatever was typed, unchecked.
-    @State private var draft: String = ""
-    @State private var validationMessage: String?
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
-                Spacer(minLength: 0)
-                Text("Add your display name")
-                    .font(.system(.title2, weight: .semibold))
-                    .foregroundStyle(AppTheme.Colors.text)
-                    .multilineTextAlignment(.center)
-                Text("Your name appears throughout the app.")
-                    .font(.system(.callout))
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                    .multilineTextAlignment(.center)
-
-                TextField("Your name", text: $draft)
-                    .font(.system(.body, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.text)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(AppTheme.Colors.card2.opacity(0.6))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(AppTheme.Colors.stroke.opacity(0.5), lineWidth: 1)
-                            )
-                    )
-                    .padding(.horizontal, 32)
-
-                if let validationMessage {
-                    Text(validationMessage)
-                        .font(.system(.footnote))
-                        .foregroundStyle(AppTheme.Colors.danger)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(AppTheme.Colors.bg.ignoresSafeArea())
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            guard BroadContentFilter.shared.validate(trimmed).isAllowed else {
-                                validationMessage = BroadContentFilter.blockedNameMessage
-                                Haptics.error()
-                                return
-                            }
-                            displayName = String(trimmed.prefix(40))
-                        }
-                        Haptics.lightTap()
-                        dismiss()
-                    }
-                }
-            }
-            .onAppear { draft = displayName }
-            .onChange(of: draft) { _, _ in validationMessage = nil }
-        }
-    }
-}
-
-/// Invisible helper that watches `scenePhase` in its own tiny `body`, kept
-/// separate from `HoursHomeView.body` so this doesn't add another modifier
-/// to that already very large SwiftUI expression (which is at the edge of
-/// what the type-checker can resolve in reasonable time).
 private struct ScenePhaseFriendsRefreshObserver: View {
     @Environment(\.scenePhase) private var scenePhase
     let onBecomeActive: () -> Void

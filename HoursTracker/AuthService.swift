@@ -325,14 +325,10 @@ final class AuthService: NSObject, ObservableObject {
             displayName = UserDefaults.standard.string(forKey: "profile_display_name")?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         }
-        if displayName.isEmpty {
-            displayName = preferredDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        }
-        if displayName.isEmpty {
-            displayName = firebaseUser.displayName ?? ""
-        }
-        // No email-local-part fallback: "john.smith1984" is not a name the
-        // user chose and it was published to friends and the leaderboards.
+        // The username is the only name. Nothing from the provider (Google /
+        // Apple profile name, email) is ever published as a name: until the
+        // user claims a handle the name is a placeholder.
+        _ = preferredDisplayName
         let isPlaceholder = displayName.isEmpty
         if isPlaceholder {
             displayName = "Worker"

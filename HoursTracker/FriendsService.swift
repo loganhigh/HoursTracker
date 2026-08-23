@@ -435,7 +435,13 @@ final class FriendsService: ObservableObject {
         }
         do {
             _ = try await functions.httpsCallable("claimUsername").call(["username": name])
-            await MainActor.run { self.myUsername = name }
+            await MainActor.run {
+                self.myUsername = name
+                // The username is the only name: every surface that reads the
+                // stored name (Home greeting, nudges, profile publish) shows it.
+                UserDefaults.standard.set(name, forKey: "profile_display_name")
+                HoursStore.current?.syncProfileSnapshotToCloud()
+            }
         } catch {
             let message = (error as NSError).localizedDescription.lowercased()
             if message.contains("taken") || message.contains("already-exists") || message.contains("already exists") {

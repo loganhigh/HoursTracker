@@ -48,10 +48,8 @@ struct OnboardingView: View {
     /// Single-fire guard for the post-auth advance (set on the main actor).
     @State private var hasAdvanced = false
 
-    @State private var nameDraft = ""
     @State private var usernameDraft = ""
     @State private var nameValidationMessage: String?
-    @FocusState private var nameFieldFocused: Bool
     @FocusState private var usernameFieldFocused: Bool
 
     @State private var payPeriodDraft: PayPeriodType = .biWeekly
@@ -106,9 +104,6 @@ struct OnboardingView: View {
         }
         .onChange(of: page) { _, newPage in
             Haptics.lightTap()
-            if newPage == namePageIndex {
-                prefillNameDraft()
-            }
             advanceIfReady()
         }
         .onChange(of: authService.isSignedIn) { _, _ in advanceIfReady() }
@@ -275,42 +270,22 @@ struct OnboardingView: View {
             Spacer(minLength: 0)
 
             VStack(spacing: AppSpacing.lg) {
-                Image(systemName: "person.crop.circle.badge.checkmark")
+                Image(systemName: "at.circle.fill")
                     .font(.system(size: 40, weight: .medium))
                     .foregroundStyle(AppColors.accent)
 
                 VStack(spacing: AppSpacing.sm) {
-                    Text("What should we call you?")
+                    Text("Pick your username")
                         .appText(.title)
                         .foregroundStyle(AppColors.text)
                         .multilineTextAlignment(.center)
 
-                    Text("Your name is what your friends see. Your username is how they find you, and what shows on the global leaderboard. You can change both any time.")
+                    Text("It's how friends find you and your name everywhere in Hour Tracker. You can change it any time.")
                         .appText(.subheadline)
                         .foregroundStyle(AppColors.subtext)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-
-                TextField("Your name", text: $nameDraft)
-                    .font(.system(.title3, design: .rounded, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                    .multilineTextAlignment(.center)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-                    .submitLabel(.done)
-                    .focused($nameFieldFocused)
-                    .onSubmit { saveNameAndFinish() }
-                    .padding(.horizontal, AppSpacing.lg)
-                    .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                            .fill(AppColors.card2.opacity(0.6))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                                    .stroke(AppColors.stroke.opacity(0.5), lineWidth: 1)
-                            )
-                    )
 
                 HStack(spacing: 2) {
                     Spacer(minLength: 0)
@@ -326,7 +301,7 @@ struct OnboardingView: View {
                         .keyboardType(.asciiCapable)
                         .submitLabel(.done)
                         .focused($usernameFieldFocused)
-                        .onSubmit { saveNameAndFinish() }
+                        .onSubmit { saveUsernameAndContinue() }
                         .onChange(of: usernameDraft) { _, _ in
                             // Never rewritten while typing (any rewrite drops
                             // keystrokes under fast input); Continue validates
@@ -346,7 +321,7 @@ struct OnboardingView: View {
                         )
                 )
                 // The centered field only spans its text; the whole box
-                // should focus it, like the full-width name field above.
+                // should focus it.
                 .contentShape(Rectangle())
                 .onTapGesture { usernameFieldFocused = true }
 
@@ -358,52 +333,33 @@ struct OnboardingView: View {
                 }
 
                 Button("Continue") {
-                    saveNameAndFinish()
+                    saveUsernameAndContinue()
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(trimmedNameDraft.isEmpty || usernameDraft.isEmpty)
-                .opacity(trimmedNameDraft.isEmpty || usernameDraft.isEmpty ? 0.6 : 1)
+                .disabled(usernameDraft.isEmpty)
+                .opacity(usernameDraft.isEmpty ? 0.6 : 1)
             }
             .padding(.horizontal, AppSpacing.xl)
 
             Spacer(minLength: 0)
         }
-        .onChange(of: nameDraft) { _, _ in nameValidationMessage = nil }
     }
 
     private var canonicalUsernameDraft: String { Username.normalize(usernameDraft) }
 
-    private var trimmedNameDraft: String {
-        String(nameDraft.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
-    }
-
-    /// Seeds the field with whatever sign-in captured from the provider, so
-    /// most users just confirm their own name. The "Worker" placeholder the
-    /// auth path falls back to is not worth confirming — it seeds empty.
-    private func prefillNameDraft() {
-        guard nameDraft.isEmpty else { return }
-        let stored = UserDefaults.standard.string(forKey: "profile_display_name") ?? ""
-        nameDraft = stored == "Worker" ? "" : stored
-    }
-
-    private func saveNameAndFinish() {
-        let name = trimmedNameDraft
-        guard !name.isEmpty else { return }
-        guard BroadContentFilter.shared.validate(name).isAllowed else {
-            nameValidationMessage = BroadContentFilter.blockedNameMessage
-            Haptics.error()
-            return
-        }
-        if let problem = Username.problem(with: canonicalUsernameDraft) {
+    private func saveUsernameAndContinue() {
+        let username = canonicalUsernameDraft
+        if let problem = Username.problem(with: username) {
             nameValidationMessage = problem
             Haptics.error()
             return
         }
-        // Stored locally only — there is no account yet at this point in the
-        // flow. `finishOnboarding` reasserts the name and claims the username
-        // once auth completes (uniqueness can only be checked signed in).
-        UserDefaults.standard.set(name, forKey: "profile_display_name")
-        UserDefaults.standard.set(canonicalUsernameDraft, forKey: "pending_username")
+        // The username IS the name: it's what friends, the leaderboard and
+        // every other surface show. Stored locally only — there is no account
+        // yet at this point in the flow; `finishOnboarding` claims it once
+        // auth completes (uniqueness can only be checked signed in).
+        UserDefaults.standard.set(username, forKey: "profile_display_name")
+        UserDefaults.standard.set(username, forKey: "pending_username")
         Haptics.success()
         withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
             page = payPageIndex
@@ -672,12 +628,12 @@ struct OnboardingView: View {
     // MARK: - Completion (same semantics as the old finishTutorial)
 
     private func finishOnboarding() {
-        // Sign-in runs last, and the auth paths set `profile_display_name`
-        // from the provider account — which would silently discard the name
-        // the user chose two screens earlier. Reassert it here, and push it so
-        // the first thing the server publishes is the chosen name.
-        let chosen = String(nameDraft.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
-        if !chosen.isEmpty, BroadContentFilter.shared.validate(chosen).isAllowed {
+        // Sign-in runs last, and the auth path may set `profile_display_name`
+        // from the cloud — which would discard the username the user chose
+        // two screens earlier. Reassert it here, and push it so the first
+        // thing the server publishes is the chosen handle.
+        let chosen = UserDefaults.standard.string(forKey: "pending_username") ?? ""
+        if !chosen.isEmpty, Username.problem(with: chosen) == nil {
             UserDefaults.standard.set(chosen, forKey: "profile_display_name")
             if let user = authService.user {
                 Task {

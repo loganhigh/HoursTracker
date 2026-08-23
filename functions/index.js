@@ -2573,12 +2573,15 @@ exports.claimUsername = onCall(
         if (prevSnap.exists && prevSnap.data()?.uid === uid) tx.delete(prevRef);
       }
       tx.set(newRef, { uid, createdAt: FieldValue.serverTimestamp() });
+      // The username is the only name: it is also the displayName every
+      // other surface (friends, pushes, leaderboards) reads.
       tx.set(userRef, {
         username,
+        displayName: username,
         usernameChangedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
-      tx.set(db.collection("publicProfiles").doc(uid), { username }, { merge: true });
+      tx.set(db.collection("publicProfiles").doc(uid), { username, displayName: username }, { merge: true });
     });
 
     return { username };

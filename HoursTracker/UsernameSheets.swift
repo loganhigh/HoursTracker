@@ -37,7 +37,7 @@ struct UsernameSheet: View {
                         .appText(.title)
                         .foregroundStyle(AppColors.text)
                         .multilineTextAlignment(.center)
-                    Text("Friends add you by your username. It's shown on the global leaderboard; your friends see your name.")
+                    Text("It's how friends find you and your name everywhere in Hour Tracker.")
                         .appText(.subheadline)
                         .foregroundStyle(AppColors.subtext)
                         .multilineTextAlignment(.center)

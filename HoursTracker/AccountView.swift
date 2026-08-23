@@ -21,7 +21,6 @@ struct AccountView: View {
     @AppStorage("profile_display_name") private var storedDisplayName: String = ""
 
     @State private var showingSettings = false
-    @State private var showingNameEditor = false
     @State private var showingUsernameEditor = false
     @ObservedObject private var friendsService = FriendsService.shared
     @State private var showingDeleteAccountConfirm = false
@@ -43,12 +42,13 @@ struct AccountView: View {
 
     // MARK: - Identity data
 
+    /// The username is the only name. Falls back to the locally stored name
+    /// (which is the handle once claimed) and finally a prompt to choose one.
     private var displayName: String {
+        if let username = friendsService.myUsername { return username }
         let trimmed = storedDisplayName.trimmingCharacters(in: .whitespaces)
-        if !trimmed.isEmpty { return trimmed }
-        let fbName = authService.user?.displayName?.trimmingCharacters(in: .whitespaces)
-        if let fbName, !fbName.isEmpty { return fbName }
-        return "Guest"
+        if !trimmed.isEmpty, trimmed != "Worker" { return trimmed }
+        return "Choose a username"
     }
 
     private var equippedTitle: String {
@@ -137,10 +137,6 @@ struct AccountView: View {
                 accountName: displayName,
                 accountUid: authService.user?.uid
             )
-        }
-        .sheet(isPresented: $showingNameEditor) {
-            DisplayNameEditorSheet(store: store)
-                .presentationDetents([.medium])
         }
         .sheet(isPresented: $showingUsernameEditor) {
             UsernameSheet(
@@ -272,12 +268,12 @@ struct AccountView: View {
 
             Button {
                 Haptics.lightTap()
-                showingNameEditor = true
+                showingUsernameEditor = true
             } label: {
                 HStack(spacing: 6) {
                     Text(displayName)
                         .appText(.title)
-                        .foregroundStyle(AppColors.text)
+                        .foregroundStyle(friendsService.myUsername == nil ? AppColors.accent : AppColors.text)
                         .multilineTextAlignment(.center)
                     // Own profile earns the badge on the same rule as every
                     // other surface. Shimmering here: one badge on screen.
@@ -293,27 +289,7 @@ struct AccountView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Edit display name")
-
-            // The handle friends add you by, right under the name it belongs
-            // to. Tapping opens the same sheet that claims or changes it.
-            Button {
-                Haptics.lightTap()
-                showingUsernameEditor = true
-            } label: {
-                HStack(spacing: 4) {
-                    Text(friendsService.myUsername.map { Username.display($0) } ?? "Choose a username")
-                        .appText(.subheadline)
-                        .foregroundStyle(friendsService.myUsername == nil ? AppColors.accent : AppColors.subtext)
-                    Image(systemName: "pencil")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(AppColors.faint)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
             .accessibilityLabel("Edit username")
-            .padding(.top, 2)
 
             // The prestige ranks chart's only reliable way in. Home's copy of
             // this row sits inside the hero card's NavigationLink, which
