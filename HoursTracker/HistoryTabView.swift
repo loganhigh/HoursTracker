@@ -111,18 +111,14 @@ struct HistoryTabView: View {
         return (currency(recorded), AppColors.positive)
     }
 
-    /// The live cheque's projection, once at least two totals exist. The
-    /// amount rides AnimatedMetricText so it rolls when hours change.
+    /// Projection for any cheque the user hasn't recorded a total for yet —
+    /// the live one AND a closed one still waiting on payday. It stays on
+    /// the row until they type in what it actually paid. The amount rides
+    /// AnimatedMetricText so it rolls when hours change.
     private func projection(for row: ChequeRow) -> (amount: Double, currencyCode: String, caption: String)? {
-        guard row.isCurrent, store.actualPayout(for: row.cycle) == nil else { return nil }
-        guard let prediction = currentPrediction() else { return nil }
+        guard store.actualPayout(for: row.cycle) == nil else { return nil }
+        guard let prediction = store.chequeProjection(for: row.cycle) else { return nil }
         return (prediction.amount, store.paySettings.currencyCode, prediction.confidence.label)
-    }
-
-    /// Projection for the live cheque — shared with Home's hero card, so the
-    /// two can never disagree. Lives on HoursStore.
-    private func currentPrediction() -> AdvancedPayPredictor.Prediction? {
-        store.currentChequeProjection()
     }
 
     private func currency(_ amount: Double) -> String {

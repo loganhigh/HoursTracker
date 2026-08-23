@@ -295,6 +295,26 @@ struct AccountView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Edit display name")
 
+            // The handle friends add you by, right under the name it belongs
+            // to. Tapping opens the same sheet that claims or changes it.
+            Button {
+                Haptics.lightTap()
+                showingUsernameEditor = true
+            } label: {
+                HStack(spacing: 4) {
+                    Text(friendsService.myUsername.map { Username.display($0) } ?? "Choose a username")
+                        .appText(.subheadline)
+                        .foregroundStyle(friendsService.myUsername == nil ? AppColors.accent : AppColors.subtext)
+                    Image(systemName: "pencil")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppColors.faint)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Edit username")
+            .padding(.top, 2)
+
             // The prestige ranks chart's only reliable way in. Home's copy of
             // this row sits inside the hero card's NavigationLink, which
             // swallows the tap and pushes the pay cycle instead — and it is
@@ -433,22 +453,6 @@ struct AccountView: View {
                         tint: AppColors.positive,
                         showsChevron: false
                     )
-
-                    AccountRowHairline()
-
-                    // The handle friends add you by. The name at the top is
-                    // what friends see; this is what the global board shows.
-                    Button {
-                        Haptics.lightTap()
-                        showingUsernameEditor = true
-                    } label: {
-                        AccountNavRow(
-                            icon: "at",
-                            title: "Username",
-                            subtitle: friendsService.myUsername.map { Username.display($0) } ?? "Choose a username"
-                        )
-                    }
-                    .buttonStyle(PremiumPressStyle())
 
                     AccountRowHairline()
 

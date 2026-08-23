@@ -1896,8 +1896,15 @@ final class HoursStore: ObservableObject {
     /// card. Walks back from the current cycle to the period holding the
     /// earliest entry (same bound as History's list).
     func currentChequeProjection() -> AdvancedPayPredictor.Prediction? {
+        chequeProjection(for: currentPayCycle())
+    }
+
+    /// Projection for `cycle` from every EARLIER period with a recorded total.
+    /// History uses this for a cheque that has closed but not been paid or
+    /// recorded yet — the projection used to vanish the moment the next
+    /// cheque started, exactly when the user wants to see what's coming.
+    func chequeProjection(for current: PayCycle) -> AdvancedPayPredictor.Prediction? {
         guard !actualPayouts.isEmpty, let earliest = entries.map(\.date).min() else { return nil }
-        let current = currentPayCycle()
         func hours(in cycle: PayCycle) -> Double {
             PayCycleEngine.entries(entries, in: cycle)
                 .filter { !$0.isOffDay }
