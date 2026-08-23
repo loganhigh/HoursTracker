@@ -8,112 +8,101 @@ import SwiftUI
 
 // MARK: - Today Hero (the ONE hero card on Home)
 
+/// Today's date with the local weather beneath it. Cheque hours moved into
+/// the stat triplet below, the pay projection lives in History, and prestige
+/// lives on the You tab — so this card is purely "what's today like".
 struct TodayHeroCard: View {
     @ObservedObject var store: HoursStore
-    let onPrestigeTap: () -> Void
+    @ObservedObject private var weather = WeatherService.shared
+    @Environment(\.openURL) private var openURL
 
     private static let todayFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = "EEE, MMM d"
+        f.dateFormat = "EEEE, MMMM d"
         return f
     }()
 
-    private var cycle: PayCycle { store.currentPayCycle() }
-
-    private var cycleEntries: [WorkEntry] {
-        PayCycleEngine.entries(store.entries, in: cycle)
-    }
-
-    private var chequeHours: Double {
-        cycleEntries.reduce(0) { $0 + $1.paidHours }
-    }
-
-    private var chequePay: Double {
-        cycleEntries.reduce(0) { $0 + store.payBreakdown(for: $1).pay }
-    }
-
     var body: some View {
-        NavigationLink {
-            PayCycleDetailView(store: store, initialCycle: cycle)
-        } label: {
-            VStack(spacing: AppSpacing.md) {
-                SectionEyebrow("Today", subtitle: Self.todayFormatter.string(from: Date()))
+        VStack(spacing: AppSpacing.sm) {
+            SectionEyebrow("Today")
 
-                // The cheque line carries the card now (the old today-hours
-                // hero numeral spent most days reading "0h"), with the
-                // learned pay projection beneath it once cheque totals exist.
-                VStack(spacing: AppSpacing.xs) {
-                    chequeLine
-
-                    if let projection = store.currentChequeProjection() {
-                        HStack(spacing: 4) {
-                            Text("Projected pay")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(AppColors.subtext)
-                            Text("~")
-                                .font(.system(size: 13, weight: .bold, design: .rounded))
-                                .foregroundStyle(AppColors.accent)
-                            AnimatedMetricText(currency: projection.amount, code: store.paySettings.currencyCode)
-                                .font(.system(size: 13, weight: .bold, design: .rounded))
-                                .monospacedDigit()
-                                .foregroundStyle(AppColors.accent)
-                        }
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    }
-                }
-
-                // Rank is earned chrome — an "Unranked" shield is just noise.
-                if store.displayedGamificationProfile().prestige > 0 {
-                    prestigeRow
-                }
-            }
-            .padding(AppSpacing.lg)
-            .background(heroBackground)
-            .overlay(heroStroke)
-            .appShadowHero()
-        }
-        .buttonStyle(PremiumPressStyle())
-        .id(cycle)
-    }
-
-    // One compact secondary line: "10h this cheque · Aug 2 – Aug 15", with
-    // the pay amount appended when pay display is on ("· $350").
-    private var chequeLine: some View {
-        HStack(spacing: 4) {
-            AnimatedMetricText(value: chequeHours) { AppTheme.Format.hours($0) }
-                .font(.system(size: 17, weight: .bold, design: .rounded))
-                .monospacedDigit()
+            Text(Self.todayFormatter.string(from: Date()))
+                .font(.system(size: 22, weight: .heavy, design: .rounded))
                 .foregroundStyle(AppColors.text)
-            Text("this cheque · \(cycle.workRangeText())")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(AppColors.subtext)
-            if store.paySettings.showPayCalculations {
-                Text("·")
-                    .appText(.caption)
-                    .foregroundStyle(AppColors.subtext)
-                AnimatedMetricText(currency: chequePay, code: store.paySettings.currencyCode)
-                    .appText(.caption)
-                    .foregroundStyle(AppColors.subtext)
-            }
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            weatherRow
         }
-        .lineLimit(1)
-        .minimumScaleFactor(0.65)
+        .padding(AppSpacing.lg)
+        .frame(maxWidth: .infinity)
+        .background(heroBackground)
+        .overlay(heroStroke)
+        .appShadowHero()
+        .onAppear { weather.refreshIfNeeded() }
     }
 
-    private var prestigeRow: some View {
-        let profile = store.displayedGamificationProfile()
-        let tier = PrestigeTheme.tier(for: profile.prestige)
-        return Button(action: onPrestigeTap) {
-            Label(
-                profile.prestige == 0 ? "Unranked" : "Prestige \(profile.prestige) (\(tier.name))",
-                systemImage: tier.icon
-            )
-            .appText(.caption)
-            .foregroundStyle(profile.prestige == 0 ? AppColors.subtext : tier.primary)
-            .frame(maxWidth: .infinity)
+    @ViewBuilder
+    private var weatherRow: some View {
+        switch weather.status {
+        case .loaded where weather.snapshot != nil:
+            let snapshot = weather.snapshot!
+            HStack(spacing: 6) {
+                Image(systemName: snapshot.symbolName)
+                    .symbolRenderingMode(.multicolor)
+                    .font(.system(size: 16, weight: .semibold))
+                Text(snapshot.temperatureText)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(AppColors.text)
+                Text(snapshot.locality.isEmpty
+                     ? snapshot.conditionText
+                     : "\(snapshot.conditionText) · \(snapshot.locality)")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .accessibilityElement(children: .combine)
+
+        case .loading, .loaded:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Checking the weather…")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+            }
+
+        case .needsPermission:
+            // Permission is asked for on the tap, not on launch — nobody
+            // opens an hours app expecting a location prompt.
+            Button { weather.requestPermission() } label: {
+                Label("Tap to show local weather", systemImage: "location.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppColors.accent)
+            }
+            .buttonStyle(.plain)
+
+        case .denied:
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+            } label: {
+                Label("Allow location in Settings for weather", systemImage: "location.slash")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .buttonStyle(.plain)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+
+        case .failed:
+            Button { weather.refreshIfNeeded(force: true) } label: {
+                Label("Weather unavailable — tap to retry", systemImage: "arrow.clockwise")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 
     private var heroBackground: some View {
@@ -286,7 +275,7 @@ struct HomeXPStrip: View {
     }
 }
 
-// MARK: - Stat Triplet (Week / Cheque / Month, with week progress)
+// MARK: - Stat Triplet (Week / Cheque / Month)
 
 struct HomeStatTriplet: View {
     @ObservedObject var store: HoursStore
@@ -304,16 +293,13 @@ struct HomeStatTriplet: View {
 
     private var weekHours: Double { hoursInWeek(containing: Date()) }
 
-    // MARK: Cheque days
+    // MARK: Cheque hours
 
-    /// Distinct calendar days with a worked (non-off-day) entry in the live
-    /// pay period — two shifts on one day count once.
-    private var chequeDaysWorked: Int {
-        let cal = Calendar.current
-        let days = PayCycleEngine.entries(store.entries, in: store.currentPayCycle())
-            .filter { !$0.isOffDay }
-            .map { cal.startOfDay(for: $0.date) }
-        return Set(days).count
+    /// Paid hours in the live pay period — the number the Today card used to
+    /// lead with.
+    private var chequeHours: Double {
+        PayCycleEngine.entries(store.entries, in: store.currentPayCycle())
+            .reduce(0) { $0 + $1.paidHours }
     }
 
     // MARK: Month sums
@@ -323,10 +309,7 @@ struct HomeStatTriplet: View {
     var body: some View {
         HStack(spacing: AppSpacing.xs + 2) {
             HomeStatTile(label: "This Week", value: AppTheme.Format.hours(weekHours))
-            // Hours this cheque already lead the hero card directly above —
-            // repeating them here said nothing new. Days worked answers the
-            // other question a pay period raises.
-            HomeStatTile(label: "Days Worked", value: "\(chequeDaysWorked)")
+            HomeStatTile(label: "This Cheque", value: AppTheme.Format.hours(chequeHours))
             HomeStatTile(label: "This Month", value: AppTheme.Format.hours(monthHours))
         }
     }

@@ -4,6 +4,8 @@
 <dict>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Used to show today's local weather on the Home screen.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

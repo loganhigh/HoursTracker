@@ -330,7 +330,6 @@ struct HoursHomeView: View {
     @State private var holidayBurst = 0
     @StateObject private var badgeUnlockTracker = BadgeUnlockTracker()
     @State private var badgeUnlockPresentation: BadgeUnlockPresentation?
-    @State private var showingPrestigeInfoFromHeroCard = false
     @State private var showingAdminPanel = false
 
     private struct BadgeUnlockPresentation: Identifiable {
@@ -548,10 +547,8 @@ struct HoursHomeView: View {
                 progressionCard
                     .cardAppear(index: 0)
 
-                TodayHeroCard(store: store) {
-                    showingPrestigeInfoFromHeroCard = true
-                }
-                .cardAppear(index: 1)
+                TodayHeroCard(store: store)
+                    .cardAppear(index: 1)
 
                 HomeStatTriplet(store: store)
                     .cardAppear(index: 2)
@@ -742,9 +739,6 @@ struct HoursHomeView: View {
                 accountName: UserDefaults.standard.string(forKey: "profile_display_name") ?? "",
                 accountUid: authService.user?.uid
             )
-        }
-        .sheet(isPresented: $showingPrestigeInfoFromHeroCard) {
-            PrestigeInfoSheet(currentPrestige: store.displayedGamificationProfile().prestige)
         }
         .fullScreenCover(isPresented: $showingPrestigeConfetti) {
             PrestigeCelebrationView(
