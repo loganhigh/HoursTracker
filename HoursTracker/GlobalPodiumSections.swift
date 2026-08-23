@@ -17,8 +17,6 @@ struct GlobalPodiumRow: View {
     /// Live rank deltas from the latest reorder — podium slots show the same
     /// transient chip the list rows do.
     var movements: [String: Int] = [:]
-    /// Opens the tracker's peek sheet; podium slots tap like list rows do.
-    var onTap: ((TopTracker) -> Void)? = nil
 
     private var podium: [TopTracker] { Array(entries.prefix(3)) }
 
@@ -119,12 +117,6 @@ struct GlobalPodiumRow: View {
             .overlay(alignment: .topLeading) {
                 rankBadge(entry.rank, metal: metal)
                     .offset(x: -4, y: isWinner ? -12 : -10)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                guard let onTap else { return }
-                Haptics.lightTap()
-                onTap(entry)
             }
         } else {
             // Keeps the three columns evenly spaced with fewer than 3 trackers.
@@ -246,10 +238,14 @@ struct GlobalTrackerRow: View {
                 }
 
                 if !tracker.detailLine.isEmpty {
+                    // A long job title shrinks rather than getting cut off
+                    // mid-word — "Heavy Equipment Operator" still reads whole.
                     Text(tracker.detailLine)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.faint)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .allowsTightening(true)
                 }
             }
 
