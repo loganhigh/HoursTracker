@@ -271,7 +271,9 @@ struct AccountView: View {
                 showingUsernameEditor = true
             } label: {
                 HStack(spacing: 6) {
-                    Text(displayName)
+                    // Shown as a handle ("@logan") once claimed; the prompt
+                    // and any legacy name stay bare.
+                    Text(friendsService.myUsername.map(Username.display) ?? displayName)
                         .appText(.title)
                         .foregroundStyle(friendsService.myUsername == nil ? AppColors.accent : AppColors.text)
                         .multilineTextAlignment(.center)
