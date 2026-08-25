@@ -55,6 +55,11 @@ struct AddShiftWizardView: View {
 
     @State private var expandedField: ExpandableField?
 
+    /// "Split at midnight" — remembered across shifts since night workers
+    /// need it every time. Only consulted when the times actually cross
+    /// midnight, so it's inert for day shifts.
+    @AppStorage("split_overnight_at_midnight") private var splitOvernightAtMidnight = false
+
     @State private var showToast = false
     @State private var toastMessage = ""
     @State private var showSaveSuccess = false
@@ -267,6 +272,10 @@ struct AddShiftWizardView: View {
             AddShiftTotalTimePanel(hours: paidHours, caption: totalCaption)
         }
 
+        if shiftKind == .work && isOvernight {
+            splitAtMidnightToggle
+        }
+
         // Sits in the content flow right under Total Time rather than in a
         // pinned footer bar, and carries no panel or card behind it.
         Button("Continue") { advance() }
@@ -452,12 +461,49 @@ struct AddShiftWizardView: View {
     private var totalCaption: String {
         let s = start.formatted(date: .omitted, time: .shortened)
         let e = end.formatted(date: .omitted, time: .shortened)
-        let span = isOvernight ? "\(s) – \(e) +1" : "\(s) – \(e)"
+        var span = isOvernight ? "\(s) – \(e) +1" : "\(s) – \(e)"
+        if willSplitAtMidnight { span += " · splits at 12 AM" }
         return breakMinutes > 0 ? "\(span) · \(breakMinutes)m break" : span
     }
 
     private var isOvernight: Bool {
         end.timeIntervalSince(start) < 0
+    }
+
+    /// Shown only for overnight work shifts. When on, saving creates two
+    /// entries split at midnight so each day's pay rules (weekend premiums,
+    /// per-day overtime) apply to the hours actually worked on that day.
+    private var splitAtMidnightToggle: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: $splitOvernightAtMidnight) {
+                HStack(spacing: 8) {
+                    Image(systemName: "moon.haze.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.accent)
+                    Text("Split at midnight")
+                        .appText(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(AppColors.text)
+                }
+            }
+            .tint(AppColors.accent)
+
+            Text(splitOvernightAtMidnight
+                 ? "Saves as two shifts — hours after midnight count on the next day's rates."
+                 : "Off: the whole shift counts on \(date.formatted(.dateTime.weekday(.wide)))'s rates.")
+                .appText(.caption)
+                .foregroundStyle(AppColors.subtext)
+        }
+        .padding(AppSpacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                .fill(AppColors.card)
+        )
+    }
+
+    /// Whether this save will actually produce two entries.
+    private var willSplitAtMidnight: Bool {
+        shiftKind == .work && isOvernight && splitOvernightAtMidnight
     }
 
     // MARK: - Navigation
@@ -563,6 +609,26 @@ struct AddShiftWizardView: View {
         case .holiday: reason = EntryEditorView.holidayReason
         }
 
+        // Split-at-midnight: an overnight work shift becomes two entries so
+        // each day's pay rules apply to the hours actually worked on it.
+        // Falls through to the single-entry path if the split comes back nil
+        // (e.g. the shift ends exactly at midnight — nothing to split).
+        if willSplitAtMidnight,
+           let portions = OvernightSplit.split(date: date, start: s, end: e, breakMinutes: br) {
+            let sharedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            let sharedLocation = locationLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+            for portion in [portions.first, portions.second] {
+                var entry = WorkEntry(date: portion.date, start: portion.start, end: portion.end,
+                                      breakMinutes: portion.breakMinutes, notes: sharedNotes,
+                                      isOffDay: false, offDayReason: "", isHoliday: false)
+                entry.locationName = sharedLocation
+                attachWeatherIfToday(to: &entry)
+                withAnimation(AppMotion.Spring.smooth) { store.add(entry) }
+            }
+            finishSave()
+            return
+        }
+
         var entry = WorkEntry(date: date, start: s, end: e, breakMinutes: br,
                               notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
                               isOffDay: isOffKind, offDayReason: reason, isHoliday: false)
@@ -572,18 +638,30 @@ struct AddShiftWizardView: View {
         entry.longitude = nil
         // Only attach weather for same-day work shifts — a cached "now"
         // reading has no bearing on a backdated or off-day entry.
-        if !isOffKind, cal.isDateInToday(date), let snapshot = WeatherService.shared.snapshot {
-            entry.weather = snapshot
-            let entryId = entry.id
-            Task {
-                let highSnapshot = await WeatherService.shared.dailyHighSnapshot(for: snapshot)
-                guard var stored = store.entries.first(where: { $0.id == entryId }) else { return }
-                stored.weather = highSnapshot
-                store.update(stored)
-            }
+        if !isOffKind {
+            attachWeatherIfToday(to: &entry)
         }
         withAnimation(AppMotion.Spring.smooth) { store.add(entry) }
+        finishSave()
+    }
 
+    /// Attaches the cached weather snapshot when the entry is dated today,
+    /// then upgrades it to the day's forecast high in the background. Shared
+    /// by the single-entry and split-at-midnight save paths.
+    private func attachWeatherIfToday(to entry: inout WorkEntry) {
+        let cal = Calendar.current
+        guard cal.isDateInToday(entry.date), let snapshot = WeatherService.shared.snapshot else { return }
+        entry.weather = snapshot
+        let entryId = entry.id
+        Task {
+            let highSnapshot = await WeatherService.shared.dailyHighSnapshot(for: snapshot)
+            guard var stored = store.entries.first(where: { $0.id == entryId }) else { return }
+            stored.weather = highSnapshot
+            store.update(stored)
+        }
+    }
+
+    private func finishSave() {
         Haptics.success()
         showSaveSuccess = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
