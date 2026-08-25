@@ -2347,6 +2347,17 @@ exports.adminResolveVerifiedProof = onCall(
         .set({ hasReviewedApp: true }, { merge: true });
       await db.collection("publicProfiles").doc(targetUid)
         .set({ hasReviewedApp: true }, { merge: true });
+
+      try {
+        const targetSnap = await db.collection("users").doc(targetUid).get();
+        await sendPushToUser(targetUid, targetSnap.data() || {}, {
+          title: "Verified",
+          body: "Your verified checkmark is active! Thank you",
+          dataPayload: { type: "verified_approved" },
+        });
+      } catch (err) {
+        console.warn(`verified-approval push uid=${targetUid} failed:`, err?.message || err);
+      }
     }
     await db.collection("verifiedInbox").doc(targetUid).set({
       status: approve ? "approved" : "rejected",
