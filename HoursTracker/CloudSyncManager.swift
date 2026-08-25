@@ -1882,6 +1882,11 @@ private struct ProfileSnapshotInputs {
             "acceptInvites": acceptInvites,
             // friendShiftAlerts is deliberately NOT here: see uploadToken.
             "clientSyncBuild": "repair-diagnostics-v4",
+            // Which release this device is running — refreshed on every
+            // profile publish (app open / sign-in), so the admin console can
+            // see version adoption per user and in aggregate.
+            "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+            "appBuild": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
             "updatedAt": FieldValue.serverTimestamp(),
             "lookupEmail": FieldValue.delete(),
             "profileHoursDebug": FieldValue.delete()

@@ -936,6 +936,11 @@ function buildAdminUserRow(uid, userData, profileData, authData, presenceData) {
       rankTitle(Number(p.level) || Number(u.level) || 1, Number(p.prestige) || Number(u.prestige) || 0),
     countryCode: String(u.countryCode || p.countryCode || "").trim().toUpperCase(),
     hasReviewedApp: p.hasReviewedApp === true || u.hasReviewedApp === true,
+    // Which release the user's device last published from (client-stamped on
+    // every profile snapshot). Empty for users who haven't opened a build
+    // that writes it yet.
+    appVersion: String(u.appVersion || ""),
+    appBuild: String(u.appBuild || ""),
     // Engagement fields, straight off the server-computed profile — the
     // admin list and analytics sort/score on these without extra reads.
     weeklyHours: Number(p.weeklyHours) || 0,

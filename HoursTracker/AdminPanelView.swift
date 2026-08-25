@@ -38,8 +38,18 @@ struct AdminUser: Identifiable, Equatable {
     var monthHours: Double = 0
     var photoURL: String?
     var lastShiftAt: Date?
+    /// Release the user's device last published from (e.g. "3.0"). Empty for
+    /// users who haven't opened a build that stamps it.
+    var appVersion: String = ""
+    var appBuild: String = ""
 
     var id: String { uid }
+
+    /// "3.0 (30)" / "3.0" / "—".
+    var appVersionDisplay: String {
+        guard !appVersion.isEmpty else { return "—" }
+        return appBuild.isEmpty ? appVersion : "\(appVersion) (\(appBuild))"
+    }
 
     var hasFloor: Bool { (adminFloorLevel ?? 0) > 0 || (adminFloorPrestige ?? 0) > 0 }
     var hasAdminTitle: Bool { !adminEquippedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -221,7 +231,7 @@ struct AdminPanelView: View {
 
                     Section {
                         if let analytics {
-                            AdminOverviewRow(stats: analytics.overview)
+                            AdminOverviewRow(stats: analytics.overview, versionStat: latestVersionStat)
                                 .listRowBackground(Color.clear)
                                 .listRowInsets(EdgeInsets())
                         } else {
@@ -438,6 +448,31 @@ struct AdminPanelView: View {
         }
     }
 
+    /// "How many users are on the newest release" — computed from the loaded
+    /// user list, not the analytics callable, so it needs no server change to
+    /// stay current. Latest = highest version any user has reported; users
+    /// whose builds predate version stamping (empty appVersion) count toward
+    /// the denominator but can never be "latest".
+    private var latestVersionStat: (version: String, onLatest: Int, total: Int)? {
+        let versions = users.map(\.appVersion).filter { !$0.isEmpty }
+        guard let latest = versions.max(by: { Self.versionIsOrderedBefore($0, $1) }) else { return nil }
+        let onLatest = versions.filter { $0 == latest }.count
+        return (latest, onLatest, users.count)
+    }
+
+    /// Numeric-aware version compare: "3.0" > "2.10" > "2.9" (a plain string
+    /// sort would put 2.9 above 2.10).
+    static func versionIsOrderedBefore(_ a: String, _ b: String) -> Bool {
+        let aParts = a.split(separator: ".").map { Int($0) ?? 0 }
+        let bParts = b.split(separator: ".").map { Int($0) ?? 0 }
+        for i in 0..<max(aParts.count, bParts.count) {
+            let x = i < aParts.count ? aParts[i] : 0
+            let y = i < bParts.count ? bParts[i] : 0
+            if x != y { return x < y }
+        }
+        return false
+    }
+
     private func loadAnalytics() async {
         do {
             let result = try await functions.httpsCallable("adminAnalytics").call(["passcode": passcode])
@@ -647,6 +682,8 @@ private extension AdminUser {
         user.monthHours = double("monthHours")
         user.photoURL = dict["photoURL"] as? String
         user.lastShiftAt = date("lastShiftMs")
+        user.appVersion = dict["appVersion"] as? String ?? ""
+        user.appBuild = dict["appBuild"] as? String ?? ""
         return user
     }
 }
@@ -781,6 +818,13 @@ private struct AdminEditUserSheet: View {
                     copyRow("Friend code", user.friendCodeDisplay, copyable: !user.friendCode.isEmpty)
                     copyRow("Email", user.email.isEmpty ? "—" : user.email, copyable: !user.email.isEmpty)
                     copyRow("Real name", user.authName.isEmpty ? "—" : user.authName, copyable: !user.authName.isEmpty)
+                    HStack {
+                        Text("App version")
+                        Spacer()
+                        Text(user.appVersionDisplay)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
                     copyRow("UID", user.uid, copyable: !user.uid.isEmpty)
                     HStack {
                         Text("Signed up")

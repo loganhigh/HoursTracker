@@ -195,11 +195,18 @@ enum AdminFormat {
 /// analytics never crowd the user list they sit above.
 struct AdminOverviewRow: View {
     let stats: AdminOverviewStats
+    /// Version-adoption chip, computed client-side from the loaded user list
+    /// (see AdminPanelView.latestVersionStat). nil until users have loaded or
+    /// when no user has reported a version yet.
+    var versionStat: (version: String, onLatest: Int, total: Int)? = nil
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 chip("\(stats.totalUsers)", "Users")
+                if let versionStat {
+                    chip("\(versionStat.onLatest)/\(versionStat.total)", "On v\(versionStat.version)")
+                }
                 chip("\(stats.activeToday)", "Active Today")
                 chip("\(stats.active7d)", "Active 7D")
                 chip("\(stats.active30d)", "Active 30D")
