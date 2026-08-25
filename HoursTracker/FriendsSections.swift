@@ -47,6 +47,27 @@ struct UsernameCard: View {
                     Text(copyConfirmation ? "Copied to clipboard" : "Share it so friends can add you")
                         .appText(.caption)
                         .foregroundStyle(copyConfirmation ? AppColors.positive : AppColors.subtext)
+
+                    if let url = FriendsService.inviteURL(username: username) {
+                        ShareLink(
+                            item: url,
+                            subject: Text("Add me on Hour Tracker"),
+                            message: Text("Add me on Hour Tracker!"),
+                            preview: SharePreview(
+                                "Add me on Hour Tracker!",
+                                image: Image("ShareInviteIcon")
+                            )
+                        ) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "message.fill")
+                                Text("Invite via iMessage")
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(AppColors.accent)
+                        .padding(.top, 4)
+                    }
                 } else {
                     Button(action: onSetUsername) {
                         HStack(spacing: AppSpacing.xs) {

@@ -37,8 +37,18 @@ struct AccountView: View {
     @State private var showingPhotoViewer = false
     @State private var showingPhotoPicker = false
     @State private var showingPrestigeInfo = false
+    /// The most recent completed year worth watching, resolved when the You
+    /// tab appears. nil when no year clears the data bar.
+    @State private var wrappedStats: WrappedYearStats?
+    @State private var showingWrapped = false
     @State private var showingVerifiedProofSheet = false
     @ObservedObject private var photoManager = ProfilePhotoManager.shared
+    #if DEBUG
+    /// Temporary Stage-2 entry point for testing Wrapped. Not a real
+    /// product surface — remove once Wrapped has a real launch point.
+    @State private var debugWrappedStats: WrappedYearStats?
+    @State private var forceWrappedSeason = UserDefaults.standard.bool(forKey: WrappedAvailability.debugForceSeasonKey)
+    #endif
 
     // MARK: - Identity data
 
@@ -104,6 +114,9 @@ struct AccountView: View {
                     .cardAppear(index: 4, group: "you")
                 accountSection
                     .cardAppear(index: 5, group: "you")
+                #if DEBUG
+                wrappedDebugSection
+                #endif
                 // Note + version as one tight, centred footer group — the
                 // review line belongs to the version it sits over.
                 VStack(spacing: 2) {
@@ -157,7 +170,13 @@ struct AccountView: View {
                 )
             }
         }
+        .fullScreenCover(isPresented: $showingWrapped) {
+            if let wrappedStats {
+                WrappedView(stats: wrappedStats, username: friendsService.myUsername)
+            }
+        }
         .onAppear {
+            resolveWrappedYear()
             // Same recovery hook as CareerView: guarantees the server-stats
             // listeners are attached whenever a level-displaying screen appears.
             StatsListenerService.shared.ensureListening()
@@ -168,6 +187,16 @@ struct AccountView: View {
                 }
             }
         }
+        #if DEBUG
+        .fullScreenCover(isPresented: Binding(
+            get: { debugWrappedStats != nil },
+            set: { if !$0 { debugWrappedStats = nil } }
+        )) {
+            if let debugWrappedStats {
+                WrappedView(stats: debugWrappedStats, username: friendsService.myUsername)
+            }
+        }
+        #endif
     }
 
     // MARK: - Settings bar
@@ -315,6 +344,31 @@ struct AccountView: View {
             .accessibilityHint("Shows the prestige ranks")
             .sheet(isPresented: $showingPrestigeInfo) {
                 PrestigeInfoSheet(currentPrestige: profile.prestige)
+            }
+
+            // Wrapped's permanent home. The Home card is seasonal and
+            // dismissible; this is how someone gets back to it afterwards,
+            // and how it stays reachable outside January.
+            if let wrappedStats {
+                Button {
+                    Haptics.lightTap()
+                    showingWrapped = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .font(.footnote.weight(.bold))
+                        Text("\(String(wrappedStats.year)) Wrapped")
+                            .appText(.subheadline)
+                            .fontWeight(.semibold)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .bold))
+                            .opacity(0.6)
+                    }
+                    .foregroundStyle(WrappedPalette.accent)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Watch your year in review")
             }
 
             if !equippedTitle.isEmpty {
@@ -601,4 +655,75 @@ struct AccountView: View {
             photoError = error.localizedDescription
         }
     }
+
+    // MARK: - Wrapped
+
+    /// Finds the most recent completed year worth watching. Runs once per
+    /// You-tab appearance rather than per re-render — each candidate year is
+    /// an O(n) pass over that year's entries.
+    private func resolveWrappedYear() {
+        wrappedStats = WrappedAvailability.mostRecentEligibleYear { year in
+            WrappedStatsEngine.compute(
+                year: year,
+                activeEntries: store.entries,
+                yearArchives: store.yearArchives
+            )
+        }
+    }
+
+    // MARK: - Wrapped (DEBUG only)
+
+    #if DEBUG
+    /// Years that actually have data, newest first: the live year plus every
+    /// archived year. Built from HoursStore's own live/archive split so the
+    /// picker can't offer a year Wrapped would render empty.
+    private var wrappedAvailableYears: [Int] {
+        let cal = Calendar.current
+        var years = Set(store.yearArchives.map(\.year))
+        for entry in store.entries {
+            years.insert(cal.component(.year, from: entry.date))
+        }
+        // Always offer the current year so Wrapped is testable even before
+        // any shift has been logged (verifies the empty-year path).
+        years.insert(cal.component(.year, from: Date()))
+        return years.sorted(by: >)
+    }
+
+    private var wrappedDebugSection: some View {
+        VStack(spacing: AppSpacing.xs) {
+            Text("DEBUG — WRAPPED")
+                .appText(.eyebrow)
+                .foregroundStyle(AppColors.faint)
+
+            // Pretends it's January so the Home card, the You row and the
+            // real navigation can all be checked outside the season.
+            // DEBUG-only: this cannot exist in a Release build.
+            Toggle(isOn: Binding(
+                get: { forceWrappedSeason },
+                set: { newValue in
+                    forceWrappedSeason = newValue
+                    UserDefaults.standard.set(newValue, forKey: WrappedAvailability.debugForceSeasonKey)
+                    resolveWrappedYear()
+                }
+            )) {
+                Text("Pretend it's Wrapped season")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .tint(AppColors.accent)
+            .padding(.horizontal, AppSpacing.md)
+            ForEach(wrappedAvailableYears, id: \.self) { year in
+                Button("Open \(String(year)) Wrapped") {
+                    debugWrappedStats = WrappedStatsEngine.compute(
+                        year: year,
+                        activeEntries: store.entries,
+                        yearArchives: store.yearArchives
+                    )
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.accent)
+            }
+        }
+    }
+    #endif
 }

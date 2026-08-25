@@ -129,7 +129,7 @@ struct VerifiedReviewProofSheet: View {
             ) {
                 Button {
                     Haptics.lightTap()
-                    AppActions.openAppStoreListing()
+                    AppActions.openAppStoreWriteReview()
                 } label: {
                     Text("Open")
                         .font(.system(size: 13, weight: .bold, design: .rounded))

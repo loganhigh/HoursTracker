@@ -95,6 +95,22 @@ class SmartNotifier: ObservableObject {
         }
     }
 
+    /// "Your Wrapped is ready" — one push on January 1. Default on.
+    var wrappedNotificationEnabled: Bool {
+        get {
+            let savedValue = UserDefaults.standard.object(forKey: "notifications_wrapped_enabled")
+            if let boolValue = savedValue as? Bool { return boolValue }
+            return true
+        }
+        set {
+            objectWillChange.send()
+            UserDefaults.standard.set(newValue, forKey: "notifications_wrapped_enabled")
+            if !newValue {
+                cancelWrappedNotification()
+            }
+        }
+    }
+
     /// Daily motivational quote reminder near usual first-shift start time. Default on.
     var motivationReminderEnabled: Bool {
         get {
@@ -760,6 +776,69 @@ class SmartNotifier: ObservableObject {
             print("Failed to schedule friend shift notification: \(error)")
             #endif
         }
+    }
+
+    // MARK: - Wrapped
+
+    private static let wrappedIdentifierPrefix = "wrapped_ready_"
+
+    /// Schedules the one-per-year "your Wrapped is ready" push for 10am on
+    /// January 1.
+    ///
+    /// Scheduled *ahead of time* rather than when the season opens, because
+    /// a local notification can only be registered while the app is running
+    /// — waiting until January would only reach users who already came back,
+    /// which is exactly the audience that needs no reminder. Re-running is
+    /// idempotent: the identifier is per-year, so a later call replaces the
+    /// pending request rather than stacking duplicates.
+    func scheduleWrappedNotificationIfNeeded(year: Int, stats: WrappedYearStats) {
+        guard wrappedNotificationEnabled else {
+            cancelWrappedNotification()
+            return
+        }
+        // Don't promise a Wrapped we wouldn't actually offer — neither for a
+        // year that predates the app nor for one too sparse to be worth it.
+        guard WrappedAvailability.isEligibleYear(year) else { return }
+        guard WrappedAvailability.meetsDataThreshold(stats) else { return }
+        guard let fireDate = WrappedAvailability.notificationDate(forYear: year),
+              fireDate > Date() else { return }
+
+        Task {
+            let hasPermission = await notificationManager.hasPermission()
+            guard hasPermission else { return }
+
+            let content = UNMutableNotificationContent()
+            content.title = "Your \(String(year)) Wrapped is ready 🎉"
+            content.body = "\(WrappedFormat.groupedWholeHours(stats.totalHours)) hours across \(stats.totalShifts) shifts. Come see your year."
+            content.sound = .default
+            content.badge = 1
+
+            let calendar = Calendar.current
+            let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: Self.wrappedIdentifierPrefix + "\(year)",
+                content: content,
+                trigger: trigger
+            )
+            do {
+                try await UNUserNotificationCenter.current().add(request)
+                WrappedAvailability.markNotificationScheduled(year: year)
+            } catch {
+                #if DEBUG
+                print("Failed to schedule Wrapped notification: \(error)")
+                #endif
+            }
+        }
+    }
+
+    func cancelWrappedNotification() {
+        let currentYear = Calendar.current.component(.year, from: Date())
+        // Clear a couple of years either side so a toggle-off reliably
+        // removes whatever is pending.
+        let identifiers = ((currentYear - 1)...(currentYear + 1))
+            .map { Self.wrappedIdentifierPrefix + "\($0)" }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 
     // MARK: - Permissions

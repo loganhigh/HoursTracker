@@ -26,17 +26,24 @@ enum AppActions {
         }
     }
 
-    /// Opens your app’s App Store page (or review page if available)
+    /// Opens your app's App Store product page — the front page where the
+    /// app is downloadable, not the review-writing flow.
     static func openAppStoreListing() {
         guard appStoreID != "YOUR_APP_ID_HERE", !appStoreID.isEmpty else { return }
 
-        let reviewURL = "itms-apps://itunes.apple.com/app/id\(appStoreID)?action=write-review"
         let productURL = "itms-apps://itunes.apple.com/app/id\(appStoreID)"
-
-        if let url = URL(string: reviewURL),
-           UIApplication.shared.canOpenURL(url) {
+        if let url = URL(string: productURL) {
             UIApplication.shared.open(url)
-        } else if let url = URL(string: productURL) {
+        }
+    }
+
+    /// Opens the App Store's write-a-review flow directly. Used by explicit
+    /// "leave a review" actions — not the general "get the app" listing.
+    static func openAppStoreWriteReview() {
+        guard appStoreID != "YOUR_APP_ID_HERE", !appStoreID.isEmpty else { return }
+
+        let reviewURL = "itms-apps://itunes.apple.com/app/id\(appStoreID)?action=write-review"
+        if let url = URL(string: reviewURL) {
             UIApplication.shared.open(url)
         }
     }

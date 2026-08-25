@@ -199,6 +199,29 @@ final class WeatherService: NSObject, ObservableObject {
         return placemarks?.first?.locality ?? ""
     }
 
+    /// Fetches today's forecast high and returns a snapshot for logging
+    /// against a shift — same condition/locality as the current reading,
+    /// but the day's max instead of the instant-in-time temperature.
+    func dailyHighSnapshot(for current: WeatherSnapshot) async -> WeatherSnapshot {
+        do {
+            let high = try await Self.todayHighTemperature(
+                latitude: current.latitude, longitude: current.longitude
+            )
+            return WeatherSnapshot(
+                temperatureC: high,
+                code: current.code,
+                isDay: current.isDay,
+                locality: current.locality,
+                fetchedAt: current.fetchedAt,
+                latitude: current.latitude,
+                longitude: current.longitude
+            )
+        } catch {
+            AppLogger.network.warning("Daily-high fetch failed: \(error.localizedDescription, privacy: .public)")
+            return current
+        }
+    }
+
     // MARK: Open-Meteo
 
     private struct Reading {
@@ -236,6 +259,35 @@ final class WeatherService: NSObject, ObservableObject {
             code: decoded.current.weather_code,
             isDay: decoded.current.is_day == 1
         )
+    }
+
+    private struct OpenMeteoDailyResponse: Decodable {
+        struct Daily: Decodable {
+            let temperature_2m_max: [Double]
+        }
+        let daily: Daily
+    }
+
+    private static func todayHighTemperature(latitude: Double, longitude: Double) async throws -> Double {
+        var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
+        components.queryItems = [
+            URLQueryItem(name: "latitude", value: String(format: "%.3f", latitude)),
+            URLQueryItem(name: "longitude", value: String(format: "%.3f", longitude)),
+            URLQueryItem(name: "daily", value: "temperature_2m_max"),
+            URLQueryItem(name: "forecast_days", value: "1"),
+            URLQueryItem(name: "timezone", value: "auto"),
+        ]
+        var request = URLRequest(url: components.url!)
+        request.timeoutInterval = 10
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        let decoded = try JSONDecoder().decode(OpenMeteoDailyResponse.self, from: data)
+        guard let high = decoded.daily.temperature_2m_max.first else {
+            throw URLError(.cannotParseResponse)
+        }
+        return high
     }
 }
 

@@ -13,9 +13,21 @@ struct EntryRowView: View {
         HStack(alignment: .top, spacing: 12) {
             // LEFT: Date + time range
             VStack(alignment: .leading, spacing: 6) {
-                Text(fullDate(entry.date))
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.text)
+                HStack(spacing: 6) {
+                    Text(fullDate(entry.date))
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppTheme.Colors.text)
+
+                    if let weather = entry.weather {
+                        HStack(spacing: 3) {
+                            Image(systemName: weather.symbolName)
+                                .font(.system(size: 12, weight: .semibold))
+                            Text(weather.temperatureText)
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        }
+                        .foregroundStyle(AppTheme.Colors.subtext)
+                    }
+                }
 
                 if !entry.isOffDay {
                     Text(timeRangeText)

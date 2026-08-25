@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "hour-tracker-1fa55"
-  }
+  },
+  "targets": {
+    "hour-tracker-1fa55": {
+      "hosting": {
+        "invites": [
+          "hourtracker-sms"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

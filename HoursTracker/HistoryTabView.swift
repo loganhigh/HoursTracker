@@ -10,7 +10,9 @@ import SwiftUI
 
 struct HistoryTabView: View {
     @EnvironmentObject private var store: HoursStore
-    /// Top-right switch: off hides the "Projected ~" line on unpaid cheques.
+    /// Top-right switch: off hides the "Projected ~" line and the status
+    /// pill (Paid / Pending / In Progress / Add Pay), leaving just the date,
+    /// shift count, and hours on each row.
     @AppStorage("history_show_projected_pay") private var showProjectedPay = true
 
     /// Hard stop on the backward walk. The loop normally ends at the earliest
@@ -88,14 +90,14 @@ struct HistoryTabView: View {
                 .foregroundStyle(AppColors.text)
             Spacer()
             Toggle(isOn: $showProjectedPay) {
-                Text("Projected pay")
+                Text("Pay details")
                     .appText(.caption)
                     .foregroundStyle(AppColors.subtext)
             }
             .toggleStyle(.switch)
             .tint(AppColors.accent)
             .labelsHidden()
-            .accessibilityLabel("Show projected pay")
+            .accessibilityLabel("Show pay details")
             .onChange(of: showProjectedPay) { _, _ in Haptics.lightTap() }
         }
         .padding(.horizontal, AppSpacing.xs)
@@ -109,7 +111,7 @@ struct HistoryTabView: View {
             number: row.ordinal,
             title: Self.depositDateText(for: row.cycle),
             subtitle: subtitle(for: row),
-            status: status(for: row),
+            status: showProjectedPay ? status(for: row) : nil,
             accentLine: accentLine(for: row),
             projection: projection(for: row),
             index: index

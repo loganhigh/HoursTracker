@@ -28,6 +28,11 @@ struct WorkEntry: Identifiable, Codable, Equatable {
     /// saved by builds that predate the field.
     var createdAt: Date? = nil
 
+    /// Weather at the user's location when the shift was logged. Only
+    /// captured for same-day entries where a recent reading exists — nil
+    /// for backdated entries or when location permission isn't granted.
+    var weather: WeatherSnapshot? = nil
+
     // Convenience (used throughout)
     var paidHours: Double {
         if isOffDay { return 0 }
@@ -72,12 +77,13 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         case locationName, locationURL, latitude, longitude
         case isOffDay, offDayReason, isHoliday
         case createdAt
+        case weather
     }
 
     init(id: UUID = UUID(), date: Date, start: Date, end: Date, breakMinutes: Int, notes: String,
          locationName: String = "", locationURL: String = "", latitude: Double? = nil, longitude: Double? = nil,
          isOffDay: Bool = false, offDayReason: String = "", isHoliday: Bool = false,
-         createdAt: Date? = Date()) {
+         createdAt: Date? = Date(), weather: WeatherSnapshot? = nil) {
         self.id = id
         self.createdAt = createdAt
         self.date = date
@@ -92,6 +98,7 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         self.isOffDay = isOffDay
         self.offDayReason = offDayReason
         self.isHoliday = isHoliday
+        self.weather = weather
     }
 
     init(from decoder: Decoder) throws {
@@ -110,6 +117,7 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         offDayReason = try c.decodeIfPresent(String.self, forKey: .offDayReason) ?? ""
         isHoliday = try c.decodeIfPresent(Bool.self, forKey: .isHoliday) ?? false
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
+        weather = try c.decodeIfPresent(WeatherSnapshot.self, forKey: .weather)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -128,5 +136,6 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         try c.encode(offDayReason, forKey: .offDayReason)
         try c.encode(isHoliday, forKey: .isHoliday)
         try c.encodeIfPresent(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(weather, forKey: .weather)
     }
 }

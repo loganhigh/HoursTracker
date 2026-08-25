@@ -134,6 +134,10 @@ final class FriendsService: ObservableObject {
     /// True once the own-profile listener has delivered at least once, so the
     /// first-time username prompt can tell "no username" from "not loaded yet".
     @Published private(set) var hasLoadedMyProfile = false
+    /// Set by an `add-friend` deep link (see `handleIncomingURL`). The Add
+    /// Friend sheet reads this to pre-fill the username field for whoever
+    /// opens an invite link shared via iMessage.
+    @Published var pendingAddUsername: String?
 
     private let db = Firestore.firestore()
     private lazy var functions = Functions.functions(region: "us-central1")
@@ -969,6 +973,48 @@ final class FriendsService: ObservableObject {
             if let value = element as? NSNumber { return value.intValue }
             return nil
         }
+    }
+
+    // MARK: - Deep link (iMessage invite)
+
+    /// `https://hourtracker-sms.web.app/f/<username>` — a short, presentable
+    /// link on a dedicated Firebase Hosting site (free `*.web.app` domain,
+    /// no custom domain needed). The page at `public/f/index.html`
+    /// immediately redirects into the app via the custom scheme below,
+    /// falling back to the App Store listing if the app isn't installed.
+    static func inviteURL(username: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "hourtracker-sms.web.app"
+        components.path = "/f/\(username)"
+        return components.url
+    }
+
+    /// `<scheme>://add-friend?u=username` — the actual deep link the
+    /// redirect page above hands off to. Reuses the same registered URL
+    /// scheme as crew invites (see `CrewService.deepLinkScheme`) since it's
+    /// the only one this app registers.
+    static func deepLinkURL(username: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = CrewService.deepLinkScheme
+        components.host = "add-friend"
+        components.queryItems = [URLQueryItem(name: "u", value: username)]
+        return components.url
+    }
+
+    /// Pre-fills the Add Friend sheet with the shared username. Returns
+    /// false for any URL it doesn't recognize so the caller can fall
+    /// through to the other deep-link handlers.
+    @discardableResult
+    static func handleIncomingURL(_ url: URL) -> Bool {
+        guard url.host == "add-friend",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let rawUsername = components.queryItems?.first(where: { $0.name == "u" })?.value,
+              !rawUsername.isEmpty
+        else { return false }
+
+        FriendsService.shared.pendingAddUsername = Username.normalize(rawUsername)
+        return true
     }
 }
 

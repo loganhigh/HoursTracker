@@ -285,6 +285,11 @@ struct HoursHomeView: View {
 
     @State private var showingAdd = false
     @State private var editingEntry: WorkEntry?
+    /// Last year's Wrapped, computed once when Home appears during January.
+    /// nil outside the season or below the data threshold.
+    @State private var wrappedStats: WrappedYearStats?
+    @State private var showingWrapped = false
+    @State private var wrappedCardDismissed = false
     @State private var showTrackingHint = false
     @AppStorage("tracking_hint_dismissed") private var trackingHintDismissed: Bool = false
     /// Local Friends/social master switch (see `FriendsFeature`). Absent reads
@@ -533,6 +538,41 @@ struct HoursHomeView: View {
         !store.entries.isEmpty
     }
 
+    // MARK: - Wrapped season
+
+    /// Decides whether to offer Wrapped, and pre-schedules next January's
+    /// push. Computing the stats is an O(n) pass over the year, so it runs
+    /// once per Home appearance and only inside the season — never on every
+    /// re-render.
+    private func refreshWrappedSeason() {
+        // Always give the notification a chance to be (re)scheduled: it has
+        // to be registered well before January, since a local notification
+        // can only be created while the app is running.
+        let currentYear = Calendar.current.component(.year, from: Date())
+        let currentYearStats = WrappedStatsEngine.compute(
+            year: currentYear,
+            activeEntries: store.entries,
+            yearArchives: store.yearArchives
+        )
+        SmartNotifier.shared.scheduleWrappedNotificationIfNeeded(year: currentYear, stats: currentYearStats)
+
+        guard let offeredYear = WrappedAvailability.offeredYear() else {
+            wrappedStats = nil
+            return
+        }
+        let stats = WrappedStatsEngine.compute(
+            year: offeredYear,
+            activeEntries: store.entries,
+            yearArchives: store.yearArchives
+        )
+        guard WrappedAvailability.meetsDataThreshold(stats) else {
+            wrappedStats = nil
+            return
+        }
+        wrappedStats = stats
+        wrappedCardDismissed = WrappedAvailability.hasDismissedHomeCard(year: offeredYear)
+    }
+
     private var authSubscriptionKey: String {
         authService.user?.uid ?? "signed_out"
     }
@@ -543,6 +583,24 @@ struct HoursHomeView: View {
 
             ScrollView {
             VStack(spacing: AppSpacing.xl) {
+
+                if let wrappedStats, !wrappedCardDismissed {
+                    WrappedHomeCard(
+                        year: wrappedStats.year,
+                        totalHours: wrappedStats.totalHours,
+                        username: friendsService.myUsername,
+                        onOpen: {
+                            Haptics.lightTap()
+                            showingWrapped = true
+                        },
+                        onDismiss: {
+                            Haptics.lightTap()
+                            WrappedAvailability.markHomeCardDismissed(year: wrappedStats.year)
+                            withAnimation(AppMotion.Spring.smooth) { wrappedCardDismissed = true }
+                        }
+                    )
+                    .cardAppear(index: 0)
+                }
 
                 progressionCard
                     .cardAppear(index: 0)
@@ -645,6 +703,7 @@ struct HoursHomeView: View {
             store.advanceNextPaydayIfNeeded()
             checkPaydayConfetti()
             store.syncProfileSnapshotToCloud()
+            refreshWrappedSeason()
             if friendsEnabled {
                 topTrackers.startListening()
             }
@@ -707,6 +766,11 @@ struct HoursHomeView: View {
         .navigationBarTitleDisplayMode(.inline)
         // Full screen, not a sheet: adding a shift is a task of its own, not
         // a panel over Home.
+        .fullScreenCover(isPresented: $showingWrapped) {
+            if let wrappedStats {
+                WrappedView(stats: wrappedStats, username: friendsService.myUsername)
+            }
+        }
         .fullScreenCover(isPresented: $showingAdd) {
             AddShiftEntryView(store: store)
         }
@@ -1439,11 +1503,21 @@ private struct StreakBurstView: View {
                     Text("\(streakCount) DAY STREAK")
                         .font(.system(.title2, design: .rounded, weight: .black))
                         .tracking(2)
-                        .foregroundStyle(AppColors.text)
+                        .foregroundStyle(.white)
                     Text("You're on fire. Keep it up!")
                         .font(.system(.footnote, design: .rounded, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
+                        .foregroundStyle(.white.opacity(0.8))
                 }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: AppDesignSystem.Radius.lg, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                )
+                .background(
+                    RoundedRectangle(cornerRadius: AppDesignSystem.Radius.lg, style: .continuous)
+                        .fill(Color.black.opacity(0.55))
+                )
             }
         }
         .onAppear {

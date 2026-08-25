@@ -125,6 +125,12 @@ struct FriendsView: View {
                 accountUid: authService.user?.uid
             )
         }
+        .onChange(of: friendsService.pendingAddUsername) { _, newValue in
+            guard let newValue else { return }
+            usernameInput = newValue
+            showingAddFriend = true
+            friendsService.pendingAddUsername = nil
+        }
         .sheet(isPresented: $showingAddFriend) {
             NavigationStack {
                 ScrollView {

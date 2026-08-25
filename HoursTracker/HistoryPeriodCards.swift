@@ -57,7 +57,9 @@ struct ChequeTableRow<Destination: View>: View {
     let number: Int
     let title: String
     let subtitle: String
-    let status: ChequeStatus
+    /// Nil hides the status pill entirely — the History toggle's "just hours
+    /// and shifts" mode.
+    let status: ChequeStatus?
     /// Optional third line: recorded cheque total on paid rows, the live
     /// projection on the In Progress row. Tinted by the caller.
     var accentLine: (text: String, tint: Color)? = nil
@@ -114,7 +116,9 @@ struct ChequeTableRow<Destination: View>: View {
 
                 Spacer(minLength: AppSpacing.xs)
 
-                ChequeStatusBadge(status: status)
+                if let status {
+                    ChequeStatusBadge(status: status)
+                }
 
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold))

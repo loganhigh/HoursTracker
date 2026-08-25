@@ -167,6 +167,9 @@ private struct AppRootView: View {
             if CrewService.handleIncomingURL(url) {
                 return
             }
+            if FriendsService.handleIncomingURL(url) {
+                return
+            }
             _ = AuthService.handleIncomingURL(url)
         }
     }

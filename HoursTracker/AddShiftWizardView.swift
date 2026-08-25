@@ -570,6 +570,18 @@ struct AddShiftWizardView: View {
         entry.locationURL = ""
         entry.latitude = nil
         entry.longitude = nil
+        // Only attach weather for same-day work shifts — a cached "now"
+        // reading has no bearing on a backdated or off-day entry.
+        if !isOffKind, cal.isDateInToday(date), let snapshot = WeatherService.shared.snapshot {
+            entry.weather = snapshot
+            let entryId = entry.id
+            Task {
+                let highSnapshot = await WeatherService.shared.dailyHighSnapshot(for: snapshot)
+                guard var stored = store.entries.first(where: { $0.id == entryId }) else { return }
+                stored.weather = highSnapshot
+                store.update(stored)
+            }
+        }
         withAnimation(AppMotion.Spring.smooth) { store.add(entry) }
 
         Haptics.success()

@@ -88,6 +88,11 @@ struct NotificationsSheet: View {
                     }
                     .tint(AppColors.accent)
 
+                    Toggle(isOn: $smartNotifier.wrappedNotificationEnabled) {
+                        SettingsRowLabel(icon: "sparkles.rectangle.stack.fill", title: "Year in review")
+                    }
+                    .tint(AppColors.accent)
+
                     if smartNotifier.dailyReminderEnabled {
                         Button {
                             showingReminderTimePicker = true
