@@ -2351,7 +2351,7 @@ exports.adminResolveVerifiedProof = onCall(
       try {
         const targetSnap = await db.collection("users").doc(targetUid).get();
         await sendPushToUser(targetUid, targetSnap.data() || {}, {
-          title: "Verified",
+          title: "Hour Tracker",
           body: "Your verified checkmark is active! Thank you",
           dataPayload: { type: "verified_approved" },
         });
