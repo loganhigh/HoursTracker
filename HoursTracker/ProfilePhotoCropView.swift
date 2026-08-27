@@ -55,8 +55,15 @@ struct ProfilePhotoCropView: View {
     }
 
     var body: some View {
+        GeometryReader { geo in
+            content(topInset: geo.safeAreaInsets.top)
+        }
+        .background(Color.black.ignoresSafeArea())
+    }
+
+    private func content(topInset: CGFloat) -> some View {
         VStack(spacing: 0) {
-            header
+            header(topInset: topInset)
 
             Spacer(minLength: 0)
 
@@ -70,10 +77,9 @@ struct ProfilePhotoCropView: View {
                 .foregroundStyle(.white.opacity(0.6))
                 .padding(.bottom, AppSpacing.xl)
         }
-        .background(Color.black.ignoresSafeArea())
     }
 
-    private var header: some View {
+    private func header(topInset: CGFloat) -> some View {
         HStack(spacing: AppSpacing.sm) {
             Button {
                 Haptics.lightTap()
@@ -112,10 +118,11 @@ struct ProfilePhotoCropView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, AppSpacing.md)
-        // The status bar is deliberately left visible: hiding it shrinks the
-        // top safe-area inset, which slid this row up under the Dynamic
-        // Island where the labels were unreadable.
-        .padding(.top, AppSpacing.xs)
+        // The full-screen cover sometimes arrives with a collapsed top
+        // safe-area inset, which slid this row under the Dynamic Island where
+        // the buttons couldn't be tapped. When the inset is missing, pad down
+        // past the island manually (59pt = island-era status bar height).
+        .padding(.top, topInset < 20 ? 59 : AppSpacing.xs)
         .padding(.bottom, AppSpacing.xs)
     }
 

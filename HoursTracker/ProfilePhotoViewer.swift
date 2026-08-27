@@ -27,18 +27,26 @@ struct ProfilePhotoViewer: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            Button {
-                Haptics.lightTap()
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(12)
-                    .background(Circle().fill(.white.opacity(0.18)))
+            GeometryReader { geo in
+                HStack {
+                    Spacer()
+                    Button {
+                        Haptics.lightTap()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(12)
+                            .background(Circle().fill(.white.opacity(0.18)))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, AppSpacing.md)
+                    // Collapsed safe-area inset slides the button under the
+                    // Dynamic Island — pad down past it manually when missing.
+                    .padding(.top, geo.safeAreaInsets.top < 20 ? 59 : AppSpacing.md)
+                }
             }
-            .buttonStyle(.plain)
-            .padding(AppSpacing.md)
         }
     }
 }
