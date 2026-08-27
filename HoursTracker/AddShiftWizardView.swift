@@ -480,7 +480,7 @@ struct AddShiftWizardView: View {
                     Image(systemName: "moon.haze.fill")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(AppColors.accent)
-                    Text("Split at midnight")
+                    Text("Night shift")
                         .appText(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundStyle(AppColors.text)
