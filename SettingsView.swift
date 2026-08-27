@@ -37,6 +37,21 @@ struct SettingsView: View {
         settings.nextCutoff ?? paydayDate
     }
 
+    /// Spells out the resulting work window so "my weeks start on the wrong
+    /// day" is diagnosable right here: the period is anchored to payday by
+    /// default, and the cutoff toggle is how you move the week start.
+    private var payCycleFooter: String {
+        let cycle = PayCycleEngine.currentCycle(settings: settings)
+        let df = DateFormatter()
+        df.dateFormat = "EEE MMM d"
+        let window = "\(df.string(from: cycle.start)) – \(df.string(from: cycle.cutoff))"
+        let startDay = PayCycleEngine.weekdayName(Calendar.current.component(.weekday, from: cycle.start))
+        if PayCycleEngine.usesSavedCutoff(settings) {
+            return "Current period: \(window) · paid \(df.string(from: cycle.payday)). Your weeks start on \(startDay) — move the cutoff date to change that."
+        }
+        return "Current period: \(window), ending the day before payday. Your weeks start on \(startDay) — to start them on a different day (e.g. Sunday), turn on Hours cutoff and pick the last day of your work week (e.g. Saturday)."
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -96,6 +111,10 @@ struct SettingsView: View {
                     }
                 } header: {
                     SectionEyebrow("Pay Cycle")
+                } footer: {
+                    Text(payCycleFooter)
+                        .appText(.caption)
+                        .foregroundStyle(AppColors.subtext)
                 }
                 .listRowBackground(AppColors.card.opacity(0.55))
                 .listRowSeparatorTint(AppColors.stroke)
