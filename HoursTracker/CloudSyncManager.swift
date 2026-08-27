@@ -717,9 +717,18 @@ final class CloudSyncManager: ObservableObject {
             return
         }
         guard let data = try? encoder.encode(settings),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             completion(.failure(NSError(domain: "CloudSync", code: -2, userInfo: [NSLocalizedDescriptionKey: "Settings encode failed"])))
             return
+        }
+        // `nextCutoff = nil` is encoded by omitting the key, which merge:true
+        // silently keeps in Firestore — so disabling the cutoff left the old
+        // date in the cloud doc forever. Write an explicit null instead (an
+        // NSNull survives both the direct write and the callable fallback);
+        // the server's payBoundaryDate(null) and the client decoder both read
+        // null as "no cutoff", so "off" really means off everywhere.
+        if settings.nextCutoff == nil {
+            json["nextCutoff"] = NSNull()
         }
         // Same watchdog as saveEntry: on devices where the direct SDK write
         // channel hangs, this setData never completes — the cloud paySettings
