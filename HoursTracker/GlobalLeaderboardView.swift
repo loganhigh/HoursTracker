@@ -23,18 +23,33 @@ struct GlobalLeaderboardView: View {
     @State private var ownRowY: CGFloat?
     @State private var movementBanner: String?
 
+    /// Temporary display order for the missed-climb replay: the board renders
+    /// with the viewer's row back at its last-seen position, then springs to
+    /// the real order so they get to watch themselves move up. nil = live
+    /// order.
+    @State private var replayTrackers: [TopTracker]?
+    @State private var didAttemptReplay = false
+
     private var myUid: String? { authService.user?.uid }
 
     private var myTracker: TopTracker? {
         topTrackers.tracker(for: myUid)
     }
 
+    private var displayTrackers: [TopTracker] {
+        replayTrackers ?? topTrackers.allTrackers
+    }
+
     /// The podium only earns its space with a full top three; below that every
     /// tracker stays in the list.
-    private var showsPodium: Bool { topTrackers.allTrackers.count >= 3 }
+    private var showsPodium: Bool { displayTrackers.count >= 3 }
 
     private var listTrackers: [TopTracker] {
-        showsPodium ? Array(topTrackers.allTrackers.dropFirst(3)) : topTrackers.allTrackers
+        showsPodium ? Array(displayTrackers.dropFirst(3)) : displayTrackers
+    }
+
+    private var lastSeenRankKey: String? {
+        myUid.map { "global_last_seen_rank_\($0)" }
     }
 
     private var totalRankedHours: Double {
@@ -105,7 +120,7 @@ struct GlobalLeaderboardView: View {
 
                     if showsPodium {
                         GlobalPodiumRow(
-                            entries: topTrackers.allTrackers,
+                            entries: displayTrackers,
                             currentUid: myUid,
                             onlineUids: presence.onlineUids,
                             movements: topTrackers.movements
@@ -124,8 +139,15 @@ struct GlobalLeaderboardView: View {
             // A movement batch just landed. Haptics only for MY row — the
             // board animating other people's moves should stay silent — and
             // only here, while the board is actually on screen.
+            .task(id: topTrackers.allTrackers.isEmpty) {
+                await maybeReplayMissedClimb(proxy: proxy)
+            }
+            .onDisappear {
+                rememberCurrentRank()
+            }
             .onChange(of: topTrackers.movementToken) { _, _ in
                 guard let myUid, let delta = topTrackers.movements[myUid] else { return }
+                rememberCurrentRank()
                 if delta > 0 { Haptics.success() } else { Haptics.mediumTap() }
                 if let rank = topTrackers.tracker(for: myUid)?.rank, ownRowOffscreen {
                     withAnimation(AppMotion.Spring.snappy) {
@@ -163,6 +185,47 @@ struct GlobalLeaderboardView: View {
             }
             }
         }
+    }
+
+    /// Replays a climb the user missed: if their rank improved since the last
+    /// time they had this board open, render their row back at the old
+    /// position for a beat, scroll it into view, then spring it up to the
+    /// real position through the normal movement pipeline. Runs at most once
+    /// per board open, and only for climbs — sliding someone DOWN as a
+    /// welcome-back would just be mean.
+    private func maybeReplayMissedClimb(proxy: ScrollViewProxy) async {
+        guard !didAttemptReplay,
+              let uid = myUid,
+              let key = lastSeenRankKey,
+              let my = myTracker else { return }
+        didAttemptReplay = true
+        let lastSeen = UserDefaults.standard.integer(forKey: key)
+        defer { rememberCurrentRank() }
+        guard lastSeen > 0, lastSeen > my.rank else { return }
+
+        var reordered = topTrackers.allTrackers
+        guard let idx = reordered.firstIndex(where: { $0.uid == uid }) else { return }
+        let item = reordered.remove(at: idx)
+        let oldIndex = min(max(lastSeen - 1, 0), reordered.count)
+        reordered.insert(item, at: oldIndex)
+
+        replayTrackers = reordered
+        // Let the list build, then show the old spot so the move is watchable.
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        proxy.scrollTo(uid, anchor: .center)
+        try? await Task.sleep(nanoseconds: 900_000_000)
+        withAnimation(AppMotion.Spring.podium) {
+            replayTrackers = nil
+        }
+        topTrackers.injectReplayMovement(uid: uid, delta: lastSeen - my.rank)
+    }
+
+    /// The stored rank is "the position the user last SAW", so it updates
+    /// whenever they're looking at the board — on replay, on live movement,
+    /// and on leaving.
+    private func rememberCurrentRank() {
+        guard let key = lastSeenRankKey, let rank = myTracker?.rank else { return }
+        UserDefaults.standard.set(rank, forKey: key)
     }
 
     /// Best-effort visibility: the row publishes its screen-space Y; if that

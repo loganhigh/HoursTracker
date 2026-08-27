@@ -209,6 +209,16 @@ final class TopTrackersService: ObservableObject {
     /// Chips and highlights are transient: visible long enough to read
     /// (~2.6s), then gone, leaving the plain board. A newer batch restarts
     /// the clock rather than being cut short by the older batch's clear.
+    /// Replays a rank change the user missed (it happened while the board was
+    /// closed): publishes a synthetic one-row movement batch so the ↑ chip,
+    /// haptic and banner run through the exact same pipeline as a live move.
+    func injectReplayMovement(uid: String, delta: Int) {
+        guard delta != 0 else { return }
+        movements = [uid: delta]
+        movementToken &+= 1
+        scheduleMovementClear()
+    }
+
     private func scheduleMovementClear() {
         movementClearTask?.cancel()
         movementClearTask = Task { [weak self] in
