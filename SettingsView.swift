@@ -49,7 +49,10 @@ struct SettingsView: View {
         if PayCycleEngine.usesSavedCutoff(settings) {
             return "Current period: \(window) · paid \(df.string(from: cycle.payday)). Your weeks start on \(startDay) — move the cutoff date to change that."
         }
-        return "Current period: \(window), ending the day before payday. Your weeks start on \(startDay) — to start them on a different day (e.g. Sunday), turn on Hours cutoff and pick the last day of your work week (e.g. Saturday)."
+        if PayCycleEngine.usesWeekStart(settings) {
+            return "Current period: \(window) · paid \(df.string(from: cycle.payday)). Your weeks start on \(startDay)."
+        }
+        return "Current period: \(window), ending the day before payday. Your weeks start on \(startDay) — pick a different start day above (e.g. Sunday) to align your periods to it."
     }
 
     var body: some View {
@@ -108,6 +111,27 @@ struct SettingsView: View {
                                     ?? "Select date"
                             )
                         }
+                    } else {
+                        Picker(selection: Binding(
+                            get: { settings.weekStartWeekday ?? 0 },
+                            set: { newValue in
+                                Haptics.lightTap()
+                                settings.weekStartWeekday = newValue == 0 ? nil : newValue
+                                store.persist()
+                            }
+                        )) {
+                            Text("Payday").tag(0)
+                            ForEach(1...7, id: \.self) { day in
+                                Text(PayCycleEngine.weekdayName(day)).tag(day)
+                            }
+                        } label: {
+                            SettingsRowLabel(
+                                icon: "calendar.circle.fill",
+                                title: "Week starts on"
+                            )
+                        }
+                        .pickerStyle(.menu)
+                        .tint(AppColors.accent)
                     }
                 } header: {
                     SectionEyebrow("Pay Cycle")

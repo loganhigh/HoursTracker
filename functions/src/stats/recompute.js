@@ -288,6 +288,22 @@ function usesSavedCutoff(settings, now = new Date()) {
   return settings.payPeriodUsesCutoff === true && payBoundaryDate(settings.nextCutoff, now) != null;
 }
 
+// "Week starts on" (1=Sunday … 7=Saturday, matching the client's Calendar
+// weekday numbering): derives a cutoff anchor so periods align to the chosen
+// weekday while pay stays on the saved payday. Mirrors
+// PayCycleEngine.derivedWeekStartCutoff — an explicit saved cutoff wins.
+function weekStartCutoffAnchor(settings, now = new Date()) {
+  if (usesSavedCutoff(settings, now)) return null;
+  const ws = settings.weekStartWeekday;
+  if (!Number.isInteger(ws) || ws < 1 || ws > 7) return null;
+  const payday = startOfDay(normalizedPaydayBoundary(settings, now));
+  // Cutoff is the day before the week start. JS getDay(): 0 Sun … 6 Sat.
+  const cutoffDow = (ws - 2 + 7) % 7;
+  let lag = (payday.getDay() - cutoffDow + 7) % 7;
+  if (lag === 0) lag = 7;
+  return new Date(payday.getTime() - lag * MS_DAY);
+}
+
 function makeCycleFromCutoff(cutoff, settings, now = new Date()) {
   const span = spanDays(settings.payPeriodType || "biWeekly");
   const safeCutoff = payBoundaryDate(cutoff, now) || now;
@@ -318,8 +334,11 @@ function currentPayCycle(settings, asOf = new Date()) {
   const d = startOfDay(asOf);
   const span = spanDays(settings.payPeriodType || "biWeekly");
 
-  if (usesSavedCutoff(settings, d)) {
-    let cutoff = startOfDay(payBoundaryDate(settings.nextCutoff, d));
+  const anchorCutoff = usesSavedCutoff(settings, d)
+    ? startOfDay(payBoundaryDate(settings.nextCutoff, d))
+    : weekStartCutoffAnchor(settings, d);
+  if (anchorCutoff) {
+    let cutoff = anchorCutoff;
     let cycle = makeCycleFromCutoff(cutoff, settings, d);
     let guard = 0;
     while (d < cycle.start && guard++ < MAX_CYCLE_LOOP_ITERATIONS) {

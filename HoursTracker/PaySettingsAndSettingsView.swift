@@ -63,6 +63,12 @@ struct PaySettings: Codable, Equatable {
     /// Legacy fallback when deriving cutoff from weekday.
     var daysFromCutoffToPayday: Int = 6
 
+    /// Which weekday the pay-period window starts on (1=Sunday … 7=Saturday).
+    /// nil = legacy behavior: the period is anchored to payday (ends the day
+    /// before it). When set (and the explicit cutoff is off), periods align to
+    /// this weekday while pay still lands on the saved payday.
+    var weekStartWeekday: Int? = nil
+
     var email: String = ""
     
     // Display preferences
@@ -90,6 +96,7 @@ struct PaySettings: Codable, Equatable {
         case saturdayOvertimeAfterHours, saturdayMultiplier, sundayMultiplier
         case paydayWeekday, nextPayday
         case payPeriodUsesCutoff, nextCutoff, payCutoffWeekday, daysFromCutoffToPayday
+        case weekStartWeekday
         case email, showPayCalculations
         case holidayPayEnabled, holidayPayMultiplier
         case vacationPayEnabled, vacationPayPercentage
@@ -143,6 +150,7 @@ struct PaySettings: Codable, Equatable {
         nextCutoff = opt(.nextCutoff)
         payCutoffWeekday = req(.payCutoffWeekday, fallback.payCutoffWeekday)
         daysFromCutoffToPayday = req(.daysFromCutoffToPayday, fallback.daysFromCutoffToPayday)
+        weekStartWeekday = opt(.weekStartWeekday)
         email = req(.email, fallback.email)
         showPayCalculations = req(.showPayCalculations, fallback.showPayCalculations)
         holidayPayEnabled = req(.holidayPayEnabled, fallback.holidayPayEnabled)

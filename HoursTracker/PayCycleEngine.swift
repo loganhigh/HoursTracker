@@ -30,7 +30,7 @@ struct PayCycle: Identifiable, Hashable {
     /// Work window plus payday when cutoff differs from pay date.
     func chequeRangeText(dateFormat: String = "MMM d", settings: PaySettings, calendar: Calendar = .current) -> String {
         let work = workRangeText(dateFormat: dateFormat)
-        guard PayCycleEngine.usesSavedCutoff(settings) else { return work }
+        guard PayCycleEngine.usesCutoffAnchoring(settings) else { return work }
         let df = DateFormatter()
         df.dateFormat = dateFormat
         let today = calendar.startOfDay(for: Date())
@@ -79,9 +79,47 @@ enum PayCycleEngine {
         return calendar.startOfDay(for: cutoff)
     }
 
+    /// "Week starts on" is active only without an explicit cutoff — the saved
+    /// cutoff date is the more specific instruction and wins.
+    static func usesWeekStart(_ settings: PaySettings) -> Bool {
+        !usesSavedCutoff(settings) && (settings.weekStartWeekday.map { (1...7).contains($0) } ?? false)
+    }
+
+    /// Cutoff anchor derived from "week starts on": the period's last day is
+    /// the day before the chosen week start, placed within the week before
+    /// payday. E.g. weeks starting Sunday with a Friday payday → cutoff
+    /// Saturday, paid 6 days later — periods tile Sun–Sat while pay stays on
+    /// the real payday.
+    static func derivedWeekStartCutoff(settings: PaySettings, calendar: Calendar = .current) -> Date? {
+        guard usesWeekStart(settings), let weekStart = settings.weekStartWeekday else { return nil }
+        let cal = calendar
+        let payday = normalizedPaydayBoundary(settings: settings, calendar: cal)
+        let cutoffWeekday = weekStart == 1 ? 7 : weekStart - 1
+        let lag = inferredDaysFromCutoffToPayday(cutoffWeekday: cutoffWeekday, payday: payday, calendar: cal)
+        return cal.date(byAdding: .day, value: -lag, to: payday)
+    }
+
+    /// The active cutoff anchor: the explicit saved date, else the one derived
+    /// from "week starts on", else nil (payday-anchored periods).
+    static func activeCutoffAnchor(settings: PaySettings, calendar: Calendar = .current) -> Date? {
+        normalizedCutoffBoundary(settings: settings, calendar: calendar)
+            ?? derivedWeekStartCutoff(settings: settings, calendar: calendar)
+    }
+
+    /// Whether periods are anchored to a cutoff (saved or derived) rather than
+    /// directly to payday.
+    static func usesCutoffAnchoring(_ settings: PaySettings) -> Bool {
+        usesSavedCutoff(settings) || usesWeekStart(settings)
+    }
+
     /// Days from cutoff until payday, based on the user's saved dates.
     static func cutoffPaydayLagDays(settings: PaySettings, calendar: Calendar = .current) -> Int {
         let cal = calendar
+        if usesWeekStart(settings), let weekStart = settings.weekStartWeekday {
+            let payday = normalizedPaydayBoundary(settings: settings, calendar: cal)
+            let cutoffWeekday = weekStart == 1 ? 7 : weekStart - 1
+            return inferredDaysFromCutoffToPayday(cutoffWeekday: cutoffWeekday, payday: payday, calendar: cal)
+        }
         guard usesSavedCutoff(settings),
               let cutoff = settings.nextCutoff,
               let payday = settings.nextPayday else { return 0 }
@@ -185,7 +223,7 @@ enum PayCycleEngine {
         let d = cal.startOfDay(for: date)
         let span = spanDays(for: settings.payPeriodType)
 
-        if usesSavedCutoff(settings), let anchor = normalizedCutoffBoundary(settings: settings, calendar: cal) {
+        if let anchor = activeCutoffAnchor(settings: settings, calendar: cal) {
             var cutoff = anchor
             var cycle = makeCycleFromCutoff(cutoff, settings: settings, calendar: cal)
 
@@ -259,7 +297,7 @@ enum PayCycleEngine {
         let cal = calendar
         let span = spanDays(for: settings.payPeriodType)
 
-        if usesSavedCutoff(settings) {
+        if usesCutoffAnchoring(settings) {
             let prevCutoff = cal.date(byAdding: .day, value: -span, to: cycle.cutoff)
                 ?? cycle.cutoff.addingTimeInterval(Double(-span) * 86400)
             var prev = makeCycleFromCutoff(prevCutoff, settings: settings, calendar: cal)
@@ -278,7 +316,7 @@ enum PayCycleEngine {
         let cal = calendar
         let span = spanDays(for: settings.payPeriodType)
 
-        if usesSavedCutoff(settings) {
+        if usesCutoffAnchoring(settings) {
             let nextCutoff = cal.date(byAdding: .day, value: span, to: cycle.cutoff)
                 ?? cycle.cutoff.addingTimeInterval(Double(span) * 86400)
             var next = makeCycleFromCutoff(nextCutoff, settings: settings, calendar: cal)
@@ -331,7 +369,7 @@ enum PayCycleEngine {
 
     /// The cheque paid on a specific payday (for settings previews).
     static func cycle(forPayday payday: Date, settings: PaySettings, calendar: Calendar = .current) -> PayCycle {
-        if usesSavedCutoff(settings) {
+        if usesCutoffAnchoring(settings) {
             let lag = cutoffPaydayLagDays(settings: settings, calendar: calendar)
             let cutoff = calendar.date(byAdding: .day, value: -lag, to: calendar.startOfDay(for: payday))
                 ?? calendar.startOfDay(for: payday)

@@ -62,7 +62,7 @@ struct PayCycleDetailView: View {
         let cal = Calendar.current
         let total = max(1, selectedCycle.spanDays)
         let today = cal.startOfDay(for: Date())
-        let accrualEnd = PayCycleEngine.usesSavedCutoff(store.paySettings)
+        let accrualEnd = PayCycleEngine.usesCutoffAnchoring(store.paySettings)
             ? selectedCycle.cutoff
             : cal.date(byAdding: .day, value: -1, to: selectedCycle.end) ?? selectedCycle.cutoff
         let endCap = min(today, accrualEnd)
