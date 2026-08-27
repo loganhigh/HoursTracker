@@ -50,6 +50,9 @@ struct LeaderboardRankRow: View {
                         .font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundStyle(entry.isMe ? AppColors.accent : AppColors.text)
                         .lineLimit(1)
+                        // Long usernames shrink instead of truncating to "…" —
+                        // the full name always shows.
+                        .minimumScaleFactor(0.6)
                     if VerifiedTracker.isVerified(reviewed: entry.hasReviewedApp) {
                         VerifiedBadgeView(variant: .static, size: 13)
                     }
