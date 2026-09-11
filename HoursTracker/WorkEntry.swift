@@ -28,6 +28,13 @@ struct WorkEntry: Identifiable, Codable, Equatable {
     /// saved by builds that predate the field.
     var createdAt: Date? = nil
 
+    /// Last time this entry's content was changed, on whichever device or
+    /// server-side tool changed it. The upload callable uses it as a
+    /// last-writer-wins stamp: a device re-uploading from a stale cache cannot
+    /// overwrite a newer server copy. Stamped by HoursStore.add/update; nil on
+    /// entries saved by builds that predate the field.
+    var modifiedAt: Date? = nil
+
     /// Weather at the user's location when the shift was logged. Only
     /// captured for same-day entries where a recent reading exists — nil
     /// for backdated entries or when location permission isn't granted.
@@ -77,6 +84,7 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         case locationName, locationURL, latitude, longitude
         case isOffDay, offDayReason, isHoliday
         case createdAt
+        case modifiedAt
         case weather
     }
 
@@ -117,6 +125,7 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         offDayReason = try c.decodeIfPresent(String.self, forKey: .offDayReason) ?? ""
         isHoliday = try c.decodeIfPresent(Bool.self, forKey: .isHoliday) ?? false
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
+        modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt)
         weather = try c.decodeIfPresent(WeatherSnapshot.self, forKey: .weather)
     }
 
@@ -136,6 +145,7 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         try c.encode(offDayReason, forKey: .offDayReason)
         try c.encode(isHoliday, forKey: .isHoliday)
         try c.encodeIfPresent(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(modifiedAt, forKey: .modifiedAt)
         try c.encodeIfPresent(weather, forKey: .weather)
     }
 }

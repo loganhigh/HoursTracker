@@ -806,6 +806,10 @@ final class HoursStore: ObservableObject {
         }
         lastAddStamp = (fingerprint, Date())
 
+        // Last-writer-wins stamp for cloud sync (see WorkEntry.modifiedAt).
+        var entry = entry
+        entry.modifiedAt = Date()
+
         let previousProfile = gamificationProfile
         let previousMonthHours = monthTotalHours(monthDate: entry.date)
 
@@ -838,6 +842,9 @@ final class HoursStore: ObservableObject {
 
     func update(_ entry: WorkEntry) {
         guard let idx = entries.firstIndex(where: { $0.id == entry.id }) else { return }
+        // Last-writer-wins stamp for cloud sync (see WorkEntry.modifiedAt).
+        var entry = entry
+        entry.modifiedAt = Date()
         entries[idx] = entry
         recalculateGamification(eventHint: "Shift updated")
         save(syncProfile: false)

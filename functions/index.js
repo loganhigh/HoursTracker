@@ -22,6 +22,7 @@ const {
   sanitizeDisplayName,
 } = require("./src/stats/recompute");
 const rankMoves = require("./src/leaderboard/rankMoves");
+const { staleWriteDecision, stampToMillis } = require("./src/stats/entryWriteGuard");
 const usernames = require("./src/social/usernames");
 const adminAnalytics = require("./src/admin/analytics");
 const { initializeApp } = require("firebase-admin/app");
@@ -1471,6 +1472,8 @@ exports.clientUploadTimeEntriesBatch = onCall(
     let ops = 0;
     let written = 0;
     let skipped = 0;
+    let stale = 0;
+    const staleSamples = [];
 
     const commitIfNeeded = async (force = false) => {
       if (ops === 0) return;
@@ -1481,12 +1484,25 @@ exports.clientUploadTimeEntriesBatch = onCall(
     };
 
     for (const { entryId, raw } of candidates) {
-      if (entryUnchanged(existingById.get(entryId), raw)) {
+      const existing = existingById.get(entryId);
+      if (entryUnchanged(existing, raw)) {
         skipped += 1;
+        continue;
+      }
+      // Last-writer-wins: a device re-uploading from a stale cache must not
+      // overwrite a doc the server (or a newer build) touched after the copy
+      // the device holds. See src/stats/entryWriteGuard.js.
+      const guard = staleWriteDecision(existing, raw);
+      if (guard.stale) {
+        stale += 1;
+        if (staleSamples.length < 3) {
+          staleSamples.push(`${entryId}:${guard.reason}(${guard.payloadMs}<${guard.existingMs})`);
+        }
         continue;
       }
       const payload = {
         ...raw,
+        modifiedAt: stampToMillis(raw.modifiedAt) ?? Date.now(),
         updatedAt: FieldValue.serverTimestamp(),
       };
       const timeRef = db.collection("users").doc(uid).collection("timeEntries").doc(entryId);
@@ -1501,10 +1517,16 @@ exports.clientUploadTimeEntriesBatch = onCall(
     }
 
     await commitIfNeeded(true);
+    if (stale > 0) {
+      console.warn(
+        `clientUploadTimeEntriesBatch uid=${uid} rejected ${stale} stale entr${stale === 1 ? "y" : "ies"} ` +
+        `(written=${written} skipped=${skipped}) samples=${staleSamples.join(",")}`
+      );
+    }
     if (written > 0) {
       await recomputeUserStats(db, uid, { skipFence: true, skipLeaderboardUpdate: true });
     }
-    return { status: "ok", uploaded: written, skipped };
+    return { status: "ok", uploaded: written, skipped, stale };
   }
 );
 
