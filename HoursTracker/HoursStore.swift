@@ -597,7 +597,16 @@ final class HoursStore: ObservableObject {
                 if state.level == profile.level {
                     profile.xpIntoCurrentLevel = state.xpIntoLevel
                     profile.xpForNextLevel = state.xpForNext
+                    // The server's "maxed, can prestige" verdict only counts
+                    // while the server is describing the SAME prestige run
+                    // this device is on. Right after a Prestige tap the local
+                    // prestige is one ahead and the server still says
+                    // "prestige N, level 25" until it recomputes — trusting
+                    // that here kept the button lit and let a second tap
+                    // prestige again (observed live: P1→P3 in one sitting,
+                    // identical hour snapshots, XP for only two runs).
                     profile.canPrestige = state.canPrestige
+                        && server.prestige == gamificationProfile.prestige
                     return profile
                 }
             }
@@ -1373,21 +1382,42 @@ final class HoursStore: ObservableObject {
         return true
     }
 
+    /// Wall-clock of the last successful Prestige on this device. A second
+    /// Prestige can never legitimately follow within seconds (a full run of
+    /// 25 levels has to be earned in between), so anything inside this window
+    /// is a double tap or a stale-eligibility race, not intent.
+    private var lastPrestigeAt: Date?
+    private static let prestigeCooldown: TimeInterval = 60
+
     func performPrestige() -> Bool {
         guard gamificationProfile.prestige < 10 else { return false }
+        if let last = lastPrestigeAt, Date().timeIntervalSince(last) < Self.prestigeCooldown {
+            return false
+        }
 
-        // Eligibility follows the level the user is SHOWN, which is server-
+        // Eligibility may follow the level the user is SHOWN, which is server-
         // preferred (displayedGamificationProfile). The old flow re-derived
         // canPrestige from local entry XP between check and act — and on
         // accounts where the server owns XP the client can't reproduce
         // (challenge extras, admin offsets), that recompute flipped the flag
         // false and the tap silently did nothing while the UI kept promising
         // a maxed level 25.
-        let eligibleByDisplayedLevel = displayedGamificationProfile().canPrestige
+        //
+        // But the server's verdict is only valid for the prestige run it is
+        // describing. Immediately after a Prestige the local prestige is one
+        // ahead and the server still reports the OLD run as maxed until its
+        // recompute lands; accepting that authorised a second Prestige the
+        // user hadn't earned (P1→P3 in one sitting, XP for two runs).
+        // displayedGamificationProfile() already refuses when the prestiges
+        // disagree; the explicit check here is the belt to that suspender.
+        let serverPrestige = StatsListenerService.shared.lifetimeStats?.prestige
+        let serverOnSameRun = serverPrestige == gamificationProfile.prestige
+        let eligibleByDisplayedLevel = serverOnSameRun && displayedGamificationProfile().canPrestige
 
         // Recalculate first so snapshots match the current entry-derived totals.
         recalculateGamification(eventHint: nil)
         guard gamificationProfile.canPrestige || eligibleByDisplayedLevel else { return false }
+        lastPrestigeAt = Date()
 
         let hours = totalPaidWorkHours()
         gamificationProfile.prestigeXPSnapshots.append(gamificationProfile.totalXP)
