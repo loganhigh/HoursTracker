@@ -1,9 +1,10 @@
 /**
  * Last-writer-wins guard for client entry uploads.
  *
- * Every entry doc carries `modifiedAt` (epoch ms): the app stamps it on each
- * create/edit, admin scripts stamp it on server-side edits, and
- * clientUploadTimeEntriesBatch stamps it when a client sends none. A client
+ * Entry docs may carry `modifiedAt` (epoch ms): the app stamps it on each
+ * create/edit and admin scripts stamp it on server-side edits. The server
+ * itself NEVER adds a stamp the client didn't send — a doc written by a
+ * pre-stamp build stays unstamped so that build can keep editing it. A client
  * that re-uploads its whole local history (the daily repair) may be working
  * from a stale on-device cache — observed live 2026-09-11: a device booted
  * from Firestore's cache and pushed month-old copies over server-side edits

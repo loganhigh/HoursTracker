@@ -1500,11 +1500,20 @@ exports.clientUploadTimeEntriesBatch = onCall(
         }
         continue;
       }
+      // Never stamp on behalf of an unstamped client. Doing so (the first
+      // guard release did) turned every doc a pre-stamp build created into
+      // one that same build could no longer edit: its next save arrived
+      // unstamped against a stamped doc and was rejected as stale (observed
+      // live 2026-09-22: Sept 11-21 edits landed in legacy `entries` via the
+      // direct write but never reached `timeEntries`). Only clients and admin
+      // tools stamp; an absent stamp stays absent.
+      const clientStamp = stampToMillis(raw.modifiedAt);
       const payload = {
         ...raw,
-        modifiedAt: stampToMillis(raw.modifiedAt) ?? Date.now(),
         updatedAt: FieldValue.serverTimestamp(),
       };
+      if (clientStamp != null) payload.modifiedAt = clientStamp;
+      else delete payload.modifiedAt;
       const timeRef = db.collection("users").doc(uid).collection("timeEntries").doc(entryId);
       const legacyRef = db.collection("users").doc(uid).collection("entries").doc(entryId);
       batch.set(timeRef, payload, { merge: true });
