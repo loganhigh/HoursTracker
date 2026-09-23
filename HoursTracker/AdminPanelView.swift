@@ -1461,7 +1461,7 @@ struct AdminAnnouncementView: View {
             } header: {
                 Text("Compose")
             } footer: {
-                Text("Shows once to every user the next time they open the app — a card like the country-flag prompt, with \(isUpdatePrompt ? "an Update Now button that opens the App Store listing" : "a Got it button") and Not Now. Publishing again later re-prompts everyone.")
+                Text("Shows once to every user the next time they open the app — a card like the country-flag prompt, with \(isUpdatePrompt ? "an Update Now button that opens the App Store listing" : "a Got it button") and Not Now. Publishing again later re-prompts everyone. Write {name} anywhere in the title or message and each user sees their own username there.")
             }
             .listRowBackground(AppTheme.Colors.card)
 

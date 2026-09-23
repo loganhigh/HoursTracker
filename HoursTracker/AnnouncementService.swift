@@ -21,6 +21,20 @@ struct Announcement: Equatable {
     let buttonTitle: String
 
     var isUpdatePrompt: Bool { kind == "update" }
+
+    /// The admin composes one message for everyone; `{name}` (or `{username}`,
+    /// any case) is filled in per device with the user's own username so it
+    /// can read "Hey logan, …". Falls back to "there" for an account that
+    /// hasn't claimed a username yet, so the copy never shows a raw brace.
+    static func personalized(_ text: String, name rawName: String?) -> String {
+        let name = rawName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let filled = name.isEmpty ? "there" : name
+        return text.replacingOccurrences(
+            of: #"\{\s*(name|username)\s*\}"#,
+            with: filled,
+            options: [.regularExpression, .caseInsensitive]
+        )
+    }
 }
 
 @MainActor
@@ -65,10 +79,13 @@ final class AnnouncementService: ObservableObject {
                       let title = data["title"] as? String,
                       let message = data["message"] as? String else { return }
                 guard id != UserDefaults.standard.string(forKey: Self.seenKey) else { return }
+                // Same key the profile snapshot publishes as the user's name —
+                // it holds the claimed username on every build since usernames.
+                let name = UserDefaults.standard.string(forKey: "profile_display_name")
                 pending = Announcement(
                     id: id,
-                    title: title,
-                    message: message,
+                    title: Announcement.personalized(title, name: name),
+                    message: Announcement.personalized(message, name: name),
                     kind: data["kind"] as? String ?? "info",
                     buttonTitle: data["buttonTitle"] as? String ?? "Got it"
                 )

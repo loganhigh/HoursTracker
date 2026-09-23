@@ -28,6 +28,7 @@
 		7A0001C12F3000010000000F /* WrappedAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001C02F3000010000000F /* WrappedAvailabilityTests.swift */; };
 		7A0001C72F30000100000012 /* OvernightSplitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001C62F30000100000012 /* OvernightSplitTests.swift */; };
 		7A0001C92F31000100000013 /* WeekStartCycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001C82F31000100000013 /* WeekStartCycleTests.swift */; };
+		7A0001D12F31000100000020 /* AnnouncementPersonalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001D02F31000100000020 /* AnnouncementPersonalizationTests.swift */; };
 		7A0001C32F30000100000010 /* WrappedEntryDump.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001C22F30000100000010 /* WrappedEntryDump.swift */; };
 		FB004MSG2F90000100000004B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = FB004MSG2F90000100000004 /* FirebaseMessaging */; };
 		FB005STG2F90000100000005B /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = FB005STG2F90000100000005 /* FirebaseStorage */; };
@@ -89,6 +90,7 @@
 		7A0001C02F3000010000000F /* WrappedAvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WrappedAvailabilityTests.swift; sourceTree = "<group>"; };
 		7A0001C62F30000100000012 /* OvernightSplitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvernightSplitTests.swift; sourceTree = "<group>"; };
 		7A0001C82F31000100000013 /* WeekStartCycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeekStartCycleTests.swift; sourceTree = "<group>"; };
+		7A0001D02F31000100000020 /* AnnouncementPersonalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnouncementPersonalizationTests.swift; sourceTree = "<group>"; };
 		7A0001C22F30000100000010 /* WrappedEntryDump.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WrappedEntryDump.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -218,6 +220,7 @@
 				7A0001C02F3000010000000F /* WrappedAvailabilityTests.swift */,
 				7A0001C62F30000100000012 /* OvernightSplitTests.swift */,
 				7A0001C82F31000100000013 /* WeekStartCycleTests.swift */,
+				7A0001D02F31000100000020 /* AnnouncementPersonalizationTests.swift */,
 				7A0001C22F30000100000010 /* WrappedEntryDump.swift */,
 			);
 			path = HoursTrackerTests;
@@ -405,6 +408,7 @@
 				7A0001C12F3000010000000F /* WrappedAvailabilityTests.swift in Sources */,
 				7A0001C72F30000100000012 /* OvernightSplitTests.swift in Sources */,
 				7A0001C92F31000100000013 /* WeekStartCycleTests.swift in Sources */,
+				7A0001D12F31000100000020 /* AnnouncementPersonalizationTests.swift in Sources */,
 				7A0001C32F30000100000010 /* WrappedEntryDump.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
