@@ -542,6 +542,39 @@ function totalXPAtLevelStart(targetLevel, prestige = 0, snapshots = []) {
   return total;
 }
 
+/**
+ * Server-side backstop for the double-Prestige client bug (fixed in the
+ * client after cf2daa0, but pre-fix builds stay in the field): a Prestige
+ * tap that races the server's recompute could go through twice, leaving an
+ * account at prestige N+1 with XP for only N runs. A legitimate prestige
+ * requires FINISHING level 25 of every prior run, so lifetime XP is always
+ * at least prestige × the standard run cost — snapshots can only lower what
+ * gets deducted, never what had to be earned. Admin sets satisfy the same
+ * bound (totalXPAtLevelStart includes the prior runs).
+ *
+ * Both the published total and the server-tracked total must fall short
+ * before anything is corrected, so a device pushing a transient low total
+ * (offset not yet adopted, cold cache) never demotes anyone the entries in
+ * Firestore can vouch for. A zero total is left alone as an anomaly, and so
+ * are accounts still carrying a legacy admin prestige floor.
+ *
+ * @returns {{ corrected: boolean, prestige: number, reason: string|null }}
+ */
+function prestigeAffordability({ prestige, publishedTotalXP, trackedTotalXP, adminFloorPrestige }) {
+  const p = Math.min(Math.max(0, Math.floor(Number(prestige) || 0)), 10);
+  const published = Math.max(0, Number(publishedTotalXP) || 0);
+  const tracked = Math.max(0, Number(trackedTotalXP) || 0);
+  const best = Math.max(published, tracked);
+  if (p === 0) return { corrected: false, prestige: p, reason: null };
+  if (adminFloorPrestige != null) return { corrected: false, prestige: p, reason: "admin-floor" };
+  if (best === 0) return { corrected: false, prestige: p, reason: "zero-xp" };
+  const runXP = totalXPForFullPrestigeRun();
+  const needed = p * runXP;
+  if (published >= needed || tracked >= needed) return { corrected: false, prestige: p, reason: null };
+  const affordable = Math.min(p, Math.floor(best / runXP));
+  return { corrected: affordable < p, prestige: affordable, reason: "unaffordable" };
+}
+
 function buildSnapshotsForPrestige(prestige) {
   const p = Math.min(Math.max(0, Math.floor(Number(prestige) || 0)), 10);
   const snaps = [];
@@ -896,7 +929,7 @@ async function recomputeUserStats(db, uid, options = {}) {
   const { extrasUpdate, xpSource } = xpResolution;
   // Shadow mode publishes the client total exactly (pre-migration behavior);
   // the tracked value is only logged until parity is proven on real traffic.
-  const totalXP =
+  let totalXP =
     XP_OWNERSHIP_MODE === "on" ? xpResolution.trackedTotalXP : xpResolution.clientTotalXP;
   // Admin-set floors (written only by the admin panel via adminSetUserProgression).
   // Both act as floors: the published value is never lower, but real XP/prestige
@@ -911,14 +944,57 @@ async function recomputeUserStats(db, uid, options = {}) {
     MAX_SANE_PRESTIGE,
     Number(gamification.prestige) || Number(userData.prestige) || 0
   );
-  const prestige = clientPrestige;
-  const snapshotSanitize = sanitizedPrestigeSnapshots(
+  let prestige = clientPrestige;
+  let snapshotSanitize = sanitizedPrestigeSnapshots(
     totalXP,
     prestige,
     gamification.prestigeXPSnapshots
   );
-  const snapshots = snapshotSanitize.snapshots;
-  const xpLevel = levelStateFromXP(totalXP, prestige, snapshots);
+  let snapshots = snapshotSanitize.snapshots;
+  let xpLevel = levelStateFromXP(totalXP, prestige, snapshots);
+  // Double-Prestige backstop (see prestigeAffordability): when the client's
+  // prestige isn't covered by its XP, rewrite the account the way an admin
+  // prestige set would — standard snapshots, offset-encoded so every client
+  // build adopts it from the gamification listener without override flags.
+  const affordability = prestigeAffordability({
+    prestige,
+    publishedTotalXP: totalXP,
+    trackedTotalXP: xpResolution.trackedTotalXP,
+    adminFloorPrestige: userData.adminFloorPrestige,
+  });
+  let prestigeCorrection = null;
+  if (affordability.corrected) {
+    const publishedBefore = totalXP;
+    const existingOffset = Number(gamification.adminXPOffset) || 0;
+    const syncedTotal = Number(gamification.totalXP) || Number(userData.totalXP) || 0;
+    const entryXP = syncedTotal - existingOffset;
+    const fixedPrestige = affordability.prestige;
+    const fixedSnapshots = buildSnapshotsForPrestige(fixedPrestige);
+    const fixedLevel = levelStateFromXP(entryXP, fixedPrestige, fixedSnapshots);
+    const targetStart = totalXPAtLevelStart(fixedLevel, fixedPrestige, fixedSnapshots);
+    const hourSnaps = Array.isArray(gamification.prestigeHourSnapshots)
+      ? gamification.prestigeHourSnapshots.slice(0, fixedPrestige)
+      : [];
+    prestigeCorrection = {
+      from: prestige,
+      prestige: fixedPrestige,
+      level: fixedLevel,
+      adminXPOffset: targetStart - entryXP,
+      totalXP: targetStart,
+      snapshots: fixedSnapshots,
+      hourSnapshots: hourSnaps,
+    };
+    prestige = fixedPrestige;
+    totalXP = targetStart;
+    snapshots = fixedSnapshots;
+    snapshotSanitize = { snapshots: fixedSnapshots, cleared: false };
+    xpLevel = fixedLevel;
+    console.warn(
+      `PRESTIGE CORRECTION uid=${uid} ${prestigeCorrection.from}→${fixedPrestige} ` +
+      `level=${fixedLevel} totalXP=${targetStart} offset=${prestigeCorrection.adminXPOffset} ` +
+      `(published=${publishedBefore} tracked=${xpResolution.trackedTotalXP})`
+    );
+  }
   const level = Math.min(CLIENT_MAX_LEVEL, xpLevel);
   const badgeCount =
     Number(userData.badgeCount) ||
@@ -1161,12 +1237,50 @@ async function recomputeUserStats(db, uid, options = {}) {
   // xpBreakdown — those stay exactly what the client last pushed, and the
   // offset correction is re-applied at read time in resolveTotalXP.
   if (
+    !prestigeCorrection &&
     xpResolution.authoritativeOffset !== 0 &&
     (Number(gamification.adminXPOffset) || 0) !== xpResolution.authoritativeOffset
   ) {
     batch.set(
       db.collection("users").doc(uid).collection("gamification").doc("current"),
       { adminXPOffset: xpResolution.authoritativeOffset },
+      { merge: true }
+    );
+  }
+
+  // Persist a prestige correction exactly the way applyAdminProgressionSet
+  // does: offset-encoded on the gamification doc (which every client build
+  // adopts when the cloud offset differs from its own), authoritative offset
+  // copy on users/{uid}, high-water lowered so no client ratchets back up.
+  // Last in the batch so it wins over the extras/heal writes above.
+  if (prestigeCorrection) {
+    const gamRef = db.collection("users").doc(uid).collection("gamification").doc("current");
+    batch.set(
+      gamRef,
+      {
+        prestige: prestigeCorrection.prestige,
+        prestigeFloor: prestigeCorrection.prestige,
+        highWaterPrestige: prestigeCorrection.prestige,
+        prestigeXPSnapshots: prestigeCorrection.snapshots,
+        prestigeHourSnapshots: prestigeCorrection.hourSnapshots,
+        adminXPOffset: prestigeCorrection.adminXPOffset,
+        totalXP: prestigeCorrection.totalXP,
+        xpExtrasBaseTotal: prestigeCorrection.totalXP,
+        xpClientExtras: prestigeCorrection.totalXP - serverEntryXP,
+        level: prestigeCorrection.level,
+        levelOverride: FieldValue.delete(),
+        prestigeOverride: FieldValue.delete(),
+        updatedAt,
+      },
+      { merge: true }
+    );
+    batch.set(
+      userRef,
+      {
+        adminXPOffset: prestigeCorrection.adminXPOffset,
+        adminFloorLevel: FieldValue.delete(),
+        adminFloorPrestige: FieldValue.delete(),
+      },
       { merge: true }
     );
   }
@@ -1496,6 +1610,7 @@ module.exports = {
   resolveTotalXP,
   totalXPAtLevelStart,
   buildSnapshotsForPrestige,
+  prestigeAffordability,
   deriveProgressionFromEntryXP,
   levelStateFromXP,
   paidHours,
