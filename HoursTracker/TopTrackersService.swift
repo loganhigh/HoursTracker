@@ -290,7 +290,11 @@ final class TopTrackersService: ObservableObject {
             ? Self.rankMovements(previous: allTrackers, current: parsed)
             : [:]
 
-        let next = Self.mergeLiveSlice(parsed, into: allTrackers, liveLimit: Self.liveRankLimit)
+        let next = Self.mergeLiveSlice(
+            parsed,
+            into: allTrackers,
+            liveCoversFullSlice: documents.count >= Self.liveRankLimit
+        )
 
         if moves.isEmpty {
             allTrackers = next
@@ -318,10 +322,21 @@ final class TopTrackersService: ObservableObject {
     /// truncated everyone ranked below the limit the moment any top-100 user
     /// logged a shift. Keep the deeper rows, drop any that just climbed into
     /// the live slice, and re-number ranks so they stay contiguous.
-    nonisolated static func mergeLiveSlice(_ live: [TopTracker], into existing: [TopTracker], liveLimit: Int) -> [TopTracker] {
-        guard existing.count > live.count, live.count >= liveLimit else { return live }
+    ///
+    /// `liveCoversFullSlice` is whether the RAW query filled its limit — not
+    /// whether `live` has that many rows. Parsing drops opted-out and zero-hour
+    /// profiles, so a full 100-document slice can parse to 99 rows; keying on
+    /// the parsed count read that as "the query exhausted the collection" and
+    /// replaced the whole board with the slice (observed live: the board's
+    /// user count flipped 106 → 99 the moment the listener fired). For the
+    /// same reason the deeper rows are found by hours, not by position: every
+    /// row the slice can't see sits at or below its last row's hours.
+    nonisolated static func mergeLiveSlice(_ live: [TopTracker], into existing: [TopTracker], liveCoversFullSlice: Bool) -> [TopTracker] {
+        guard liveCoversFullSlice, existing.count > live.count, let lastLive = live.last else { return live }
         let liveUIDs = Set(live.map(\.uid))
-        let tail = existing.dropFirst(liveLimit).filter { !liveUIDs.contains($0.uid) }
+        let tail = existing
+            .filter { !liveUIDs.contains($0.uid) && $0.hours <= lastLive.hours }
+            .sorted { $0.hours != $1.hours ? $0.hours > $1.hours : $0.rank < $1.rank }
         guard !tail.isEmpty else { return live }
         var rank = live.count
         let renumbered = tail.map { t -> TopTracker in

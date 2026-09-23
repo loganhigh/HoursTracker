@@ -56,31 +56,45 @@ final class LeaderboardMovementTests: XCTestCase {
     // MARK: - Live slice merge (regression: top-100 snapshot truncated the 500-row board)
 
     func testLiveSliceKeepsDeeperRowsAndRenumbers() {
-        let limit = 3
-        let full = (1...6).map { tracker("u\($0)", rank: $0) }
+        let full = (1...6).map { tracker("u\($0)", rank: $0, hours: Double(100 - $0)) }
         // Live top-3 arrives with u2 and u1 swapped.
-        let live = [tracker("u2", rank: 1), tracker("u1", rank: 2), tracker("u3", rank: 3)]
-        let merged = TopTrackersService.mergeLiveSlice(live, into: full, liveLimit: limit)
+        let live = [tracker("u2", rank: 1, hours: 99), tracker("u1", rank: 2, hours: 98), tracker("u3", rank: 3, hours: 97)]
+        let merged = TopTrackersService.mergeLiveSlice(live, into: full, liveCoversFullSlice: true)
         XCTAssertEqual(merged.map(\.uid), ["u2", "u1", "u3", "u4", "u5", "u6"])
         XCTAssertEqual(merged.map(\.rank), [1, 2, 3, 4, 5, 6])
     }
 
-    func testLiveSliceDropsRowThatClimbedIntoIt() {
-        let limit = 3
-        let full = (1...6).map { tracker("u\($0)", rank: $0) }
-        // u5 climbs into the top 3; u3 falls out of the live slice.
-        let live = [tracker("u1", rank: 1), tracker("u5", rank: 2), tracker("u2", rank: 3)]
-        let merged = TopTrackersService.mergeLiveSlice(live, into: full, liveLimit: limit)
-        XCTAssertEqual(merged.map(\.uid), ["u1", "u5", "u2", "u4", "u6"])
+    func testLiveSliceKeepsRowThatFellOutOfIt() {
+        let full = (1...6).map { tracker("u\($0)", rank: $0, hours: Double(100 - $0)) }
+        // u5 climbs into the top 3; u3 falls out of the live slice. u3 is
+        // still ranked — it now sits just below the slice, above u4.
+        let live = [tracker("u1", rank: 1, hours: 99), tracker("u5", rank: 2, hours: 98.5), tracker("u2", rank: 3, hours: 98)]
+        let merged = TopTrackersService.mergeLiveSlice(live, into: full, liveCoversFullSlice: true)
+        XCTAssertEqual(merged.map(\.uid), ["u1", "u5", "u2", "u3", "u4", "u6"])
+        XCTAssertEqual(merged.map(\.rank), [1, 2, 3, 4, 5, 6])
+    }
+
+    // Regression: a full 100-document slice can parse to fewer rows (opted-out
+    // profiles are filtered client-side). That is NOT the query exhausting the
+    // collection — the deeper rows must survive (observed live: 106 → 99).
+    func testLiveSliceShortByFilteringStillKeepsDeeperRows() {
+        // Raw top-3 was u1, x (opted out, filtered), u3 → parsed live has 2 rows.
+        let live = [tracker("u1", rank: 1, hours: 99), tracker("u3", rank: 2, hours: 97)]
+        let full = [
+            tracker("u1", rank: 1, hours: 99), tracker("u3", rank: 2, hours: 97),
+            tracker("u4", rank: 3, hours: 96), tracker("u5", rank: 4, hours: 95), tracker("u6", rank: 5, hours: 94),
+        ]
+        let merged = TopTrackersService.mergeLiveSlice(live, into: full, liveCoversFullSlice: true)
+        XCTAssertEqual(merged.map(\.uid), ["u1", "u3", "u4", "u5", "u6"])
         XCTAssertEqual(merged.map(\.rank), [1, 2, 3, 4, 5])
     }
 
     func testLiveSliceIsAuthoritativeWhenNoDeeperRowsExist() {
         let live = [tracker("a", rank: 1), tracker("b", rank: 2)]
-        XCTAssertEqual(TopTrackersService.mergeLiveSlice(live, into: [], liveLimit: 100).map(\.uid), ["a", "b"])
-        // A short live list (fewer than the limit) means the query exhausted
-        // the collection — the existing longer list is stale, so replace it.
+        XCTAssertEqual(TopTrackersService.mergeLiveSlice(live, into: [], liveCoversFullSlice: true).map(\.uid), ["a", "b"])
+        // A raw query that didn't fill its limit exhausted the collection —
+        // the existing longer list is stale, so replace it.
         let stale = (1...5).map { tracker("s\($0)", rank: $0) }
-        XCTAssertEqual(TopTrackersService.mergeLiveSlice(live, into: stale, liveLimit: 100).map(\.uid), ["a", "b"])
+        XCTAssertEqual(TopTrackersService.mergeLiveSlice(live, into: stale, liveCoversFullSlice: false).map(\.uid), ["a", "b"])
     }
 }
