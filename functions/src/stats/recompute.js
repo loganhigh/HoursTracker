@@ -4,6 +4,11 @@
  * and server-written activity events.
  */
 
+// All day-boundary math below uses Date's LOCAL methods; the process timezone
+// must be the users' (see index.js). Pinned here too so direct consumers
+// (tests, scripts) get the same calendar without going through index.js.
+process.env.TZ = "America/Edmonton";
+
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 
 const MS_DAY = 86400000;
@@ -259,7 +264,7 @@ function weeklyStats(entries, now = new Date()) {
     if (!date || entry.isOffDay || !inInterval(date, interval)) continue;
     hours += paidHours(entry);
     shifts += 1;
-    days.add(startOfDay(date).toISOString().slice(0, 10));
+    days.add(isoDate(date));
   }
   return {
     weekStart: interval.start,
@@ -380,7 +385,7 @@ function payPeriodStats(entries, settings, now = new Date()) {
     if (t < cycle.start.getTime() || t >= cycle.end.getTime()) continue;
     hours += paidHours(entry);
     shifts += 1;
-    days.add(startOfDay(date).toISOString().slice(0, 10));
+    days.add(isoDate(date));
   }
   return {
     periodStart: cycle.start,
@@ -401,23 +406,21 @@ function workedDays(entries) {
     if (entry.isOffDay) continue;
     const date = entryDate(entry);
     if (!date) continue;
-    days.add(startOfDay(date).toISOString().slice(0, 10));
+    days.add(isoDate(date));
   }
   return [...days].sort().map((s) => new Date(s + "T00:00:00"));
 }
 
 function currentStreak(workedDayStrings) {
   if (workedDayStrings.length === 0) return 0;
-  const today = startOfDay(new Date()).toISOString().slice(0, 10);
-  const yesterday = new Date(startOfDay(new Date()).getTime() - MS_DAY)
-    .toISOString()
-    .slice(0, 10);
+  const today = isoDate(new Date());
+  const yesterday = isoDate(new Date(startOfDay(new Date()).getTime() - MS_DAY));
   const set = new Set(workedDayStrings);
   let anchor = set.has(today) ? today : set.has(yesterday) ? yesterday : null;
   if (!anchor) return 0;
   let streak = 0;
   let cursor = new Date(anchor + "T00:00:00");
-  while (set.has(cursor.toISOString().slice(0, 10))) {
+  while (set.has(isoDate(cursor))) {
     streak += 1;
     cursor = new Date(cursor.getTime() - MS_DAY);
   }
@@ -785,8 +788,17 @@ function privacyFlags(userData) {
   };
 }
 
+/**
+ * "yyyy-MM-dd" of `d` in LOCAL time (process TZ, pinned to the users'
+ * timezone). `toISOString()` is UTC and drifted a day for evening dates —
+ * every consumer compares these strings against local calendar days
+ * (the client parses chequeDailySummary dates as local).
+ */
 function isoDate(d) {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 async function loadPaySettings(db, uid) {

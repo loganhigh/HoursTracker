@@ -2,6 +2,15 @@
  * Hour Tracker — friend shift push notifications.
  */
 
+// Every day-boundary computation in this codebase (cheque windows, weekly
+// stats, streaks, "today"/"yesterday") uses Date's LOCAL methods, and Cloud
+// Functions run in UTC. The user base is Mountain time, so from 18:00 local
+// the server believed it was already tomorrow: cheque windows rolled a day
+// early and friends saw 0h on the cutoff evening. Pin the process timezone
+// before any Date math runs (Node re-reads TZ from the environment).
+// Unconditional: the runtime may export TZ=UTC explicitly.
+process.env.TZ = "America/Edmonton";
+
 const { onDocumentCreated, onDocumentUpdated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
