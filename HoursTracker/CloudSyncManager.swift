@@ -1775,6 +1775,11 @@ private struct ProfileSnapshotInputs {
     let profilePhotoURL: String?
     let friendShiftAlerts: Bool
     let countryCode: String
+    /// IANA identifier of the device's timezone. The server computes every
+    /// day boundary (cheque windows, weekly totals, streaks) in the USER's
+    /// calendar and reads this first; without it, it derives the zone from
+    /// the local-midnight `date` of the user's latest shift.
+    let timeZone: String
 
     @MainActor
     static func capture(from store: HoursStore) -> ProfileSnapshotInputs {
@@ -1869,7 +1874,8 @@ private struct ProfileSnapshotInputs {
             chequeWindowCutoff: chequeWindowCutoff,
             profilePhotoURL: ProfilePhotoManager.shared.remotePhotoURL,
             friendShiftAlerts: SmartNotifier.shared.friendShiftNotificationsEnabled,
-            countryCode: CountryFlag.hasChosenCountry ? CountryFlag.resolvedCode : ""
+            countryCode: CountryFlag.hasChosenCountry ? CountryFlag.resolvedCode : "",
+            timeZone: TimeZone.current.identifier
         )
     }
 
@@ -1904,6 +1910,9 @@ private struct ProfileSnapshotInputs {
             fields["countryCode"] = countryCode
         } else {
             fields["countryCode"] = FieldValue.delete()
+        }
+        if !timeZone.isEmpty {
+            fields["timeZone"] = timeZone
         }
         // Company PII (name/start-date) is written to users/{uid}, which
         // is world-readable to any signed-in user. Only publish it when the user has

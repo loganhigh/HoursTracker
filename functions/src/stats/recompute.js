@@ -4,10 +4,10 @@
  * and server-written activity events.
  */
 
-// All day-boundary math below uses Date's LOCAL methods; the process timezone
-// must be the users' (see index.js). Pinned here too so direct consumers
-// (tests, scripts) get the same calendar without going through index.js.
-process.env.TZ = "America/Edmonton";
+// Every day-boundary decision here goes through a per-user calendar
+// (src/stats/localCalendar.js) — never Date's local methods, which follow the
+// server's clock rather than the user's.
+const { makeCalendar, resolveUserTimeZone } = require("./localCalendar");
 
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 
@@ -233,19 +233,13 @@ function entryDate(entry) {
   return ms == null ? null : new Date(ms);
 }
 
-function startOfDay(date, calendarOffset = 0) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-/** Monday-aligned week interval containing `now`. */
-function currentWeekInterval(now = new Date()) {
-  const d = startOfDay(now);
-  const day = d.getDay(); // 0 Sun .. 6 Sat
+/** Monday-aligned week interval containing `now`, in the user's calendar. */
+function currentWeekInterval(now, cal) {
+  const d = cal.startOfDay(now);
+  const day = cal.weekday(d); // 0 Sun .. 6 Sat
   const diffToMonday = day === 0 ? -6 : 1 - day;
-  const start = new Date(d.getTime() + diffToMonday * MS_DAY);
-  const end = new Date(start.getTime() + 7 * MS_DAY);
+  const start = cal.addDays(d, diffToMonday);
+  const end = cal.addDays(start, 7);
   return { start, end };
 }
 
@@ -254,8 +248,8 @@ function inInterval(date, interval) {
   return t >= interval.start.getTime() && t < interval.end.getTime();
 }
 
-function weeklyStats(entries, now = new Date()) {
-  const interval = currentWeekInterval(now);
+function weeklyStats(entries, now, cal) {
+  const interval = currentWeekInterval(now, cal);
   let hours = 0;
   let shifts = 0;
   const days = new Set();
@@ -264,7 +258,7 @@ function weeklyStats(entries, now = new Date()) {
     if (!date || entry.isOffDay || !inInterval(date, interval)) continue;
     hours += paidHours(entry);
     shifts += 1;
-    days.add(isoDate(date));
+    days.add(cal.isoDate(date));
   }
   return {
     weekStart: interval.start,
@@ -279,14 +273,13 @@ function spanDays(payPeriodType) {
   return payPeriodType === "weekly" ? 7 : 14;
 }
 
-function normalizedPaydayBoundary(settings, now = new Date()) {
+function normalizedPaydayBoundary(settings, now, cal) {
   const savedPayday = payBoundaryDate(settings.nextPayday, now);
   if (savedPayday) {
-    return startOfDay(savedPayday);
+    return cal.startOfDay(savedPayday);
   }
   const span = spanDays(settings.payPeriodType || "biWeekly");
-  const today = startOfDay(now);
-  return new Date(today.getTime() + span * MS_DAY);
+  return cal.addDays(now, span);
 }
 
 function usesSavedCutoff(settings, now = new Date()) {
@@ -297,33 +290,32 @@ function usesSavedCutoff(settings, now = new Date()) {
 // weekday numbering): derives a cutoff anchor so periods align to the chosen
 // weekday while pay stays on the saved payday. Mirrors
 // PayCycleEngine.derivedWeekStartCutoff — an explicit saved cutoff wins.
-function weekStartCutoffAnchor(settings, now = new Date()) {
+function weekStartCutoffAnchor(settings, now, cal) {
   if (usesSavedCutoff(settings, now)) return null;
   const ws = settings.weekStartWeekday;
   if (!Number.isInteger(ws) || ws < 1 || ws > 7) return null;
-  const payday = startOfDay(normalizedPaydayBoundary(settings, now));
-  // Cutoff is the day before the week start. JS getDay(): 0 Sun … 6 Sat.
+  const payday = normalizedPaydayBoundary(settings, now, cal);
+  // Cutoff is the day before the week start. Weekday: 0 Sun … 6 Sat.
   const cutoffDow = (ws - 2 + 7) % 7;
-  let lag = (payday.getDay() - cutoffDow + 7) % 7;
+  let lag = (cal.weekday(payday) - cutoffDow + 7) % 7;
   if (lag === 0) lag = 7;
-  return new Date(payday.getTime() - lag * MS_DAY);
+  return cal.addDays(payday, -lag);
 }
 
-function makeCycleFromCutoff(cutoff, settings, now = new Date()) {
+function makeCycleFromCutoff(cutoff, settings, now, cal) {
   const span = spanDays(settings.payPeriodType || "biWeekly");
   const safeCutoff = payBoundaryDate(cutoff, now) || now;
-  const cutoffDay = startOfDay(safeCutoff);
-  const end = new Date(cutoffDay.getTime() + MS_DAY);
-  const start = new Date(end.getTime() - span * MS_DAY);
+  const cutoffDay = cal.startOfDay(safeCutoff);
+  const end = cal.addDays(cutoffDay, 1);
+  const start = cal.addDays(end, -span);
   return { start, end, cutoff: cutoffDay };
 }
 
-function makeCycle(payday, settings) {
+function makeCycle(payday, settings, cal) {
   const span = spanDays(settings.payPeriodType || "biWeekly");
-  const paydayStart = startOfDay(payday);
-  const end = paydayStart;
-  const start = new Date(end.getTime() - span * MS_DAY);
-  const cutoff = new Date(end.getTime() - MS_DAY);
+  const end = cal.startOfDay(payday);
+  const start = cal.addDays(end, -span);
+  const cutoff = cal.addDays(end, -1);
   return { start, end, cutoff };
 }
 
@@ -335,46 +327,52 @@ function makeCycle(payday, settings) {
 // bug should need — this exists purely as a hard backstop.
 const MAX_CYCLE_LOOP_ITERATIONS = 20_000;
 
-function currentPayCycle(settings, asOf = new Date()) {
-  const d = startOfDay(asOf);
+/**
+ * The pay cycle containing `asOf`, in the user's calendar. Mirrors the
+ * client's PayCycleEngine.cycle(containing:) — the user's phone and the
+ * server must agree on which cheque "today" belongs to, or the friends board
+ * compares the viewer's local cheque against everyone else's server one.
+ */
+function currentPayCycle(settings, asOf, cal) {
+  const d = cal.startOfDay(asOf);
   const span = spanDays(settings.payPeriodType || "biWeekly");
 
   const anchorCutoff = usesSavedCutoff(settings, d)
-    ? startOfDay(payBoundaryDate(settings.nextCutoff, d))
-    : weekStartCutoffAnchor(settings, d);
+    ? cal.startOfDay(payBoundaryDate(settings.nextCutoff, d))
+    : weekStartCutoffAnchor(settings, d, cal);
   if (anchorCutoff) {
     let cutoff = anchorCutoff;
-    let cycle = makeCycleFromCutoff(cutoff, settings, d);
+    let cycle = makeCycleFromCutoff(cutoff, settings, d, cal);
     let guard = 0;
     while (d < cycle.start && guard++ < MAX_CYCLE_LOOP_ITERATIONS) {
-      cutoff = new Date(cutoff.getTime() - span * MS_DAY);
-      cycle = makeCycleFromCutoff(cutoff, settings, d);
+      cutoff = cal.addDays(cutoff, -span);
+      cycle = makeCycleFromCutoff(cutoff, settings, d, cal);
     }
     guard = 0;
     while (d >= cycle.end && guard++ < MAX_CYCLE_LOOP_ITERATIONS) {
-      cutoff = new Date(cutoff.getTime() + span * MS_DAY);
-      cycle = makeCycleFromCutoff(cutoff, settings, d);
+      cutoff = cal.addDays(cutoff, span);
+      cycle = makeCycleFromCutoff(cutoff, settings, d, cal);
     }
     return cycle;
   }
 
-  let payday = normalizedPaydayBoundary(settings, d);
-  let cycle = makeCycle(payday, settings);
+  let payday = normalizedPaydayBoundary(settings, d, cal);
+  let cycle = makeCycle(payday, settings, cal);
   let guard = 0;
   while (d < cycle.start && guard++ < MAX_CYCLE_LOOP_ITERATIONS) {
-    payday = new Date(payday.getTime() - span * MS_DAY);
-    cycle = makeCycle(payday, settings);
+    payday = cal.addDays(payday, -span);
+    cycle = makeCycle(payday, settings, cal);
   }
   guard = 0;
   while (d >= cycle.end && guard++ < MAX_CYCLE_LOOP_ITERATIONS) {
-    payday = new Date(payday.getTime() + span * MS_DAY);
-    cycle = makeCycle(payday, settings);
+    payday = cal.addDays(payday, span);
+    cycle = makeCycle(payday, settings, cal);
   }
   return cycle;
 }
 
-function payPeriodStats(entries, settings, now = new Date()) {
-  const cycle = currentPayCycle(settings, now);
+function payPeriodStats(entries, settings, now, cal) {
+  const cycle = currentPayCycle(settings, now, cal);
   let hours = 0;
   let shifts = 0;
   const days = new Set();
@@ -385,7 +383,7 @@ function payPeriodStats(entries, settings, now = new Date()) {
     if (t < cycle.start.getTime() || t >= cycle.end.getTime()) continue;
     hours += paidHours(entry);
     shifts += 1;
-    days.add(isoDate(date));
+    days.add(cal.isoDate(date));
   }
   return {
     periodStart: cycle.start,
@@ -400,29 +398,37 @@ function totalPaidHours(entries) {
   return entries.reduce((sum, e) => sum + (e.isOffDay ? 0 : paidHours(e)), 0);
 }
 
-function workedDays(entries) {
+/** Sorted, de-duplicated "yyyy-MM-dd" strings of worked days, user-local. */
+function workedDayStrings(entries, cal) {
   const days = new Set();
   for (const entry of entries) {
     if (entry.isOffDay) continue;
     const date = entryDate(entry);
     if (!date) continue;
-    days.add(isoDate(date));
+    days.add(cal.isoDate(date));
   }
-  return [...days].sort().map((s) => new Date(s + "T00:00:00"));
+  return [...days].sort();
 }
 
-function currentStreak(workedDayStrings) {
+/** Days since epoch for a "yyyy-MM-dd" string — timezone-free day arithmetic. */
+function dayNumber(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return Math.round(Date.UTC(y, m - 1, d) / MS_DAY);
+}
+
+function currentStreak(workedDayStrings, now, cal) {
   if (workedDayStrings.length === 0) return 0;
-  const today = isoDate(new Date());
-  const yesterday = isoDate(new Date(startOfDay(new Date()).getTime() - MS_DAY));
+  const today = cal.isoDate(now);
+  const yesterday = cal.isoDate(cal.addDays(now, -1));
   const set = new Set(workedDayStrings);
-  let anchor = set.has(today) ? today : set.has(yesterday) ? yesterday : null;
+  const anchor = set.has(today) ? today : set.has(yesterday) ? yesterday : null;
   if (!anchor) return 0;
+  const days = new Set(workedDayStrings.map(dayNumber));
   let streak = 0;
-  let cursor = new Date(anchor + "T00:00:00");
-  while (set.has(isoDate(cursor))) {
+  let cursor = dayNumber(anchor);
+  while (days.has(cursor)) {
     streak += 1;
-    cursor = new Date(cursor.getTime() - MS_DAY);
+    cursor -= 1;
   }
   return streak;
 }
@@ -433,9 +439,9 @@ function bestStreak(workedDayStrings) {
   let best = 1;
   let run = 1;
   for (let i = 1; i < sorted.length; i++) {
-    const prev = new Date(sorted[i - 1] + "T00:00:00").getTime();
-    const cur = new Date(sorted[i] + "T00:00:00").getTime();
-    if (cur - prev === MS_DAY) {
+    const prev = dayNumber(sorted[i - 1]);
+    const cur = dayNumber(sorted[i]);
+    if (cur - prev === 1) {
       run += 1;
       best = Math.max(best, run);
     } else if (sorted[i] !== sorted[i - 1]) {
@@ -637,7 +643,7 @@ const XP_OWNERSHIP_MODE = "shadow";
 
 /** Per-component server entry XP, for parity diagnosis against the client's
  * pushed xpBreakdown. */
-function entryXPComponents(entries, workedDayCount) {
+function entryXPComponents(entries, workedDayCount, cal) {
   let hoursSum = 0;
   let shifts = 0;
   let longShifts = 0;
@@ -650,7 +656,7 @@ function entryXPComponents(entries, workedDayCount) {
     if (h >= LONG_SHIFT_HOURS) longShifts += 1;
     const d = entryDate(entry);
     if (d) {
-      const weekStart = currentWeekInterval(d).start.getTime();
+      const weekStart = currentWeekInterval(d, cal).start.getTime();
       weekHours.set(weekStart, (weekHours.get(weekStart) || 0) + h);
     }
   }
@@ -667,8 +673,8 @@ function entryXPComponents(entries, workedDayCount) {
   };
 }
 
-function entryDerivedXP(entries, workedDayCount) {
-  const c = entryXPComponents(entries, workedDayCount);
+function entryDerivedXP(entries, workedDayCount, cal) {
+  const c = entryXPComponents(entries, workedDayCount, cal);
   return c.hourly + c.logging + c.streakDays + c.longShift + c.weeklyCompletion;
 }
 
@@ -788,19 +794,6 @@ function privacyFlags(userData) {
   };
 }
 
-/**
- * "yyyy-MM-dd" of `d` in LOCAL time (process TZ, pinned to the users'
- * timezone). `toISOString()` is UTC and drifted a day for evening dates —
- * every consumer compares these strings against local calendar days
- * (the client parses chequeDailySummary dates as local).
- */
-function isoDate(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 async function loadPaySettings(db, uid) {
   const snap = await db
     .collection("users")
@@ -839,7 +832,7 @@ async function loadAllTimeEntries(db, uid) {
   return legacy.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-async function emitShiftActivityIfNeeded(db, uid, userData, beforeEntry, afterEntry) {
+async function emitShiftActivityIfNeeded(db, uid, userData, beforeEntry, afterEntry, cal) {
   if (!afterEntry || afterEntry.isOffDay) return;
   const hours = paidHours(afterEntry);
   if (hours <= 0) return;
@@ -849,9 +842,7 @@ async function emitShiftActivityIfNeeded(db, uid, userData, beforeEntry, afterEn
   const date = entryDate(afterEntry);
   if (!date) return;
   const now = new Date();
-  const dayDiff = Math.floor(
-    (startOfDay(now).getTime() - startOfDay(date).getTime()) / MS_DAY
-  );
+  const dayDiff = cal.dayDiff(now, date);
   if (dayDiff > 1) return;
 
   const isNew = !beforeEntry && afterEntry;
@@ -928,15 +919,17 @@ async function recomputeUserStats(db, uid, options = {}) {
 
   const userData = userSnap.exists ? userSnap.data() : {};
   const now = new Date();
-  const week = weeklyStats(entries, now);
-  const payPeriod = payPeriodStats(entries, paySettings, now);
-  const worked = workedDays(entries);
-  const workedStrings = worked.map((d) => isoDate(d));
-  const streak = currentStreak(workedStrings);
+  // Every day boundary below is the USER's, not the server's (UTC).
+  const tzResolution = resolveUserTimeZone({ userData, paySettings, entries });
+  const cal = makeCalendar(tzResolution.timeZone);
+  const week = weeklyStats(entries, now, cal);
+  const payPeriod = payPeriodStats(entries, paySettings, now, cal);
+  const workedStrings = workedDayStrings(entries, cal);
+  const streak = currentStreak(workedStrings, now, cal);
   const best = bestStreak(workedStrings);
   const totalHours = totalPaidHours(entries);
 
-  const serverEntryXP = entryDerivedXP(entries, workedStrings.length);
+  const serverEntryXP = entryDerivedXP(entries, workedStrings.length, cal);
   const xpResolution = resolveTotalXP(gamification, userData, serverEntryXP);
   const { extrasUpdate, xpSource } = xpResolution;
   // Shadow mode publishes the client total exactly (pre-migration behavior);
@@ -1051,20 +1044,24 @@ async function recomputeUserStats(db, uid, options = {}) {
   // Company stats — hours and days since companyStartDate
   const companyStart = userData.companyStartDate?.toDate?.() || null;
   const workEntries = entries.filter((e) => !e.isOffDay);
-  const companyEntries = companyStart
+  const companyStartDay = companyStart ? cal.startOfDay(companyStart) : null;
+  const companyEntries = companyStartDay
     ? workEntries.filter((e) => {
         const d = entryDate(e);
-        return d && d >= startOfDay(companyStart);
+        return d && d >= companyStartDay;
       })
     : workEntries;
   const companyHoursLogged = companyEntries.reduce((s, e) => s + paidHours(e), 0);
   const companyDaysWorked = new Set(
-    companyEntries.map((e) => isoDate(entryDate(e))).filter(Boolean)
+    companyEntries.map((e) => {
+      const d = entryDate(e);
+      return d ? cal.isoDate(d) : null;
+    }).filter(Boolean)
   ).size;
 
   // Current calendar month / year hour totals (for the public single-source doc).
-  const monthStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
-  const yearStart = startOfDay(new Date(now.getFullYear(), 0, 1));
+  const monthStart = cal.monthStart(now);
+  const yearStart = cal.yearStart(now);
   let currentMonthHours = 0;
   let currentYearHours = 0;
   let lastShiftMs = 0;
@@ -1084,10 +1081,10 @@ async function recomputeUserStats(db, uid, options = {}) {
   // worked day of the cheque — the cutoff users see — is one day earlier.
   // Publishing periodEnd as the cutoff showed friends a period ending on
   // payday itself, one day later than the owner's own app displays.
-  const lastPeriodDay = new Date(payPeriod.periodEnd.getTime() - MS_DAY);
+  const lastPeriodDay = cal.addDays(payPeriod.periodEnd, -1);
   const chequeDailySummary = (() => {
     if (!privacy.shareHours) return [];
-    const today = startOfDay(now);
+    const today = cal.startOfDay(now);
     const cutoff = lastPeriodDay < today ? lastPeriodDay : today;
     const grouped = {};
     for (const entry of entries) {
@@ -1095,18 +1092,18 @@ async function recomputeUserStats(db, uid, options = {}) {
       if (!d || entry.isOffDay) continue;
       const t = d.getTime();
       if (t < payPeriod.periodStart.getTime() || t >= payPeriod.periodEnd.getTime()) continue;
-      const key = isoDate(d);
+      const key = cal.isoDate(d);
       if (!grouped[key]) grouped[key] = { hours: 0, shifts: 0 };
       grouped[key].hours += paidHours(entry);
       grouped[key].shifts += 1;
     }
     const result = [];
-    const cursor = new Date(payPeriod.periodStart);
+    let cursor = payPeriod.periodStart;
     while (cursor <= cutoff) {
-      const key = isoDate(cursor);
+      const key = cal.isoDate(cursor);
       const day = grouped[key] || { hours: 0, shifts: 0 };
       result.push({ date: key, hours: day.hours, shifts: day.shifts });
-      cursor.setDate(cursor.getDate() + 1);
+      cursor = cal.addDays(cursor, 1);
     }
     return result;
   })();
@@ -1182,8 +1179,8 @@ async function recomputeUserStats(db, uid, options = {}) {
     companyHoursLogged: privacy.shareHours ? companyHoursLogged : 0,
     companyDaysWorked: privacy.shareHours ? companyDaysWorked : 0,
     chequeDailySummary,
-    chequeWindowStart: privacy.shareHours ? isoDate(payPeriod.periodStart) : "",
-    chequeWindowCutoff: privacy.shareHours ? isoDate(lastPeriodDay) : "",
+    chequeWindowStart: privacy.shareHours ? cal.isoDate(payPeriod.periodStart) : "",
+    chequeWindowCutoff: privacy.shareHours ? cal.isoDate(lastPeriodDay) : "",
     unlockedBadgeSummaries,
     badgeCount,
     updatedAt,
@@ -1315,7 +1312,8 @@ async function recomputeUserStats(db, uid, options = {}) {
   console.log(
     `recomputeUserStats committed uid=${uid} level=${level} prestige=${prestige} ` +
     `totalXP=${totalXP} (${xpSource}, entryXP=${serverEntryXP}) ` +
-    `totalHours=${totalHours.toFixed(2)} badges=${badgeCount}` +
+    `totalHours=${totalHours.toFixed(2)} badges=${badgeCount} ` +
+    `tz=${cal.timeZone}(${tzResolution.source})` +
     (xpResolution.offsetRepair
       ? ` (re-added un-adopted adminXPOffset ${xpResolution.offsetRepair})`
       : "") +
@@ -1353,7 +1351,7 @@ async function recomputeUserStats(db, uid, options = {}) {
       `prestige=${prestige}`,
       `hours=${totalHours.toFixed(2)}`,
       `bestStreak(client=${clientBestStreak}, server=${best})`,
-      `serverComponents=${JSON.stringify(entryXPComponents(entries, workedStrings.length))}`,
+      `serverComponents=${JSON.stringify(entryXPComponents(entries, workedStrings.length, cal))}`,
     ];
     if (clientBreakdown && typeof clientBreakdown === "object") {
       parts.push(`clientComponents=${JSON.stringify(clientBreakdown)}`);
@@ -1370,7 +1368,8 @@ async function recomputeUserStats(db, uid, options = {}) {
     uid,
     userData,
     options.beforeEntry,
-    options.afterEntry
+    options.afterEntry,
+    cal
   );
 
   // Refresh the global "Top 5 Hour Trackers" board. publicProfiles.totalHours is
@@ -1628,4 +1627,7 @@ module.exports = {
   paidHours,
   weeklyStats,
   currentPayCycle,
+  workedDayStrings,
+  currentStreak,
+  bestStreak,
 };
