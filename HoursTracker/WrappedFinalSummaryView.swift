@@ -149,13 +149,11 @@ struct WrappedFinalSummarySlide: View {
         }
         .padding(.vertical, 30)
         .padding(.horizontal, 24)
+        // Borderless frosted panel: a gold outline fought the purple ribbon
+        // backdrop, so the card is defined by its fill alone.
         .background(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(Color.white.opacity(0.07))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(WrappedPalette.accent.opacity(0.30), lineWidth: 1)
+                .fill(Color.white.opacity(0.10))
         )
         .wrappedReveal(appeared, index: 0, yOffset: 26, scaleFrom: 0.92)
     }
