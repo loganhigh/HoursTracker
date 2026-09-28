@@ -14,6 +14,16 @@ struct WrappedHomeCard: View {
     let onOpen: () -> Void
     let onDismiss: () -> Void
 
+    init(year: Int, totalHours: Double, username: String? = nil, prestige: Int = 0,
+         onOpen: @escaping () -> Void, onDismiss: @escaping () -> Void) {
+        WrappedPalette.prestige = prestige
+        self.year = year
+        self.totalHours = totalHours
+        self.username = username
+        self.onOpen = onOpen
+        self.onDismiss = onDismiss
+    }
+
     /// "2,269 hours. Great job!! logan" — falls back to just the praise
     /// when there's no handle, so it never reads as a dangling greeting.
     private var headline: String {

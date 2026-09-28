@@ -193,12 +193,16 @@ struct WrappedLongestShiftSlide: View {
                         WrappedEyebrow(text: "Longest Shift")
                             .wrappedReveal(appeared, index: 0)
 
-                        // Counts up in h/m form, so the minutes tick into
-                        // place rather than the whole duration cross-fading.
+                        // Counts up in one fixed shape all the way: whole
+                        // hours when the shift was whole hours, "Xh Ym"
+                        // otherwise. hoursAndMinutes drops the minutes on
+                        // every whole hour, so mid-count the text flipped
+                        // between "9h 59m" and "10h" and the fit-to-width
+                        // scaling made it jump in size.
                         WrappedCountingText(
                             value: count,
                             font: .system(size: 68, weight: .black, design: .rounded),
-                            format: { WrappedFormat.hoursAndMinutes($0) }
+                            format: { WrappedFormat.countingDuration($0, target: stats.longestShiftHours) }
                         )
                         .wrappedReveal(appeared, index: 1, yOffset: 0, scaleFrom: 0.68)
 

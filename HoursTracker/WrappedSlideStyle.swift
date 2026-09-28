@@ -14,15 +14,26 @@ enum WrappedPalette {
     static let background = Color.black
     static let primaryText = Color.white
     static let secondaryText = Color.white.opacity(0.68)
-    static let accent = Color(hex: 0xF5C518) // matches the app's existing gold/yellow accent
-    static let accentDeep = Color(hex: 0xE0932B)
+
+    /// The viewer's prestige, set when Wrapped (or its Home card) is shown.
+    /// The stat accent takes that rank's colours so Wrapped wears the
+    /// user's prestige; unranked users keep the original gold, since the
+    /// Unranked purple disappears into the purple ribbon backdrop.
+    static var prestige = 0
+
+    static var accent: Color {
+        prestige > 0 ? PrestigeTheme.tier(for: prestige).primary : Color(hex: 0xF5C518)
+    }
+    static var accentDeep: Color {
+        prestige > 0 ? PrestigeTheme.tier(for: prestige).accent2 : Color(hex: 0xE0932B)
+    }
 
     /// Fill for a highlighted bar/segment — the "this is the one" treatment.
-    static let accentGradient = LinearGradient(
+    static var accentGradient: LinearGradient { LinearGradient(
         colors: [accent, accentDeep],
         startPoint: .top,
         endPoint: .bottom
-    )
+    ) }
 
     /// Fill for ordinary bars: present but clearly subordinate to the accent.
     static let barGradient = LinearGradient(

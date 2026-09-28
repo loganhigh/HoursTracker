@@ -19,7 +19,8 @@ struct WrappedView: View {
     /// transition for the incoming slide is already correct.
     @State private var isNavigatingForward = true
 
-    init(stats: WrappedYearStats, username: String? = nil) {
+    init(stats: WrappedYearStats, username: String? = nil, prestige: Int = 0) {
+        WrappedPalette.prestige = prestige
         self.stats = stats
         self.username = username
         _navigator = State(initialValue: WrappedNavigator(slides: WrappedSlideType.availableSlides(for: stats)))

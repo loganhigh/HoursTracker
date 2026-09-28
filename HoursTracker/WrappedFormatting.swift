@@ -18,6 +18,17 @@ enum WrappedFormat {
         return m == 0 ? "\(h)h" : "\(h)h \(m)m"
     }
 
+    /// A duration mid count-up toward `target`, in the shape the final
+    /// value will have so the text never changes form while counting.
+    /// Lands on exactly `hoursAndMinutes(target)`.
+    static func countingDuration(_ hours: Double, target: Double) -> String {
+        guard hours.isFinite, hours > 0 else { return "0h" }
+        let targetMinutes = Int((target * 60).rounded())
+        let totalMinutes = min(Int((hours * 60).rounded()), targetMinutes)
+        if targetMinutes % 60 == 0 { return "\(totalMinutes / 60)h" }
+        return "\(totalMinutes / 60)h \(totalMinutes % 60)m"
+    }
+
     /// "2,847" — grouped integer, for large whole-number stats like total
     /// shifts. Native SwiftUI/Foundation number formatting, not manual
     /// string math.
