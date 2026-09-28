@@ -833,6 +833,7 @@ final class HoursStore: ObservableObject {
         }
         save(syncProfile: false)
         WeeklyMilestoneNotifier.shared.checkMilestones(for: entries)
+        IncomeMilestoneNotifier.check(store: self)
         SmartNotifier.shared.checkPayPeriodProgress(for: entries, paySettings: paySettings)
         SmartNotifier.shared.cancelDailyReminderIfNeeded(for: entry.date, entries: entries)
         SmartNotifier.shared.cancelForgotHoursReminderIfNeeded(for: entry.date, entries: entries)
@@ -858,6 +859,7 @@ final class HoursStore: ObservableObject {
         recalculateGamification(eventHint: "Shift updated")
         save(syncProfile: false)
         WeeklyMilestoneNotifier.shared.checkMilestones(for: entries)
+        IncomeMilestoneNotifier.check(store: self)
         SmartNotifier.shared.checkPayPeriodProgress(for: entries, paySettings: paySettings)
         SmartNotifier.shared.cancelDailyReminderIfNeeded(for: entry.date, entries: entries)
         SmartNotifier.shared.cancelForgotHoursReminderIfNeeded(for: entry.date, entries: entries)
@@ -879,6 +881,7 @@ final class HoursStore: ObservableObject {
         recalculateGamification(eventHint: "Shift removed")
         save(syncProfile: false)
         WeeklyMilestoneNotifier.shared.checkMilestones(for: entries)
+        IncomeMilestoneNotifier.check(store: self)
         
         cloudSync.deleteEntry(entry) { _ in }
     }
@@ -890,6 +893,7 @@ final class HoursStore: ObservableObject {
         recalculateGamification(eventHint: "Month entries removed")
         save(syncProfile: false)
         WeeklyMilestoneNotifier.shared.checkMilestones(for: entries)
+        IncomeMilestoneNotifier.check(store: self)
         // Tombstone + push each cloud deletion — without this the cloud docs
         // survived a month wipe and kept inflating server totals forever.
         for entry in monthEntries {
@@ -1865,6 +1869,7 @@ final class HoursStore: ObservableObject {
         recalculateGamification(eventHint: nil)
         save(syncProfile: false)
         WeeklyMilestoneNotifier.shared.checkMilestones(for: entries)
+        IncomeMilestoneNotifier.check(store: self)
         SmartNotifier.shared.scheduleForgotHoursReminderIfNeeded(entries: entries)
         SmartNotifier.shared.scheduleStreakNotificationsIfNeeded(
             entries: entries,

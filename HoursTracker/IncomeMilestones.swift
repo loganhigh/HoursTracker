@@ -1,4 +1,5 @@
 import Foundation
+import UserNotifications
 
 /// Lifetime milestones on the You tab: money earned, total hours, shifts
 /// logged. Data-driven — add a row to `IncomeMilestone.all` for a new one.
@@ -149,14 +150,14 @@ enum IncomeMilestoneCalculator {
 
 // MARK: - Seen / celebrated tracking
 
-/// Which milestones this device has already celebrated. Local-only and
+/// Which milestones this device has already notified about. Local-only and
 /// account-bound — cleared alongside the other per-account local data.
 enum IncomeMilestoneSeenStore {
     static let key = "milestones_celebrated_v1"
 
-    /// Only milestones crossed this recently pop a celebration; older ones
+    /// Only milestones crossed this recently send a notification; older ones
     /// (backfilled history, a cloud restore landing after first launch) are
-    /// marked seen silently so a restore never floods the screen.
+    /// marked seen silently so a restore never floods notifications.
     static let celebrationWindowDays = 30
 
     static var hasInitialized: Bool {
@@ -177,7 +178,7 @@ enum IncomeMilestoneSeenStore {
     }
 
     /// Records every reached milestone as seen and returns the one to
-    /// celebrate now, if any. First run seeds the set without celebrating.
+    /// notify about now, if any. First run seeds the set without celebrating.
     /// When several cross at once, the last in list order (the biggest)
     /// is celebrated and the rest are marked seen with it.
     static func consumeNewlyReached(
@@ -238,5 +239,44 @@ enum IncomeMilestoneFormat {
 
     static func date(_ date: Date) -> String {
         date.formatted(.dateTime.month(.abbreviated).day().year())
+    }
+}
+
+// MARK: - Notification
+
+/// Celebrates a newly crossed milestone with a local notification (shown as
+/// a banner even while the app is open). Runs wherever shifts are saved and
+/// on foreground, so the milestone lands the moment the shift that crosses
+/// it does. First run seeds the seen-set silently; see
+/// `IncomeMilestoneSeenStore.consumeNewlyReached`.
+enum IncomeMilestoneNotifier {
+    @MainActor
+    static func check(store: HoursStore) {
+        guard store.isLoaded else { return }
+        let rows = IncomeMilestoneCalculator.progress(store: store)
+        guard let row = IncomeMilestoneSeenStore.consumeNewlyReached(rows) else { return }
+        let currencyCode = store.paySettings.currencyCode
+        Task {
+            guard await NotificationManager.shared.hasPermission() else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "Milestone unlocked 🎉"
+            content.body = message(for: row.milestone, currencyCode: currencyCode)
+            content.sound = .default
+            let request = UNNotificationRequest(
+                identifier: "income_milestone_\(row.milestone.id)",
+                content: content,
+                trigger: nil
+            )
+            try? await UNUserNotificationCenter.current().add(request)
+        }
+    }
+
+    static func message(for milestone: IncomeMilestone, currencyCode: String) -> String {
+        let value = milestone.valueText(currencyCode: currencyCode)
+        switch milestone.kind {
+        case .earnings: return "You've earned \(value) tracking your shifts. Hard work, paid off."
+        case .hours: return "\(value) hours logged. That's a serious body of work."
+        case .shifts: return "\(value) shifts logged. Consistency pays."
+        }
     }
 }

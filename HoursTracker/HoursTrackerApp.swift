@@ -240,6 +240,7 @@ private struct MainAppWithStartup: View {
             store.applyAutoOffDaysForForgottenShifts()
             WeeklyMilestoneNotifier.shared.resetWeeklyStateIfNeeded()
             WeeklyMilestoneNotifier.shared.checkMilestones(for: store.entries)
+            IncomeMilestoneNotifier.check(store: store)
             SmartNotifier.shared.scheduleDailyReminder()
             SmartNotifier.shared.scheduleForgotHoursReminderIfNeeded(entries: store.entries)
             SmartNotifier.shared.scheduleMotivationReminderIfNeeded(entries: store.entries)

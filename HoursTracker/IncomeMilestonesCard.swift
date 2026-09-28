@@ -2,11 +2,12 @@ import SwiftUI
 
 /// "Milestones" card on the You tab, directly under Goals. Every lifetime
 /// milestone is listed: reached ones with the day they were crossed (tap to
-/// open the shareable card), unreached ones with a progress bar.
+/// share an image of it), unreached ones with a progress bar. Crossing one
+/// sends a notification (IncomeMilestoneNotifier).
 struct IncomeMilestonesCard: View {
     @ObservedObject var store: HoursStore
 
-    @State private var presented: IncomeMilestoneProgress?
+    @State private var shareImage: MilestoneShareImage?
 
     private var currencyCode: String { store.paySettings.currencyCode }
 
@@ -23,12 +24,14 @@ struct IncomeMilestonesCard: View {
                     if row.isReached {
                         Button {
                             Haptics.lightTap()
-                            presented = row
+                            if let image = IncomeMilestoneShareStory.render(row: row, currencyCode: currencyCode) {
+                                shareImage = MilestoneShareImage(image: image)
+                            }
                         } label: {
                             IncomeMilestoneRow(row: row, currencyCode: currencyCode)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityHint("Open shareable card")
+                        .accessibilityHint("Share this milestone")
                     } else {
                         IncomeMilestoneRow(row: row, currencyCode: currencyCode)
                     }
@@ -36,29 +39,8 @@ struct IncomeMilestonesCard: View {
             }
             .padding(.vertical, AppSpacing.xs)
         }
-        .onAppear { checkForNewMilestones(rows) }
-        .onChange(of: rows.filter(\.isReached).map(\.id)) { _, _ in
-            checkForNewMilestones(IncomeMilestoneCalculator.progress(store: store))
-        }
-        .onChange(of: store.isLoaded) { _, _ in
-            checkForNewMilestones(IncomeMilestoneCalculator.progress(store: store))
-        }
-        .fullScreenCover(item: $presented) { row in
-            IncomeMilestoneCelebrationView(
-                row: row,
-                currencyCode: currencyCode,
-                onDismiss: { presented = nil }
-            )
-        }
-    }
-
-    /// Pops the celebration once for a milestone this device hasn't seen.
-    /// Waits for the store's first load so an empty pre-load snapshot never
-    /// seeds the seen-set (which would then celebrate the whole history).
-    private func checkForNewMilestones(_ rows: [IncomeMilestoneProgress]) {
-        guard store.isLoaded, presented == nil else { return }
-        if let row = IncomeMilestoneSeenStore.consumeNewlyReached(rows) {
-            presented = row
+        .sheet(item: $shareImage) { item in
+            ShareSheet(items: [item.image]) { shareImage = nil }
         }
     }
 }
