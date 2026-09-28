@@ -214,6 +214,10 @@ struct ShiftShareRow: View {
                             let ok = await ShiftSharer.save(image)
                             saveState = ok ? .saved : .failed
                             if ok { Haptics.success() } else { Haptics.error() }
+                            // Confirm, then return to "Save Image" so the
+                            // button never looks permanently done.
+                            try? await Task.sleep(nanoseconds: ok ? 1_800_000_000 : 3_000_000_000)
+                            withAnimation(.easeInOut(duration: 0.25)) { saveState = .idle }
                         }
                     } else {
                         ShiftSharer.share(image, to: target)
@@ -224,6 +228,7 @@ struct ShiftShareRow: View {
                             .frame(width: 56, height: 56)
                             .clipShape(Circle())
                         Text(label(for: target))
+                            .contentTransition(.opacity)
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(Color.white.opacity(0.85))
                             .lineLimit(1)

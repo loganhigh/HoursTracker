@@ -334,6 +334,9 @@ struct HoursHomeView: View {
     @State private var holidayBurst = 0
     @StateObject private var badgeUnlockTracker = BadgeUnlockTracker()
     @State private var badgeUnlockPresentation: BadgeUnlockPresentation?
+    /// A badge unlocked while the add-shift flow was up, shown once it closes.
+    @State private var deferredBadge: BadgeUnlockPresentation?
+    @ObservedObject private var addFlow = AddFlowPresence.shared
     @State private var showingAdminPanel = false
 
     private struct BadgeUnlockPresentation: Identifiable {
@@ -845,8 +848,23 @@ struct HoursHomeView: View {
             guard let badge = new.first(where: { !oldSet.contains($0) && !badgeUnlockTracker.hasCelebrated($0) && !$0.hasPrefix("prestige_") }) else { return }
             badgeUnlockTracker.markCelebrated(badge)
             let label = badge.replacingOccurrences(of: "_", with: " ").capitalized
+            let presentation = BadgeUnlockPresentation(id: badge, displayName: label)
+            // Presenting a sheet from here while the add-shift cover is up
+            // makes iOS dismiss that cover (and the earnings card in it).
+            guard !addFlow.isActive else {
+                deferredBadge = presentation
+                return
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                badgeUnlockPresentation = BadgeUnlockPresentation(id: badge, displayName: label)
+                badgeUnlockPresentation = presentation
+            }
+        }
+        .onChange(of: addFlow.isActive) { _, active in
+            guard !active, let pending = deferredBadge else { return }
+            deferredBadge = nil
+            // Let the cover finish its dismissal animation first.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                badgeUnlockPresentation = pending
             }
         }
         .sheet(item: $badgeUnlockPresentation) { presentation in

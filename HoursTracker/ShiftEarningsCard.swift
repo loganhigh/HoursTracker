@@ -112,9 +112,9 @@ struct ShiftEarningsView: View {
     private var footnote: String {
         switch earnings.source {
         case .learned(let cheques):
-            return "Take-home estimated from your last \(cheques) recorded cheques."
+            return "Take-home estimated from your last \(cheques) recorded cheques. These are predictions, so your final pay may differ."
         case .assumed:
-            return "Take-home assumes about \(Int(TakeHomeEstimator.assumedDeductionRate * 100))% in deductions. Record a cheque's real total in History and this becomes yours."
+            return "Add your actual cheque in History to improve future estimates. These are predictions, so your final pay may differ."
         }
     }
 

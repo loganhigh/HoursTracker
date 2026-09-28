@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - Add Shift entry point (Hour Tracker Pro — router)
 //
@@ -20,10 +21,25 @@ struct AddShiftEntryView: View {
     @EnvironmentObject private var liveShift: LiveShiftManager
 
     var body: some View {
-        if liveShift.activeShift != nil {
-            LiveShiftTrackingView(store: store)
-        } else {
-            AddShiftWizardView(store: store)
+        Group {
+            if liveShift.activeShift != nil {
+                LiveShiftTrackingView(store: store)
+            } else {
+                AddShiftWizardView(store: store)
+            }
         }
+        .onAppear { AddFlowPresence.shared.isActive = true }
+        .onDisappear { AddFlowPresence.shared.isActive = false }
     }
+}
+
+/// Whether the add-shift flow is on screen. Celebrations that are presented
+/// as sheets from the screen underneath (badge unlocks) must wait for it:
+/// presenting one while this full-screen cover is up makes iOS dismiss the
+/// cover — which threw away the shift earnings card mid-view.
+@MainActor
+final class AddFlowPresence: ObservableObject {
+    static let shared = AddFlowPresence()
+    @Published var isActive = false
+    private init() {}
 }
