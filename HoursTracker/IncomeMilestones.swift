@@ -1,8 +1,9 @@
 import Foundation
 import UserNotifications
 
-/// Lifetime milestones on the You tab: money earned, total hours, shifts
-/// logged. Data-driven — add a row to `IncomeMilestone.all` for a new one.
+/// Lifetime milestones — money earned, total hours, shifts logged — each
+/// celebrated once with a notification (IncomeMilestoneNotifier).
+/// Data-driven — add a row to `IncomeMilestone.all` for a new one.
 struct IncomeMilestone: Identifiable, Equatable {
     enum Kind: String {
         case earnings
@@ -25,36 +26,9 @@ struct IncomeMilestone: Identifiable, Equatable {
         IncomeMilestone(kind: .shifts, threshold: 100)
     ]
 
-    var icon: String {
-        switch kind {
-        case .earnings: return "dollarsign.circle.fill"
-        case .hours: return "clock.fill"
-        case .shifts: return "briefcase.fill"
-        }
-    }
-
-    /// "Lifetime earnings" / "Total hours" / "Shifts logged".
-    var categoryLabel: String {
-        switch kind {
-        case .earnings: return "Lifetime earnings"
-        case .hours: return "Total hours"
-        case .shifts: return "Shifts logged"
-        }
-    }
-
     /// Headline value: "$10,000", "1,000", "100".
     func valueText(currencyCode: String) -> String {
         IncomeMilestoneFormat.value(threshold, kind: kind, currencyCode: currencyCode)
-    }
-
-    /// Row title: "$10,000 earned", "1,000 total hours", "100 shifts".
-    func title(currencyCode: String) -> String {
-        let value = valueText(currencyCode: currencyCode)
-        switch kind {
-        case .earnings: return "\(value) earned"
-        case .hours: return "\(value) total hours"
-        case .shifts: return "\(value) shifts"
-        }
     }
 }
 
@@ -69,11 +43,6 @@ struct IncomeMilestoneProgress: Identifiable, Equatable {
 
     var id: String { milestone.id }
     var isReached: Bool { reachedDate != nil }
-    var remaining: Double { max(0, milestone.threshold - current) }
-    var fraction: Double {
-        guard milestone.threshold > 0 else { return 0 }
-        return min(1, max(0, current / milestone.threshold))
-    }
 }
 
 // MARK: - Calculation
@@ -223,22 +192,6 @@ enum IncomeMilestoneFormat {
             f.maximumFractionDigits = 0
             return f.string(from: NSNumber(value: value.rounded(.down))) ?? "\(Int(value))"
         }
-    }
-
-    /// "$1,240 to go" / "212 hours to go" / "1 shift to go".
-    static func remaining(_ row: IncomeMilestoneProgress, currencyCode: String) -> String {
-        let kind = row.milestone.kind
-        let amount = row.remaining.rounded(.up)
-        let text = value(amount, kind: kind, currencyCode: currencyCode)
-        switch kind {
-        case .earnings: return "\(text) to go"
-        case .hours: return "\(text) \(amount == 1 ? "hour" : "hours") to go"
-        case .shifts: return "\(text) \(amount == 1 ? "shift" : "shifts") to go"
-        }
-    }
-
-    static func date(_ date: Date) -> String {
-        date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 }
 
