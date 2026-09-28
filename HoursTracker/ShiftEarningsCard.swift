@@ -19,11 +19,12 @@ struct ShiftEarnings: Equatable {
 
 extension HoursStore {
     /// Earnings for shifts that were just saved (one entry, or both halves of
-    /// a split-at-midnight shift). nil for off days, zero hours, or no wage
-    /// set — a "$0.00 earned" card helps nobody.
+    /// a split-at-midnight shift). nil for off days, zero hours, and for
+    /// anyone who hasn't entered their own wage — the card states dollar
+    /// figures as fact, and the $35 placeholder rate isn't theirs.
     func shiftEarnings(for shifts: [WorkEntry]) -> ShiftEarnings? {
         let work = shifts.filter { !$0.isOffDay && $0.paidHours > 0 }
-        guard !work.isEmpty, paySettings.hourlyWage > 0 else { return nil }
+        guard !work.isEmpty, paySettings.hourlyRateSet, paySettings.hourlyWage > 0 else { return nil }
         let hours = work.reduce(0) { $0 + $1.paidHours }
         let gross = work.reduce(0) { $0 + payBreakdown(for: $1).pay }
         guard gross > 0 else { return nil }
@@ -65,7 +66,7 @@ struct ShiftEarningsView: View {
     let earnings: ShiftEarnings
     let onDone: () -> Void
 
-    @State private var shareImage: Image?
+    @State private var shareImage: UIImage?
 
     var body: some View {
         ZStack {
@@ -98,20 +99,8 @@ struct ShiftEarningsView: View {
     }
 
     private var buttons: some View {
-        VStack(spacing: AppSpacing.sm) {
-            if let shareImage {
-                ShareLink(
-                    item: shareImage,
-                    preview: SharePreview("My shift", image: shareImage)
-                ) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color(hex: 0x1B1035))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Capsule().fill(Color.white))
-                }
-            }
+        VStack(spacing: AppSpacing.md) {
+            ShiftShareRow(image: shareImage)
             Button(action: onDone) {
                 Text("Done")
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
@@ -144,9 +133,7 @@ struct ShiftEarningsView: View {
 
         let renderer = ImageRenderer(content: content)
         renderer.scale = 3
-        if let uiImage = renderer.uiImage {
-            shareImage = Image(uiImage: uiImage)
-        }
+        shareImage = renderer.uiImage
     }
 }
 
@@ -200,8 +187,10 @@ struct ShiftEarningsCard: View {
                 .font(.system(size: 16, weight: .medium, design: .rounded))
                 .foregroundStyle(Color.white.opacity(0.78))
             Spacer(minLength: 12)
+            // Standard design, not rounded: SF Rounded's bold "$" loses its
+            // stroke at this size and reads as an "S".
             Text(value)
-                .font(.system(size: emphasized ? 22 : 18, weight: .bold, design: .rounded))
+                .font(.system(size: emphasized ? 22 : 18, weight: .bold, design: .default))
                 .foregroundStyle(Color.white)
                 .monospacedDigit()
         }

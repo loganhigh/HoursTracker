@@ -26,6 +26,11 @@ enum PayPeriodType: String, Codable, CaseIterable {
 struct PaySettings: Codable, Equatable {
     // Money basics
     var hourlyRate: Double = 35.00
+    /// True once the user has entered their own wage. `hourlyRate` always
+    /// holds a number (the 35.00 default until then), so this is the only way
+    /// to tell "earns $35" from "never told us". Features that show money as
+    /// fact — the shift earnings card — require it.
+    var hourlyRateSet: Bool = false
     var currencyCode: String = "CAD"
     var provinceState: String = ""
 
@@ -90,7 +95,7 @@ struct PaySettings: Codable, Equatable {
     init() {}
 
     enum CodingKeys: String, CodingKey {
-        case hourlyRate, currencyCode, provinceState, payPeriodType
+        case hourlyRate, hourlyRateSet, currencyCode, provinceState, payPeriodType
         case overtimeType, weekdayOvertimeAfterHours, weekdayOvertimeMultiplier
         case weeklyOvertimeThreshold, weeklyOvertimeAfterHours
         case saturdayOvertimeAfterHours, saturdayMultiplier, sundayMultiplier
@@ -127,6 +132,9 @@ struct PaySettings: Codable, Equatable {
         }
 
         hourlyRate = req(.hourlyRate, fallback.hourlyRate)
+        // Payloads saved before the flag existed: any rate other than the
+        // built-in default can only have come from the user.
+        hourlyRateSet = req(.hourlyRateSet, hourlyRate != fallback.hourlyRate)
         currencyCode = req(.currencyCode, fallback.currencyCode)
         provinceState = req(.provinceState, fallback.provinceState)
         payPeriodType = req(.payPeriodType, fallback.payPeriodType)
