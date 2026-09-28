@@ -181,8 +181,8 @@ enum PrestigeTheme {
         // obsidian-dark gradient tails. Widget mirror: WidgetPrestigeTheme.
         Tier(
             prestige: 11,
-            name: "Obsidian",
-            icon: "seal.fill",
+            name: "Elite",
+            icon: "checkmark.seal.fill",
             primary:    Color(hex: 0x9D86FF),
             accent2:    Color(hex: 0x6D4FE0),
             highlight:  Color(hex: 0xD2C6FF),
@@ -191,8 +191,8 @@ enum PrestigeTheme {
         ),
         Tier(
             prestige: 12,
-            name: "Onyx",
-            icon: "circle.hexagongrid.fill",
+            name: "Premier",
+            icon: "rosette",
             primary:    Color(hex: 0x94A9C4),
             accent2:    Color(hex: 0x5B6E8A),
             highlight:  Color(hex: 0xDCE6F2),
@@ -201,8 +201,8 @@ enum PrestigeTheme {
         ),
         Tier(
             prestige: 13,
-            name: "Titanium",
-            icon: "shield.checkered",
+            name: "Supreme",
+            icon: "bolt.shield.fill",
             primary:    Color(hex: 0x5B9BFF),
             accent2:    Color(hex: 0x3563D9),
             highlight:  Color(hex: 0xB3D1FF),
@@ -211,8 +211,8 @@ enum PrestigeTheme {
         ),
         Tier(
             prestige: 14,
-            name: "Eclipse",
-            icon: "moon.circle.fill",
+            name: "MVP",
+            icon: "medal.fill",
             primary:    Color(hex: 0xFF9F43),
             accent2:    Color(hex: 0xD9601A),
             highlight:  Color(hex: 0xFFD7A0),
@@ -221,8 +221,8 @@ enum PrestigeTheme {
         ),
         Tier(
             prestige: 15,
-            name: "Aurora",
-            icon: "sparkle",
+            name: "Superstar",
+            icon: "star.circle.fill",
             primary:    Color(hex: 0x2EE6A6),
             accent2:    Color(hex: 0x0FA3A0),
             highlight:  Color(hex: 0xA8FFE0),
@@ -231,8 +231,8 @@ enum PrestigeTheme {
         ),
         Tier(
             prestige: 16,
-            name: "Nebula",
-            icon: "hurricane",
+            name: "Hall of Fame",
+            icon: "building.columns.fill",
             primary:    Color(hex: 0xE36BFF),
             accent2:    Color(hex: 0xA93BE0),
             highlight:  Color(hex: 0xF6C2FF),
@@ -241,8 +241,8 @@ enum PrestigeTheme {
         ),
         Tier(
             prestige: 17,
-            name: "Supernova",
-            icon: "sun.max.fill",
+            name: "All-Time Great",
+            icon: "laurel.leading",
             primary:    Color(hex: 0xFF5E6C),
             accent2:    Color(hex: 0xE0304A),
             highlight:  Color(hex: 0xFFB3A0),
@@ -251,8 +251,8 @@ enum PrestigeTheme {
         ),
         Tier(
             prestige: 18,
-            name: "Celestial",
-            icon: "moon.stars.fill",
+            name: "Royalty",
+            icon: "crown.fill",
             primary:    Color(hex: 0x6FCBFF),
             accent2:    Color(hex: 0x3A8EE0),
             highlight:  Color(hex: 0xD9F2FF),
@@ -261,8 +261,8 @@ enum PrestigeTheme {
         ),
         Tier(
             prestige: 19,
-            name: "Ascendant",
-            icon: "wand.and.stars",
+            name: "One of One",
+            icon: "1.circle.fill",
             primary:    Color(hex: 0xF5C451),
             accent2:    Color(hex: 0xC9921E),
             highlight:  Color(hex: 0xFFF0C2),
@@ -271,8 +271,8 @@ enum PrestigeTheme {
         ),
         Tier(
             prestige: 20,
-            name: "Eternal",
-            icon: "infinity",
+            name: "G.O.A.T.",
+            icon: "trophy.circle.fill",
             // White-hot platinum and champagne — one radiant family, not a
             // spectrum, so the top rank reads as light rather than colour.
             primary:    Color(hex: 0xF3E9D2),

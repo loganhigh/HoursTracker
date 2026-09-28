@@ -5,7 +5,7 @@ import SwiftUI
 // Anyone at Legend Status (P11+, `Tier.isLegend`) is marked wherever their
 // name or avatar shows: the name is filled with a fixed gradient of their
 // tier's colours (never animated, so it is always fully legible), and the
-// avatar gets a tier-gradient ring. P20 (Eternal) adds a soft glow to the
+// avatar gets a tier-gradient ring. P20 (G.O.A.T.) adds a soft glow to the
 // name and a thicker rotating ring.
 //
 // P0–P10 render EXACTLY as before — a plain `Text` in the caller's style and

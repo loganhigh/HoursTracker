@@ -64,8 +64,8 @@ const LEGACY_MAX_PRESTIGE = 10;
 const PRESTIGE_TIER_NAMES = [
   "Unranked", "Bronze", "Silver", "Gold", "Platinum",
   "Diamond", "Master", "Grandmaster", "Champion", "Legend", "Prestige Master",
-  "Obsidian", "Onyx", "Titanium", "Eclipse", "Aurora",
-  "Nebula", "Supernova", "Celestial", "Ascendant", "Eternal",
+  "Elite", "Premier", "Supreme", "MVP", "Superstar",
+  "Hall of Fame", "All-Time Great", "Royalty", "One of One", "G.O.A.T.",
 ];
 
 const MAX_LEVEL = 25;

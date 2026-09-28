@@ -70,6 +70,6 @@ test("P10 and below derive exactly as before", () => {
 
 test("rank titles cover the Legend tiers", () => {
   assert.equal(rankTitle(1, 10), "Prestige Master Rookie");
-  assert.equal(rankTitle(1, 11), "Obsidian Rookie");
-  assert.equal(rankTitle(25, 20), "Eternal Prestige Ready");
+  assert.equal(rankTitle(1, 11), "Elite Rookie");
+  assert.equal(rankTitle(25, 20), "G.O.A.T. Prestige Ready");
 });
