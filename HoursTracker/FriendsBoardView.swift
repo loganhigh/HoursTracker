@@ -263,8 +263,7 @@ struct FriendsBoardView: View {
 
     private func postCard(_ post: BoardPost) -> some View {
         let prestige = authorPrestige(post.authorUid)
-        return
-        VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 avatarCircle(initials: post.authorInitials, tint: avatarTint(for: post.authorUid))
                     .ascendedAvatarRing(prestige: prestige, diameter: 40, inset: 1.5)

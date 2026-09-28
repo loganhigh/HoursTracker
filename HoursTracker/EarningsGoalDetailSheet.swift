@@ -89,6 +89,8 @@ struct EarningsGoalDetailSheet: View {
                 Text("Add to savings")
             } footer: {
                 Text("Record what you actually put aside for this goal so it stays accurate.")
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
             }
 
             if !row.goal.deposits.isEmpty || row.goal.alreadySaved > 0 {
