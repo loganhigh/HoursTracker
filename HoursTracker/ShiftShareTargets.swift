@@ -2,10 +2,11 @@ import SwiftUI
 import UIKit
 import MessageUI
 import LinkPresentation
+import Photos
 
 // MARK: - Share targets for the shift earnings card
 //
-// Four first-class destinations plus a "More" sheet:
+// Four first-class destinations plus Save Image:
 //   - Messages: the in-app composer with the card attached.
 //   - WhatsApp: hands the image straight to WhatsApp via its documented
 //     `net.whatsapp.image` document type.
@@ -16,8 +17,9 @@ import LinkPresentation
 //   - Snapchat: direct sharing needs Snap's Creative Kit SDK and client ID,
 //     so for now it opens the share sheet, where Snapchat appears when
 //     installed.
+//   - Save Image: straight to Photos (add-only permission).
 // Anything that can't go direct (app not installed, no attachments allowed)
-// falls back to the same trimmed share sheet rather than failing silently.
+// falls back to a trimmed system share sheet rather than failing silently.
 
 enum ShareConfig {
     /// Facebook App ID from developers.facebook.com, required by Instagram
@@ -26,7 +28,7 @@ enum ShareConfig {
 }
 
 enum ShiftShareTarget: String, CaseIterable, Identifiable {
-    case messages, whatsapp, instagram, snapchat, more
+    case messages, whatsapp, instagram, snapchat, save
 
     var id: String { rawValue }
 
@@ -36,39 +38,32 @@ enum ShiftShareTarget: String, CaseIterable, Identifiable {
         case .whatsapp: return "WhatsApp"
         case .instagram: return "Instagram"
         case .snapchat: return "Snapchat"
-        case .more: return "More"
+        case .save: return "Save Image"
+        }
+    }
+
+    /// Brand artwork from the asset catalog; nil → drawn from an SF Symbol.
+    var brandAsset: String? {
+        switch self {
+        case .whatsapp: return "BrandWhatsApp"
+        case .instagram: return "BrandInstagram"
+        case .snapchat: return "BrandSnapchat"
+        case .messages, .save: return nil
         }
     }
 
     var symbol: String {
         switch self {
         case .messages: return "message.fill"
-        case .whatsapp: return "phone.fill"
-        case .instagram: return "camera"
-        case .snapchat: return "bolt.fill"
-        case .more: return "ellipsis"
+        case .save: return "square.and.arrow.down"
+        default: return "questionmark"
         }
     }
 
-    var glyphColor: Color {
+    var symbolBackground: Color {
         switch self {
-        case .snapchat: return .black
-        default: return .white
-        }
-    }
-
-    @ViewBuilder var background: some View {
-        switch self {
-        case .messages: Color(hex: 0x34C759)
-        case .whatsapp: Color(hex: 0x25D366)
-        case .instagram:
-            LinearGradient(
-                colors: [Color(hex: 0xFEDA75), Color(hex: 0xFA7E1E), Color(hex: 0xD62976), Color(hex: 0x962FBF), Color(hex: 0x4F5BD5)],
-                startPoint: .bottomLeading,
-                endPoint: .topTrailing
-            )
-        case .snapchat: Color(hex: 0xFFFC00)
-        case .more: Color.white.opacity(0.18)
+        case .messages: return Color(hex: 0x34C759)
+        default: return Color.white.opacity(0.18)
         }
     }
 }
@@ -118,8 +113,25 @@ enum ShiftSharer {
             )
             UIApplication.shared.open(url)
 
-        case .snapchat, .more:
+        case .snapchat:
             presentShareSheet(image)
+
+        case .save:
+            break // handled by save(_:) so the button can show the result
+        }
+    }
+
+    /// Saves to Photos with add-only access. true on success.
+    static func save(_ image: UIImage) async -> Bool {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else { return false }
+        do {
+            try await PHPhotoLibrary.shared().performChanges {
+                PHAssetChangeRequest.creationRequestForAsset(from: image)
+            }
+            return true
+        } catch {
+            return false
         }
     }
 
@@ -187,34 +199,78 @@ private final class MessageComposeDelegate: NSObject, MFMessageComposeViewContro
 struct ShiftShareRow: View {
     let image: UIImage?
 
+    private enum SaveState { case idle, saving, saved, failed }
+    @State private var saveState: SaveState = .idle
+
     var body: some View {
         HStack(spacing: 0) {
             ForEach(ShiftShareTarget.allCases) { target in
                 Button {
+                    guard let image else { return }
                     Haptics.lightTap()
-                    if let image { ShiftSharer.share(image, to: target) }
+                    if target == .save {
+                        saveState = .saving
+                        Task {
+                            let ok = await ShiftSharer.save(image)
+                            saveState = ok ? .saved : .failed
+                            if ok { Haptics.success() } else { Haptics.error() }
+                        }
+                    } else {
+                        ShiftSharer.share(image, to: target)
+                    }
                 } label: {
                     VStack(spacing: 6) {
-                        ZStack {
-                            target.background
-                            Image(systemName: target.symbol)
-                                .font(.system(size: 22, weight: .semibold))
-                                .foregroundStyle(target.glyphColor)
-                        }
-                        .frame(width: 56, height: 56)
-                        .clipShape(Circle())
-                        Text(target.label)
+                        icon(for: target)
+                            .frame(width: 56, height: 56)
+                            .clipShape(Circle())
+                        Text(label(for: target))
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(Color.white.opacity(0.85))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.8)
+                            .minimumScaleFactor(0.75)
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)
-                .disabled(image == nil)
-                .accessibilityLabel("Share to \(target.label)")
+                .disabled(image == nil || (target == .save && saveState == .saving))
+                .accessibilityLabel(target == .save ? label(for: target) : "Share to \(target.label)")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func icon(for target: ShiftShareTarget) -> some View {
+        if let asset = target.brandAsset {
+            Image(asset)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+        } else {
+            ZStack {
+                target.symbolBackground
+                Image(systemName: target == .save ? saveSymbol : target.symbol)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+        }
+    }
+
+    private var saveSymbol: String {
+        switch saveState {
+        case .saved: return "checkmark"
+        case .failed: return "exclamationmark"
+        default: return "square.and.arrow.down"
+        }
+    }
+
+    private func label(for target: ShiftShareTarget) -> String {
+        guard target == .save else { return target.label }
+        switch saveState {
+        case .saving: return "Saving…"
+        case .saved: return "Saved"
+        case .failed: return "Allow in Settings"
+        case .idle: return "Save Image"
         }
     }
 }

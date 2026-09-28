@@ -95,7 +95,7 @@ struct AddShiftWizardView: View {
 
     var body: some View {
         if let earnings {
-            ShiftEarningsView(earnings: earnings) { dismiss() }
+            ShiftEarningsView(store: store, earnings: earnings) { dismiss() }
                 .transition(.opacity)
         } else {
             wizardBody

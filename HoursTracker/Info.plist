@@ -21,6 +21,8 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Used to show today's local weather on the Home screen.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Saves your shift card to your photos.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 </dict>

@@ -847,6 +847,8 @@ final class HoursStore: ObservableObject {
                 #endif
             }
         }
+        // Every work shift gets weather, however it was logged.
+        attachWeatherIfMissing(entry)
     }
 
     func update(_ entry: WorkEntry) {

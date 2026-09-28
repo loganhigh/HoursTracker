@@ -2,9 +2,9 @@ import SwiftUI
 
 // MARK: - Shift earnings card
 //
-// Shown right after a work shift is saved: hours, gross, estimated take-home
-// and the effective hourly rate after deductions — the numbers people
-// actually talk about, on a card designed to be screenshotted and shared.
+// Shown right after a work shift is saved: hours, the day's weather, where,
+// the current streak, then gross, estimated take-home and the effective
+// hourly rate after deductions — on a card designed to be shared.
 
 struct ShiftEarnings: Equatable {
     let date: Date
@@ -13,6 +13,13 @@ struct ShiftEarnings: Equatable {
     let takeHome: Double
     let source: TakeHomeEstimator.Source
     let currencyCode: String
+    /// The saved entries, so the view can pick up weather that arrives after
+    /// the card opens (backdated shifts are looked up asynchronously).
+    let entryIDs: [UUID]
+    /// Job site if the user set one on the shift.
+    let locationName: String
+    /// Worked-day streak including this shift.
+    let streak: Int
 
     var netHourlyRate: Double { hours > 0 ? takeHome / hours : 0 }
 }
@@ -35,7 +42,12 @@ extension HoursStore {
             gross: gross,
             takeHome: gross * ratio.value,
             source: ratio.source,
-            currencyCode: paySettings.currencyCode
+            currencyCode: paySettings.currencyCode,
+            entryIDs: work.map(\.id),
+            locationName: work
+                .map { $0.locationName.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .first { !$0.isEmpty } ?? "",
+            streak: gamificationProfile.currentStreak
         )
     }
 
@@ -63,10 +75,17 @@ extension HoursStore {
 
 /// Full-screen result shown in place of the add-shift wizard after saving.
 struct ShiftEarningsView: View {
+    @ObservedObject var store: HoursStore
     let earnings: ShiftEarnings
     let onDone: () -> Void
 
     @State private var shareImage: UIImage?
+
+    /// Read live from the store: weather for a backdated shift lands a moment
+    /// after the card opens, and the card (and share image) update with it.
+    private var weather: WeatherSnapshot? {
+        store.entries.first { earnings.entryIDs.contains($0.id) && $0.weather != nil }?.weather
+    }
 
     var body: some View {
         ZStack {
@@ -74,7 +93,7 @@ struct ShiftEarningsView: View {
 
             VStack(spacing: AppSpacing.lg) {
                 Spacer(minLength: 0)
-                ShiftEarningsCard(earnings: earnings)
+                ShiftEarningsCard(earnings: earnings, weather: weather)
                 Text(footnote)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.7))
@@ -87,6 +106,7 @@ struct ShiftEarningsView: View {
             .padding(.bottom, AppSpacing.xl)
         }
         .task { renderShareImage() }
+        .onChange(of: weather) { _, _ in renderShareImage() }
     }
 
     private var footnote: String {
@@ -125,10 +145,10 @@ struct ShiftEarningsView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            ShiftEarningsCard(earnings: earnings)
+            ShiftEarningsCard(earnings: earnings, weather: weather)
                 .padding(28)
         }
-        .frame(width: 390, height: 520)
+        .frame(width: 390, height: 640)
         .clipped()
 
         let renderer = ImageRenderer(content: content)
@@ -140,6 +160,7 @@ struct ShiftEarningsView: View {
 /// The card itself — shared by the on-screen view and the share image.
 struct ShiftEarningsCard: View {
     let earnings: ShiftEarnings
+    let weather: WeatherSnapshot?
 
     var body: some View {
         VStack(spacing: 22) {
@@ -158,6 +179,37 @@ struct ShiftEarningsCard: View {
                     .lineLimit(1)
             }
 
+            if !stats.isEmpty {
+                HStack(spacing: 10) {
+                    ForEach(stats, id: \.label) { stat in
+                        VStack(spacing: 5) {
+                            Image(systemName: stat.symbol)
+                                .font(.system(size: 17, weight: .semibold))
+                                .symbolRenderingMode(.multicolor)
+                                .foregroundStyle(Color.white)
+                                .frame(height: 20)
+                            Text(stat.value)
+                                .font(.system(size: 16, weight: .bold, design: .default))
+                                .foregroundStyle(Color.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                            Text(stat.label)
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color.white.opacity(0.7))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color.white.opacity(0.08))
+                        )
+                    }
+                }
+            }
+
             VStack(spacing: 0) {
                 row("Gross earned", money(earnings.gross))
                 divider
@@ -173,6 +225,32 @@ struct ShiftEarningsCard: View {
             RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .fill(Color.white.opacity(0.10))
         )
+    }
+
+    private struct Stat {
+        let symbol: String
+        let value: String
+        let label: String
+    }
+
+    /// Weather, place and streak — each shown only when there's something
+    /// real to show.
+    private var stats: [Stat] {
+        var out: [Stat] = []
+        if let weather {
+            out.append(Stat(symbol: weather.symbolName, value: weather.temperatureText, label: weather.conditionText))
+        }
+        let city = weather?.locality ?? ""
+        if !earnings.locationName.isEmpty {
+            out.append(Stat(symbol: "mappin.circle.fill", value: earnings.locationName,
+                            label: city.isEmpty ? "Location" : city))
+        } else if !city.isEmpty {
+            out.append(Stat(symbol: "mappin.circle.fill", value: city, label: "Location"))
+        }
+        if earnings.streak > 0 {
+            out.append(Stat(symbol: "flame.fill", value: "\(earnings.streak)", label: "day streak"))
+        }
+        return out
     }
 
     private var divider: some View {
