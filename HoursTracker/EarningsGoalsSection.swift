@@ -1,30 +1,16 @@
 import SwiftUI
 
 /// "Goals" card on the You tab, directly under Tracking history. Each goal
-/// is funded by the pay of shifts logged since it was created; the card
-/// turns what's left into a shift count at the user's recent average.
+/// tracks what the user records putting aside (tap a goal to add to it);
+/// the card turns what's left into a shift count at their recent average.
 struct EarningsGoalsCard: View {
     @ObservedObject var store: HoursStore
     @ObservedObject private var goalStore = EarningsGoalStore.shared
 
-    @State private var editorTarget: EditorTarget?
+    @State private var showingNewGoal = false
+    @State private var openGoal: OpenGoal?
 
-    private enum EditorTarget: Identifiable {
-        case new
-        case edit(EarningsGoal)
-
-        var id: String {
-            switch self {
-            case .new: return "new"
-            case .edit(let goal): return goal.id.uuidString
-            }
-        }
-
-        var goal: EarningsGoal? {
-            if case .edit(let goal) = self { return goal }
-            return nil
-        }
-    }
+    private struct OpenGoal: Identifiable { let id: UUID }
 
     private var rows: [EarningsGoalProgress] {
         // Unfinished goals first (oldest first), reached goals at the bottom.
@@ -50,16 +36,16 @@ struct EarningsGoalsCard: View {
                     ForEach(rows) { row in
                         Button {
                             Haptics.lightTap()
-                            editorTarget = .edit(row.goal)
+                            openGoal = OpenGoal(id: row.goal.id)
                         } label: {
                             EarningsGoalRow(row: row, currencyCode: store.paySettings.currencyCode)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityHint("Edit goal")
+                        .accessibilityHint("Add savings or edit goal")
                     }
                     Button {
                         Haptics.lightTap()
-                        editorTarget = .new
+                        showingNewGoal = true
                     } label: {
                         Label("Add goal", systemImage: "plus")
                     }
@@ -69,11 +55,11 @@ struct EarningsGoalsCard: View {
             }
             .padding(.vertical, AppSpacing.xs)
         }
-        .sheet(item: $editorTarget) { target in
-            EarningsGoalEditorSheet(
-                existing: target.goal,
-                currencyCode: store.paySettings.currencyCode
-            )
+        .sheet(item: $openGoal) { item in
+            EarningsGoalDetailSheet(goalID: item.id, store: store)
+        }
+        .sheet(isPresented: $showingNewGoal) {
+            EarningsGoalEditorSheet(existing: nil, currencyCode: store.paySettings.currencyCode)
         }
     }
 
@@ -97,7 +83,7 @@ struct EarningsGoalsCard: View {
                 .padding(.horizontal, AppSpacing.xs)
             Button {
                 Haptics.lightTap()
-                editorTarget = .new
+                showingNewGoal = true
             } label: {
                 Label("Add a goal", systemImage: "plus")
             }
@@ -186,7 +172,7 @@ private struct EarningsGoalRow: View {
 
     private var footnote: String {
         if row.isComplete {
-            return "You did it. Every shift since you set this goal got you here."
+            return "You did it. Goal fully saved."
         }
         guard let needed = row.shiftsNeeded, needed > 0 else {
             return "Log a paid shift and we'll estimate how many more it takes."

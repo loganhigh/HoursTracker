@@ -95,7 +95,7 @@ struct EarningsGoalEditorSheet: View {
                             field: .saved,
                             error: savedError
                         )
-                        Text("Shifts you log from the day you set this goal count toward it.")
+                        Text("Tap the goal any time to add what you've put aside.")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(AppColors.faint)
                     }
@@ -171,7 +171,10 @@ struct EarningsGoalEditorSheet: View {
             Haptics.error()
             return
         }
-        if var goal = existing {
+        // Start from the stored copy, not the snapshot this sheet opened
+        // with, so deposits added meanwhile aren't overwritten.
+        if let existing {
+            var goal = goalStore.goals.first(where: { $0.id == existing.id }) ?? existing
             goal.name = trimmedName
             goal.targetAmount = target
             goal.alreadySaved = saved

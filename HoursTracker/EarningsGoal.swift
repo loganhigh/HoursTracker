@@ -1,28 +1,57 @@
 import Combine
 import Foundation
 
-/// A work-powered earnings goal ("Vacation: $2,400"). Progress is funded by
-/// the pay of shifts logged on/after the day the goal was created, plus any
-/// amount the user had already put aside. Goals don't split earnings — every
-/// goal counts the same shifts independently.
+/// A work-powered earnings goal ("Vacation: $2,400"). Progress is what the
+/// user actually puts aside — the amount saved when the goal was set plus
+/// each deposit they record — not every dollar they earn, so it stays
+/// accurate. Shifts come in as the estimate of how many more it'll take.
 struct EarningsGoal: Identifiable, Codable, Equatable {
     var id = UUID()
     var name: String
     var targetAmount: Double
+    /// Saved before the goal was created (entered in the editor).
     var alreadySaved: Double = 0
     var createdAt: Date = Date()
+    /// Money the user has put toward the goal since, newest last.
+    var deposits: [GoalDeposit] = []
+
+    var savedTotal: Double { alreadySaved + deposits.reduce(0) { $0 + $1.amount } }
+}
+
+/// One amount the user put toward a goal.
+struct GoalDeposit: Identifiable, Codable, Equatable {
+    var id = UUID()
+    var amount: Double
+    var date: Date = Date()
+}
+
+extension EarningsGoal {
+    private enum CodingKeys: String, CodingKey {
+        case id, name, targetAmount, alreadySaved, createdAt, deposits
+    }
+
+    /// Goals saved before deposits existed have no `deposits` key; decode
+    /// them with an empty list instead of failing (which would drop every
+    /// saved goal).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        targetAmount = try c.decode(Double.self, forKey: .targetAmount)
+        alreadySaved = try c.decodeIfPresent(Double.self, forKey: .alreadySaved) ?? 0
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        deposits = try c.decodeIfPresent([GoalDeposit].self, forKey: .deposits) ?? []
+    }
 }
 
 /// Derived, display-ready numbers for one goal.
 struct EarningsGoalProgress: Identifiable {
     let goal: EarningsGoal
-    /// Pay from shifts dated on/after the goal's creation day.
-    let earnedFromShifts: Double
     /// `nil` when there's no usable average (no paid shifts yet).
     let shiftsNeeded: Int?
 
     var id: UUID { goal.id }
-    var progress: Double { goal.alreadySaved + earnedFromShifts }
+    var progress: Double { goal.savedTotal }
     var remaining: Double { max(0, goal.targetAmount - progress) }
     var isComplete: Bool { goal.targetAmount > 0 && remaining <= 0.005 }
     var fraction: Double {
@@ -78,14 +107,12 @@ enum EarningsGoalCalculator {
         let shifts = pricedShifts(store: store, now: now)
         let average = averagePerShift(shifts, now: now, calendar: calendar)
         return goals.map { goal in
-            let start = calendar.startOfDay(for: goal.createdAt)
-            let earned = shifts.reduce(0) { $1.date >= start ? $0 + $1.pay : $0 }
-            let remaining = max(0, goal.targetAmount - goal.alreadySaved - earned)
+            let remaining = max(0, goal.targetAmount - goal.savedTotal)
             var needed: Int?
             if let average {
                 needed = remaining <= 0.005 ? 0 : Int((remaining / average).rounded(.up))
             }
-            return EarningsGoalProgress(goal: goal, earnedFromShifts: earned, shiftsNeeded: needed)
+            return EarningsGoalProgress(goal: goal, shiftsNeeded: needed)
         }
     }
 }
@@ -114,6 +141,19 @@ final class EarningsGoalStore: ObservableObject {
     func update(_ goal: EarningsGoal) {
         guard let idx = goals.firstIndex(where: { $0.id == goal.id }) else { return }
         goals[idx] = goal
+        save()
+    }
+
+    func addDeposit(_ amount: Double, to goalID: UUID) {
+        guard amount > 0, amount.isFinite,
+              let idx = goals.firstIndex(where: { $0.id == goalID }) else { return }
+        goals[idx].deposits.append(GoalDeposit(amount: amount))
+        save()
+    }
+
+    func deleteDeposit(_ depositID: UUID, from goalID: UUID) {
+        guard let idx = goals.firstIndex(where: { $0.id == goalID }) else { return }
+        goals[idx].deposits.removeAll { $0.id == depositID }
         save()
     }
 
