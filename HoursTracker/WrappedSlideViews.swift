@@ -76,7 +76,7 @@ struct WrappedTotalHoursSlide: View {
                     )
                     .wrappedReveal(appeared, index: 1, yOffset: 0, scaleFrom: 0.62)
 
-                    WrappedEyebrow(text: "Hours", color: WrappedPalette.accent)
+                    WrappedEyebrow(text: "Hours", color: WrappedPalette.primaryText)
                         .wrappedReveal(appeared, index: 2)
 
                     WrappedSupportingLine(
@@ -118,7 +118,7 @@ struct WrappedTotalShiftsSlide: View {
                     )
                     .wrappedReveal(appeared, index: 1, yOffset: 0, scaleFrom: 0.7)
 
-                    WrappedEyebrow(text: "Shifts", color: WrappedPalette.accent)
+                    WrappedEyebrow(text: "Shifts", color: WrappedPalette.primaryText)
                         .wrappedReveal(appeared, index: 2)
 
                     // Deliberately staggered well after the count so the two
@@ -158,7 +158,7 @@ struct WrappedBiggestMonthSlide: View {
 
                         Text("\(WrappedFormat.oneDecimalHours(busiestMonth.hours)) hours")
                             .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundStyle(WrappedPalette.accent)
+                            .foregroundStyle(WrappedPalette.primaryText)
                             .wrappedReveal(appeared, index: 2)
 
                         // Full Jan–Dec context, bars rising in sequence.

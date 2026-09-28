@@ -220,7 +220,7 @@ struct WrappedWorkStreakSlide: View {
                         )
                         Text("DAYS")
                             .font(.system(size: 24, weight: .black, design: .rounded))
-                            .foregroundStyle(WrappedPalette.accent)
+                            .foregroundStyle(WrappedPalette.primaryText)
                     }
                     .wrappedReveal(appeared, index: 2, yOffset: 0, scaleFrom: 0.72)
 

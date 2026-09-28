@@ -83,7 +83,7 @@ struct WrappedFinalSummarySlide: View {
                 WrappedEyebrow(text: "Hour Tracker Wrapped")
                 Text(String(stats.year))
                     .font(.system(size: 48, weight: .black, design: .rounded))
-                    .foregroundStyle(WrappedPalette.accent)
+                    .foregroundStyle(WrappedPalette.primaryText)
                 if let username, !username.isEmpty {
                     Text(Username.display(username))
                         .font(.system(size: 15, weight: .bold, design: .rounded))
