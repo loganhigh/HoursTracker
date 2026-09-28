@@ -280,6 +280,7 @@ final class AuthService: NSObject, ObservableObject {
         // Earnings goals are local-only and account-bound too.
         EarningsGoalStore.shared.removeAll()
         MissingShiftDismissals.shared.removeAll()
+        IncomeMilestoneSeenStore.removeAll()
     }
 
     // MARK: - Profile doc

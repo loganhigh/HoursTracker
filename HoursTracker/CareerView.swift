@@ -148,6 +148,9 @@ struct CareerSections: View {
                 // Work-powered earnings goals, directly under Tracking history.
                 EarningsGoalsCard(store: store)
 
+                // Lifetime earnings / hours / shifts milestones, under Goals.
+                IncomeMilestonesCard(store: store)
+
         }
     }
 

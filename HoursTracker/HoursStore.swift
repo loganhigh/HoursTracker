@@ -966,6 +966,7 @@ final class HoursStore: ObservableObject {
         LevelUpRatchet.resetAll()
         EarningsGoalStore.shared.removeAll()
         MissingShiftDismissals.shared.removeAll()
+        IncomeMilestoneSeenStore.removeAll()
         isLoaded = false
         UserDefaults.standard.removeObject(forKey: entriesKey)
         UserDefaults.standard.removeObject(forKey: settingsKey)
