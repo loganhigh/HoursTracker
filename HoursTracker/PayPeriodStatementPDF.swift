@@ -129,7 +129,7 @@ private struct PayPeriodStatementRenderer {
         let renderer = UIGraphicsPDFRenderer(bounds: page, format: {
             let format = UIGraphicsPDFRendererFormat()
             format.documentInfo = [
-                kCGPDFContextTitle as String: "Pay Period Statement",
+                kCGPDFContextTitle as String: "Hours Statement",
                 kCGPDFContextCreator as String: "Hour Tracker",
             ]
             return format
@@ -240,7 +240,7 @@ private struct PayPeriodStatementRenderer {
 
     private func drawTitleBlock(y: inout CGFloat) {
         y += 22
-        drawText("Pay Period Statement", at: CGPoint(x: margin, y: y), font: .systemFont(ofSize: 22, weight: .bold), color: ink)
+        drawText("Hours Statement", at: CGPoint(x: margin, y: y), font: .systemFont(ofSize: 22, weight: .bold), color: ink)
         y += 30
         let range = "\(Self.shortDate.string(from: statement.periodStart)) – \(Self.longDate.string(from: statement.periodEnd))"
         drawText(range, at: CGPoint(x: margin, y: y), font: .systemFont(ofSize: 11, weight: .medium), color: muted)
