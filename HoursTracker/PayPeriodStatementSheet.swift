@@ -56,7 +56,7 @@ struct PayPeriodStatementSheet: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
             }
-            .navigationTitle("Pay Statement")
+            .navigationTitle("Hours Statement")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

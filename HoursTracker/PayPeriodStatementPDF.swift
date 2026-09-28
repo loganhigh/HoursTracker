@@ -230,7 +230,7 @@ private struct PayPeriodStatementRenderer {
             let w = min(120, h * aspect)
             companyLogo.draw(in: CGRect(x: right - w, y: y + 2, width: w, height: h))
         } else {
-            drawText("PAY STATEMENT", rightAlignedTo: right, y: y + 4, font: .systemFont(ofSize: 9, weight: .bold), color: brand, kern: 1.4)
+            drawText("HOURS STATEMENT", rightAlignedTo: right, y: y + 4, font: .systemFont(ofSize: 9, weight: .bold), color: brand, kern: 1.4)
             drawText("Generated \(Self.longDate.string(from: Date()))", rightAlignedTo: right, y: y + 19, font: .systemFont(ofSize: 9), color: muted)
         }
         y += brandHeaderHeight + 14
