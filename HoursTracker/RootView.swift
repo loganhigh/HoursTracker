@@ -332,17 +332,7 @@ struct HoursHomeView: View {
     @State private var logShiftBurst = 0
     @State private var offDayBurst = 0
     @State private var holidayBurst = 0
-    @StateObject private var badgeUnlockTracker = BadgeUnlockTracker()
-    @State private var badgeUnlockPresentation: BadgeUnlockPresentation?
-    /// A badge unlocked while the add-shift flow was up, shown once it closes.
-    @State private var deferredBadge: BadgeUnlockPresentation?
-    @ObservedObject private var addFlow = AddFlowPresence.shared
     @State private var showingAdminPanel = false
-
-    private struct BadgeUnlockPresentation: Identifiable {
-        let id: String
-        let displayName: String
-    }
 
     private var todayEntry: WorkEntry? {
         let cal = Calendar.current
@@ -840,35 +830,6 @@ struct HoursHomeView: View {
             evaluateLevelUpCelebration(celebrate: false)
             lastKnownStreak = store.gamificationProfile.currentStreak
             checkPersonalBest()
-        }
-        .onChange(of: store.gamificationProfile.unlockedBadges) { old, new in
-            let oldSet = Set(old)
-            // Prestige badges are already celebrated by the full-screen
-            // prestige ritual — a second confetti sheet on top is noise.
-            guard let badge = new.first(where: { !oldSet.contains($0) && !badgeUnlockTracker.hasCelebrated($0) && !$0.hasPrefix("prestige_") }) else { return }
-            badgeUnlockTracker.markCelebrated(badge)
-            let label = badge.replacingOccurrences(of: "_", with: " ").capitalized
-            let presentation = BadgeUnlockPresentation(id: badge, displayName: label)
-            // Presenting a sheet from here while the add-shift cover is up
-            // makes iOS dismiss that cover (and the earnings card in it).
-            guard !addFlow.isActive else {
-                deferredBadge = presentation
-                return
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                badgeUnlockPresentation = presentation
-            }
-        }
-        .onChange(of: addFlow.isActive) { _, active in
-            guard !active, let pending = deferredBadge else { return }
-            deferredBadge = nil
-            // Let the cover finish its dismissal animation first.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                badgeUnlockPresentation = pending
-            }
-        }
-        .sheet(item: $badgeUnlockPresentation) { presentation in
-            BadgeUnlockCelebrationSheet(badgeName: presentation.displayName)
         }
     }
 
