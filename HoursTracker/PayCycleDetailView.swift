@@ -281,11 +281,7 @@ struct PayCycleDetailView: View {
             }
         }
         .sheet(isPresented: $showShare) {
-            HoursShareAnalyticsSheet(
-                store: store,
-                achievementTitle: nil,
-                payPeriodOverride: (selectedCycle.start, selectedCycle.end)
-            )
+            PayPeriodStatementSheet(store: store, cycle: selectedCycle)
         }
         .sheet(isPresented: $showingPrestigeInfo) {
             PrestigeInfoSheet(currentPrestige: store.displayedGamificationProfile().prestige)
