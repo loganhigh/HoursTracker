@@ -63,6 +63,8 @@ struct AddShiftWizardView: View {
     @State private var showToast = false
     @State private var toastMessage = ""
     @State private var showSaveSuccess = false
+    /// Set after a work shift saves; swaps the wizard for the earnings card.
+    @State private var earnings: ShiftEarnings?
 
     // MARK: - Init (defaults mirror EntryEditorView's add mode)
 
@@ -92,6 +94,15 @@ struct AddShiftWizardView: View {
     // MARK: - Body
 
     var body: some View {
+        if let earnings {
+            ShiftEarningsView(earnings: earnings) { dismiss() }
+                .transition(.opacity)
+        } else {
+            wizardBody
+        }
+    }
+
+    private var wizardBody: some View {
         ZStack {
             AppColors.bg.ignoresSafeArea()
 
@@ -617,6 +628,7 @@ struct AddShiftWizardView: View {
            let portions = OvernightSplit.split(date: date, start: s, end: e, breakMinutes: br) {
             let sharedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
             let sharedLocation = locationLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+            var saved: [WorkEntry] = []
             for portion in [portions.first, portions.second] {
                 var entry = WorkEntry(date: portion.date, start: portion.start, end: portion.end,
                                       breakMinutes: portion.breakMinutes, notes: sharedNotes,
@@ -624,8 +636,9 @@ struct AddShiftWizardView: View {
                 entry.locationName = sharedLocation
                 attachWeatherIfToday(to: &entry)
                 withAnimation(AppMotion.Spring.smooth) { store.add(entry) }
+                saved.append(entry)
             }
-            finishSave()
+            finishSave(saved: saved)
             return
         }
 
@@ -642,7 +655,7 @@ struct AddShiftWizardView: View {
             attachWeatherIfToday(to: &entry)
         }
         withAnimation(AppMotion.Spring.smooth) { store.add(entry) }
-        finishSave()
+        finishSave(saved: [entry])
     }
 
     /// Attaches the cached weather snapshot when the entry is dated today,
@@ -661,11 +674,20 @@ struct AddShiftWizardView: View {
         }
     }
 
-    private func finishSave() {
+    /// After the save tick, a work shift shows its earnings card in place of
+    /// the wizard; anything else (off day, no wage set) just closes.
+    private func finishSave(saved: [WorkEntry]) {
         Haptics.success()
         showSaveSuccess = true
+        // Only entries the store actually accepted (it drops duplicates).
+        let accepted = saved.compactMap { entry in store.entries.first { $0.id == entry.id } }
+        let result = store.shiftEarnings(for: accepted)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-            dismiss()
+            if let result {
+                withAnimation(.easeInOut(duration: 0.35)) { earnings = result }
+            } else {
+                dismiss()
+            }
         }
     }
 }
