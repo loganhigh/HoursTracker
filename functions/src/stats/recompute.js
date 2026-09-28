@@ -567,9 +567,17 @@ function totalXPAtLevelStart(targetLevel, prestige = 0, snapshots = []) {
  * Firestore can vouch for. A zero total is left alone as an anomaly, and so
  * are accounts still carrying a legacy admin prestige floor.
  *
+ * A shortfall alone is NOT proof: client-only XP (daily challenge XP resets
+ * at midnight) can dip a legitimately earned prestige a few hundred XP under
+ * the bound (observed live 2026-09-28: P4 earned at 345,409, the challenge
+ * XP expired overnight → 343,609 → demoted to P3). So a correction also
+ * needs the double-tap signature: consecutive prestiges recorded at the same
+ * paid-hours mark. A real run takes hundreds of hours; a double tap takes
+ * none. Only the duplicated prestiges are removed.
+ *
  * @returns {{ corrected: boolean, prestige: number, reason: string|null }}
  */
-function prestigeAffordability({ prestige, publishedTotalXP, trackedTotalXP, adminFloorPrestige }) {
+function prestigeAffordability({ prestige, publishedTotalXP, trackedTotalXP, adminFloorPrestige, hourSnapshots }) {
   const p = Math.min(Math.max(0, Math.floor(Number(prestige) || 0)), 10);
   const published = Math.max(0, Number(publishedTotalXP) || 0);
   const tracked = Math.max(0, Number(trackedTotalXP) || 0);
@@ -580,9 +588,18 @@ function prestigeAffordability({ prestige, publishedTotalXP, trackedTotalXP, adm
   const runXP = totalXPForFullPrestigeRun();
   const needed = p * runXP;
   if (published >= needed || tracked >= needed) return { corrected: false, prestige: p, reason: null };
-  const affordable = Math.min(p, Math.floor(best / runXP));
+  const hours = Array.isArray(hourSnapshots) ? hourSnapshots.slice(0, p).map((h) => Number(h) || 0) : [];
+  let duplicates = 0;
+  for (let i = 1; i < hours.length; i++) {
+    if (Math.abs(hours[i] - hours[i - 1]) < DUPLICATE_PRESTIGE_HOURS) duplicates += 1;
+  }
+  if (duplicates === 0) return { corrected: false, prestige: p, reason: "no-double-tap" };
+  const affordable = Math.max(Math.min(p, Math.floor(best / runXP)), p - duplicates);
   return { corrected: affordable < p, prestige: affordable, reason: "unaffordable" };
 }
+
+/** Two prestiges closer than this in paid hours can only be a double tap. */
+const DUPLICATE_PRESTIGE_HOURS = 1;
 
 function buildSnapshotsForPrestige(prestige) {
   const p = Math.min(Math.max(0, Math.floor(Number(prestige) || 0)), 10);
@@ -966,6 +983,7 @@ async function recomputeUserStats(db, uid, options = {}) {
     publishedTotalXP: totalXP,
     trackedTotalXP: xpResolution.trackedTotalXP,
     adminFloorPrestige: userData.adminFloorPrestige,
+    hourSnapshots: gamification.prestigeHourSnapshots,
   });
   let prestigeCorrection = null;
   if (affordability.corrected) {

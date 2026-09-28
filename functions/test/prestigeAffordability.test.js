@@ -10,7 +10,9 @@ test("prestige 0 is never corrected", () => {
 
 test("double-prestige signature (P3 on two runs of XP) corrects down to P2", () => {
   // Joey, 2026-09-22: prestige 3, published 207825, tracked 207825.
-  const d = prestigeAffordability({ prestige: 3, publishedTotalXP: 207825, trackedTotalXP: 207825 });
+  const d = prestigeAffordability({
+    prestige: 3, publishedTotalXP: 207825, trackedTotalXP: 207825, hourSnapshots: [310.5, 612.25, 612.25],
+  });
   assert.deepEqual(d, { corrected: true, prestige: 2, reason: "unaffordable" });
 });
 
@@ -36,6 +38,31 @@ test("legacy admin prestige floor exempts the account", () => {
 });
 
 test("correction uses the better of the two totals", () => {
-  const d = prestigeAffordability({ prestige: 4, publishedTotalXP: RUN + 10, trackedTotalXP: 2 * RUN + 10 });
+  const d = prestigeAffordability({
+    prestige: 4, publishedTotalXP: RUN + 10, trackedTotalXP: 2 * RUN + 10, hourSnapshots: [100, 100, 100, 400],
+  });
+  assert.deepEqual(d, { corrected: true, prestige: 2, reason: "unaffordable" });
+});
+
+test("expired challenge XP never demotes a prestige earned hundreds of hours apart", () => {
+  // Logan, 2026-09-28: P4 earned at 345409; daily challenge XP (1800) reset
+  // overnight → 343609, 1679 short of 4 runs. Hour snapshots are all distinct.
+  const d = prestigeAffordability({
+    prestige: 4, publishedTotalXP: 343609, trackedTotalXP: 343609,
+    hourSnapshots: [332.9, 665.8, 1078.3, 1494.55],
+  });
+  assert.deepEqual(d, { corrected: false, prestige: 4, reason: "no-double-tap" });
+});
+
+test("missing hour snapshots are not evidence of a double tap", () => {
+  const d = prestigeAffordability({ prestige: 3, publishedTotalXP: 207825, trackedTotalXP: 207825 });
+  assert.equal(d.corrected, false);
+});
+
+test("only the duplicated prestiges are removed, even when XP is further short", () => {
+  // One double tap, but XP only covers one run: remove just the duplicate.
+  const d = prestigeAffordability({
+    prestige: 3, publishedTotalXP: RUN + 10, trackedTotalXP: 0, hourSnapshots: [300, 700, 700],
+  });
   assert.deepEqual(d, { corrected: true, prestige: 2, reason: "unaffordable" });
 });
