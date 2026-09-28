@@ -3,11 +3,14 @@ import UIKit
 
 // ⚠️ KEEP IN SYNC with HoursTrackerWidget/WidgetPrestigeTheme.swift: the
 // widget extension cannot see this file (separate synchronized folders), so
-// it duplicates every tier's `gradient` (P0–P10) as raw hex. If you change a
+// it duplicates every tier's `gradient` (P0–P20) as raw hex. If you change a
 // tier gradient here, mirror it there. Verified matching 2026-08-05 (Phase 13).
 
 /// Central source of truth for prestige rank cosmetics:
-/// every rank P0–P10 has its own distinct color, gradient, name, and icon.
+/// every rank P0–P20 has its own distinct color, gradient, name, and icon.
+/// P0–P10 are the original metal/gem ladder; P11–P20 are the Legend family —
+/// luminous primaries (they drive the app accent on a near-black UI, so they
+/// must stay bright) over deep, obsidian-dark gradients, culminating in P20.
 /// The active rank drives the app-wide accent color through `AdaptiveThemeModifier`.
 enum PrestigeTheme {
 
@@ -27,6 +30,13 @@ enum PrestigeTheme {
         let chartBar: [Color]
 
         var id: Int { prestige }
+
+        /// P11–P20: the Legend family. Drives the badge shimmer
+        /// (`legendShimmer`) and is available for other premium treatments.
+        var isLegend: Bool { prestige > 10 }
+
+        /// The pinnacle rank (P20) — gets a prismatic shimmer.
+        var isApex: Bool { prestige >= GamificationLevelCalculator.maxPrestige }
 
         /// Readable text/icon color for content drawn directly on `primary`
         /// (buttons, earned-badge glyphs, anything using `AppColors.textOnAccent`).
@@ -53,7 +63,7 @@ enum PrestigeTheme {
 
     // MARK: - Tiers
 
-    /// All defined prestige tiers, ordered 0…10.
+    /// All defined prestige tiers, ordered 0…`GamificationLevelCalculator.maxPrestige`.
     static let tiers: [Tier] = [
         Tier(
             prestige: 0,
@@ -164,6 +174,112 @@ enum PrestigeTheme {
             highlight:  Color(hex: 0xF87171),
             gradient:   [Color(hex: 0xFCA5A5), Color(hex: 0xDC2626), Color(hex: 0x991B1B)],
             chartBar:   [Color(hex: 0xF87171), Color(hex: 0xB91C1B)]
+        ),
+
+        // MARK: Legend family (P11–P20)
+        // Luminous primaries (app accent on near-black) over deep,
+        // obsidian-dark gradient tails. Widget mirror: WidgetPrestigeTheme.
+        Tier(
+            prestige: 11,
+            name: "Obsidian",
+            icon: "seal.fill",
+            primary:    Color(hex: 0x9D86FF),
+            accent2:    Color(hex: 0x6D4FE0),
+            highlight:  Color(hex: 0xD2C6FF),
+            gradient:   [Color(hex: 0xC4B5FF), Color(hex: 0x6D4FE0), Color(hex: 0x1E1440)],
+            chartBar:   [Color(hex: 0xC4B5FF), Color(hex: 0x6D4FE0)]
+        ),
+        Tier(
+            prestige: 12,
+            name: "Onyx",
+            icon: "circle.hexagongrid.fill",
+            primary:    Color(hex: 0x94A9C4),
+            accent2:    Color(hex: 0x5B6E8A),
+            highlight:  Color(hex: 0xDCE6F2),
+            gradient:   [Color(hex: 0xDCE6F2), Color(hex: 0x5B6E8A), Color(hex: 0x141A24)],
+            chartBar:   [Color(hex: 0xDCE6F2), Color(hex: 0x5B6E8A)]
+        ),
+        Tier(
+            prestige: 13,
+            name: "Titanium",
+            icon: "shield.checkered",
+            primary:    Color(hex: 0x5B9BFF),
+            accent2:    Color(hex: 0x3563D9),
+            highlight:  Color(hex: 0xB3D1FF),
+            gradient:   [Color(hex: 0xB3D1FF), Color(hex: 0x3563D9), Color(hex: 0x0F1E4A)],
+            chartBar:   [Color(hex: 0xB3D1FF), Color(hex: 0x3563D9)]
+        ),
+        Tier(
+            prestige: 14,
+            name: "Eclipse",
+            icon: "moon.circle.fill",
+            primary:    Color(hex: 0xFF9F43),
+            accent2:    Color(hex: 0xD9601A),
+            highlight:  Color(hex: 0xFFD7A0),
+            gradient:   [Color(hex: 0xFFD7A0), Color(hex: 0xC2530F), Color(hex: 0x2A1206)],
+            chartBar:   [Color(hex: 0xFFD7A0), Color(hex: 0xD9601A)]
+        ),
+        Tier(
+            prestige: 15,
+            name: "Aurora",
+            icon: "sparkle",
+            primary:    Color(hex: 0x2EE6A6),
+            accent2:    Color(hex: 0x0FA3A0),
+            highlight:  Color(hex: 0xA8FFE0),
+            gradient:   [Color(hex: 0xA8FFE0), Color(hex: 0x0F8F84), Color(hex: 0x062326)],
+            chartBar:   [Color(hex: 0xA8FFE0), Color(hex: 0x0FA3A0)]
+        ),
+        Tier(
+            prestige: 16,
+            name: "Nebula",
+            icon: "hurricane",
+            primary:    Color(hex: 0xE36BFF),
+            accent2:    Color(hex: 0xA93BE0),
+            highlight:  Color(hex: 0xF6C2FF),
+            gradient:   [Color(hex: 0xF6C2FF), Color(hex: 0x8E2BC4), Color(hex: 0x220A33)],
+            chartBar:   [Color(hex: 0xF6C2FF), Color(hex: 0xA93BE0)]
+        ),
+        Tier(
+            prestige: 17,
+            name: "Supernova",
+            icon: "sun.max.fill",
+            primary:    Color(hex: 0xFF5E6C),
+            accent2:    Color(hex: 0xE0304A),
+            highlight:  Color(hex: 0xFFB3A0),
+            gradient:   [Color(hex: 0xFFC9A8), Color(hex: 0xE0304A), Color(hex: 0x330812)],
+            chartBar:   [Color(hex: 0xFFC9A8), Color(hex: 0xE0304A)]
+        ),
+        Tier(
+            prestige: 18,
+            name: "Celestial",
+            icon: "moon.stars.fill",
+            primary:    Color(hex: 0x6FCBFF),
+            accent2:    Color(hex: 0x3A8EE0),
+            highlight:  Color(hex: 0xD9F2FF),
+            gradient:   [Color(hex: 0xD9F2FF), Color(hex: 0x2F6FC4), Color(hex: 0x0A1633)],
+            chartBar:   [Color(hex: 0xD9F2FF), Color(hex: 0x3A8EE0)]
+        ),
+        Tier(
+            prestige: 19,
+            name: "Ascendant",
+            icon: "wand.and.stars",
+            primary:    Color(hex: 0xF5C451),
+            accent2:    Color(hex: 0xC9921E),
+            highlight:  Color(hex: 0xFFF0C2),
+            gradient:   [Color(hex: 0xFFF0C2), Color(hex: 0xB8841A), Color(hex: 0x2B1D05)],
+            chartBar:   [Color(hex: 0xFFF0C2), Color(hex: 0xC9921E)]
+        ),
+        Tier(
+            prestige: 20,
+            name: "Eternal",
+            icon: "infinity",
+            // White-hot platinum and champagne — one radiant family, not a
+            // spectrum, so the top rank reads as light rather than colour.
+            primary:    Color(hex: 0xF3E9D2),
+            accent2:    Color(hex: 0xC9A96E),
+            highlight:  Color(hex: 0xFFFFFF),
+            gradient:   [Color(hex: 0xFFFFFF), Color(hex: 0xD9C39A), Color(hex: 0x2A2418)],
+            chartBar:   [Color(hex: 0xF3E9D2), Color(hex: 0xC9A96E)]
         )
     ]
 
@@ -176,5 +292,66 @@ enum PrestigeTheme {
     /// Convenience: primary accent color for a prestige rank.
     static func color(for prestige: Int) -> Color {
         tier(for: prestige).primary
+    }
+}
+
+// MARK: - Legend badge shimmer
+
+/// A slow diagonal light sweep across a prestige BADGE/emblem, shown only for
+/// Legend tiers (P11–P20). Masked to the modified view's own alpha, so it
+/// follows an SF Symbol's glyph or a filled shape exactly. P20 sweeps a
+/// prismatic band. Reduce Motion: no sweep — a static sheen instead.
+/// Intended for emblems only; name text effects are a separate treatment.
+private struct LegendShimmerModifier: ViewModifier {
+    let tier: PrestigeTheme.Tier
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var phase: CGFloat = -1
+
+    func body(content: Content) -> some View {
+        if tier.isLegend {
+            content
+                .overlay {
+                    GeometryReader { geo in
+                        band
+                            .frame(width: geo.size.width * 0.9, height: geo.size.height * 2)
+                            .rotationEffect(.degrees(24))
+                            .offset(x: reduceMotion ? 0 : phase * geo.size.width * 1.4)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                    }
+                    .opacity(reduceMotion ? 0.35 : 1)
+                    .blendMode(.plusLighter)
+                    .mask(content)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+                .onAppear {
+                    guard !reduceMotion else { return }
+                    phase = -1
+                    withAnimation(.easeInOut(duration: 2.6).delay(0.4).repeatForever(autoreverses: false)) {
+                        phase = 1
+                    }
+                }
+        } else {
+            content
+        }
+    }
+
+    private var band: LinearGradient {
+        let peak: [Color] = tier.isApex
+            ? [tier.accent2.opacity(0.55), Color.white.opacity(0.7), tier.highlight.opacity(0.55)]
+            : [tier.highlight.opacity(0.35), Color.white.opacity(0.6), tier.highlight.opacity(0.35)]
+        return LinearGradient(
+            colors: [.clear] + peak + [.clear],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+}
+
+extension View {
+    /// Adds the Legend-tier (P11+) shimmer to a prestige badge/emblem; a
+    /// no-op for P0–P10.
+    func legendShimmer(_ tier: PrestigeTheme.Tier) -> some View {
+        modifier(LegendShimmerModifier(tier: tier))
     }
 }

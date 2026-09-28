@@ -23,6 +23,8 @@ const {
   totalXPAtLevelStart,
   buildSnapshotsForPrestige,
   deriveProgressionFromEntryXP,
+  MAX_PRESTIGE,
+  LEGACY_MAX_PRESTIGE,
   levelStateFromXP,
   stripWrappingQuotes,
   sanitizeDisplayName,
@@ -1675,7 +1677,7 @@ exports.clientSaveGamificationAnchors = onCall(
       update.totalXP = Math.min(50_000_000, Math.max(0, Math.floor(Number(update.totalXP) || 0)));
     }
     if ("prestige" in update) {
-      update.prestige = Math.min(10, Math.max(0, Math.floor(Number(update.prestige) || 0)));
+      update.prestige = Math.min(MAX_PRESTIGE, Math.max(0, Math.floor(Number(update.prestige) || 0)));
     }
     if (request.data?.clearLevelOverride === true) {
       update.levelOverride = FieldValue.delete();
@@ -1774,9 +1776,9 @@ async function applyAdminProgressionSet(db, targetUid, opts = {}) {
 
   const prestige =
     targetPrestige != null
-      ? Math.min(10, Math.max(0, Math.floor(Number(targetPrestige))))
+      ? Math.min(MAX_PRESTIGE, Math.max(0, Math.floor(Number(targetPrestige))))
       : Math.min(
-          10,
+          MAX_PRESTIGE,
           Math.max(0, Number(g.prestige) || Number(u.prestige) || 0)
         );
 
@@ -1856,7 +1858,17 @@ async function clearAdminProgressionSet(db, targetUid) {
   const existingOffset = Number(g.adminXPOffset) || 0;
   const syncedTotal = Number(g.totalXP) || 0;
   const entryXP = syncedTotal - existingOffset;
-  const derived = deriveProgressionFromEntryXP(entryXP);
+  // Never derive past the legacy cap unless the user already holds a
+  // higher (claimed) prestige — resetting to XP must not auto-promote a
+  // maxed P10 account with 11+ runs of XP into the Legend ranks.
+  const heldPrestige = Math.max(
+    Number(g.prestige) || 0,
+    Number(g.highWaterPrestige) || 0
+  );
+  const derived = deriveProgressionFromEntryXP(
+    entryXP,
+    Math.max(LEGACY_MAX_PRESTIGE, heldPrestige)
+  );
 
   await gamRef.set(
     {
@@ -2164,8 +2176,8 @@ exports.adminSetUserProgression = onCall(
         if (!Number.isFinite(pres) || pres < 0) {
           throw new HttpsError("invalid-argument", "prestige must be >= 0.");
         }
-        if (pres > 10) {
-          throw new HttpsError("invalid-argument", "prestige cannot exceed 10.");
+        if (pres > MAX_PRESTIGE) {
+          throw new HttpsError("invalid-argument", `prestige cannot exceed ${MAX_PRESTIGE}.`);
         }
         targetPrestige = pres;
       }

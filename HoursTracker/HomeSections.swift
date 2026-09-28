@@ -235,6 +235,7 @@ struct HomeXPStrip: View {
             Image(systemName: PrestigeTheme.tier(for: profile.prestige).icon)
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(emblemColor)
+                .legendShimmer(PrestigeTheme.tier(for: profile.prestige))
         }
     }
 

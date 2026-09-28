@@ -222,6 +222,7 @@ struct PrestigeCelebrationView: View {
                     .foregroundStyle(
                         LinearGradient(colors: tier.gradient, startPoint: .top, endPoint: .bottom)
                     )
+                    .legendShimmer(tier)
 
                 Text("P\(prestige)")
                     .font(.system(.largeTitle, design: .rounded, weight: .black))
@@ -370,7 +371,17 @@ struct PrestigeCelebrationView: View {
         case 7: return "Grandmaster. Legends are watching."
         case 8: return "Champion. Top of the board."
         case 9: return "Legendary. Almost at the summit."
-        case 10: return "Prestige Master. The ultimate rank."
+        case 10: return "Prestige Master. Legend Status awaits."
+        case 11: return "Obsidian. Welcome to Legend Status."
+        case 12: return "Onyx. Forged under pressure."
+        case 13: return "Titanium. Unbreakable."
+        case 14: return "Eclipse. You outshine the rest."
+        case 15: return "Aurora. A rare sight."
+        case 16: return "Nebula. Where stars are born."
+        case 17: return "Supernova. Impossible to ignore."
+        case 18: return "Celestial. Among the stars."
+        case 19: return "Ascendant. One step from eternity."
+        case 20: return "Eternal. The ultimate rank."
         default: return "Your journey continues."
         }
     }

@@ -118,7 +118,7 @@ final class LevelUpCoordinator: ObservableObject {
 
         // Prestige availability — the run's terminal unlock.
         if profile.canPrestige {
-            let nextTier = PrestigeTheme.tier(for: min(profile.prestige + 1, 10))
+            let nextTier = PrestigeTheme.tier(for: min(profile.prestige + 1, GamificationLevelCalculator.maxPrestige))
             rewards.append(Reward(
                 icon: "crown.fill",
                 title: "Prestige available",

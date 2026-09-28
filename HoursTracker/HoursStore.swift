@@ -1397,7 +1397,7 @@ final class HoursStore: ObservableObject {
     private static let prestigeCooldown: TimeInterval = 60
 
     func performPrestige() -> Bool {
-        guard gamificationProfile.prestige < 10 else { return false }
+        guard gamificationProfile.prestige < GamificationLevelCalculator.maxPrestige else { return false }
         if let last = lastPrestigeAt, Date().timeIntervalSince(last) < Self.prestigeCooldown {
             return false
         }
@@ -2658,8 +2658,8 @@ private enum GamificationEngine {
         // not when bonus/challenge XP fluctuates between recalculations.
         // prestigeFloor is a ratchet: once set it only goes up, so a future bug that
         // zeros `previous.prestige` still can't permanently erase earned prestige.
-        let floor = min(max(previous.prestigeFloor ?? 0, 0), 10)
-        var adjustedPrestige = min(max(max(previous.prestige, floor), 0), 10)
+        let floor = min(max(previous.prestigeFloor ?? 0, 0), GamificationLevelCalculator.maxPrestige)
+        var adjustedPrestige = min(max(max(previous.prestige, floor), 0), GamificationLevelCalculator.maxPrestige)
         var adjustedSnapshots = previous.prestigeXPSnapshots
         var adjustedHourSnapshots = previous.prestigeHourSnapshots
 
@@ -2704,7 +2704,7 @@ private enum GamificationEngine {
             }
             unlockedBadges.insert("level_\(milestone)")
         }
-        for p in 1...10 where manualPrestige >= p {
+        for p in 1...GamificationLevelCalculator.maxPrestige where manualPrestige >= p {
             unlockedTitles.insert("Prestige \(p)")
             unlockedBadges.insert("prestige_\(p)")
         }

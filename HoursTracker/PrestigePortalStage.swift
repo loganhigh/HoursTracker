@@ -39,6 +39,7 @@ struct PrestigePortalStage: View {
                     Image(systemName: oldTier.icon)
                         .font(.system(size: 46, weight: .bold))
                         .foregroundStyle(oldTier.primary)
+                        .legendShimmer(oldTier)
                 }
                 // Crushed into the singularity: shrink, spin, smear, vanish.
                 .scaleEffect(max(0.02, 1 - absorb))

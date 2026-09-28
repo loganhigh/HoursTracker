@@ -45,9 +45,27 @@ const RANK_TITLES = [
   "Shift Legend", "Time Titan", "Overtime Ace", "OT King", "Prestige Ready",
 ];
 
+/**
+ * Highest prestige rank (P0…P20). The ONE server-side prestige cap — every
+ * clamp below and in index.js references it. Client twin:
+ * GamificationLevelCalculator.maxPrestige (iOS).
+ */
+const MAX_PRESTIGE = 20;
+
+/**
+ * The cap before the Legend ranks (P11–P20) existed. Deriving prestige purely
+ * from XP (admin "reset to shift XP") never auto-promotes past this — a
+ * prestige beyond it must have been claimed by the user (tapping Prestige),
+ * so raising MAX_PRESTIGE cannot silently promote anyone.
+ */
+const LEGACY_MAX_PRESTIGE = 10;
+
+// Mirrors PrestigeTheme.tiers names (iOS). P11–P20 = the Legend family.
 const PRESTIGE_TIER_NAMES = [
   "Unranked", "Bronze", "Silver", "Gold", "Platinum",
   "Diamond", "Master", "Grandmaster", "Champion", "Legend", "Prestige Master",
+  "Obsidian", "Onyx", "Titanium", "Eclipse", "Aurora",
+  "Nebula", "Supernova", "Celestial", "Ascendant", "Eternal",
 ];
 
 const MAX_LEVEL = 25;
@@ -487,7 +505,7 @@ function totalXPForFullPrestigeRun() {
  * from lifetime XP + optional per-prestige snapshot anchors.
  */
 function levelStateFromXP(totalXP, prestige = 0, snapshots = []) {
-  const clampedPrestige = Math.min(Math.max(0, Number(prestige) || 0), 10);
+  const clampedPrestige = Math.min(Math.max(0, Number(prestige) || 0), MAX_PRESTIGE);
   let xpPool = Math.min(MAX_SANE_TOTAL_XP, Math.max(0, Number(totalXP) || 0));
 
   for (let p = 0; p < clampedPrestige; p++) {
@@ -529,7 +547,7 @@ function totalXPAtLevelStart(targetLevel, prestige = 0, snapshots = []) {
     Math.max(1, Number(targetLevel) || 1),
     CLIENT_MAX_LEVEL
   );
-  const clampedPrestige = Math.min(Math.max(0, Number(prestige) || 0), 10);
+  const clampedPrestige = Math.min(Math.max(0, Number(prestige) || 0), MAX_PRESTIGE);
   let total = 0;
   const clean = Array.isArray(snapshots)
     ? snapshots.map((v) => Number(v) || 0)
@@ -578,7 +596,7 @@ function totalXPAtLevelStart(targetLevel, prestige = 0, snapshots = []) {
  * @returns {{ corrected: boolean, prestige: number, reason: string|null }}
  */
 function prestigeAffordability({ prestige, publishedTotalXP, trackedTotalXP, adminFloorPrestige, hourSnapshots }) {
-  const p = Math.min(Math.max(0, Math.floor(Number(prestige) || 0)), 10);
+  const p = Math.min(Math.max(0, Math.floor(Number(prestige) || 0)), MAX_PRESTIGE);
   const published = Math.max(0, Number(publishedTotalXP) || 0);
   const tracked = Math.max(0, Number(trackedTotalXP) || 0);
   const best = Math.max(published, tracked);
@@ -602,7 +620,7 @@ function prestigeAffordability({ prestige, publishedTotalXP, trackedTotalXP, adm
 const DUPLICATE_PRESTIGE_HOURS = 1;
 
 function buildSnapshotsForPrestige(prestige) {
-  const p = Math.min(Math.max(0, Math.floor(Number(prestige) || 0)), 10);
+  const p = Math.min(Math.max(0, Math.floor(Number(prestige) || 0)), MAX_PRESTIGE);
   const snaps = [];
   let cumulative = 0;
   const runXP = totalXPForFullPrestigeRun();
@@ -613,14 +631,26 @@ function buildSnapshotsForPrestige(prestige) {
   return snaps;
 }
 
-/** Shift-only prestige/level from entry XP (no admin offset). */
-function deriveProgressionFromEntryXP(entryXP) {
+/**
+ * Shift-only prestige/level from entry XP (no admin offset).
+ *
+ * `maxPrestige` bounds the derivation. It defaults to LEGACY_MAX_PRESTIGE
+ * (10), NOT MAX_PRESTIGE: prestige is something a user claims by tapping
+ * Prestige, and deriving it from XP alone would promote a maxed P10 user
+ * sitting on 11+ runs of XP into the Legend ranks without their action.
+ * Callers pass a higher bound only for prestige the user already holds.
+ */
+function deriveProgressionFromEntryXP(entryXP, maxPrestige = LEGACY_MAX_PRESTIGE) {
+  const cap = Math.min(
+    MAX_PRESTIGE,
+    Math.max(0, Math.floor(Number(maxPrestige) || 0))
+  );
   const runXP = totalXPForFullPrestigeRun();
   let pool = Math.max(0, Number(entryXP) || 0);
   const snapshots = [];
   let prestige = 0;
   let cumulative = 0;
-  while (prestige < 10 && pool >= runXP) {
+  while (prestige < cap && pool >= runXP) {
     cumulative += runXP;
     prestige += 1;
     pool -= runXP;
@@ -1641,6 +1671,8 @@ module.exports = {
   buildSnapshotsForPrestige,
   prestigeAffordability,
   deriveProgressionFromEntryXP,
+  MAX_PRESTIGE,
+  LEGACY_MAX_PRESTIGE,
   levelStateFromXP,
   paidHours,
   weeklyStats,

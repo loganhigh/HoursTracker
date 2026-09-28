@@ -38,6 +38,8 @@ struct LevelBadgeView<Content: View>: View {
                     LevelHexagon(cornerRadius: corner)
                         .fill(tier.primary.opacity(0.14))
                 )
+                // Legend tiers (P11+): a slow light sweep across the face.
+                .legendShimmer(tier)
 
             // Bevel: bright top edge, dark bottom edge, tier-colored rim.
             LevelHexagon(cornerRadius: corner)

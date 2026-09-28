@@ -2,6 +2,11 @@ import Foundation
 
 /// Shared level/prestige math used by local gamification and friend profile display.
 enum GamificationLevelCalculator {
+    /// Highest prestige rank (P0…P20). The ONE client-side cap — every
+    /// prestige clamp references this. Server twin: MAX_PRESTIGE in
+    /// functions/src/stats/recompute.js; widget twin: WidgetPrestigeTheme.maxPrestige.
+    static let maxPrestige = 20
+
     static func maxLevelForPrestige(_ prestige: Int) -> Int { 25 }
 
     static func xpRequiredForLevel(_ level: Int) -> Int {
@@ -15,7 +20,7 @@ enum GamificationLevelCalculator {
         snapshots: [Int] = []
     ) -> (level: Int, xpIntoLevel: Int, xpForNext: Int, canPrestige: Bool) {
         var xpPool = max(0, totalXP)
-        let clampedPrestige = min(max(prestige, 0), 10)
+        let clampedPrestige = min(max(prestige, 0), maxPrestige)
 
         for p in 0..<clampedPrestige {
             let cap = maxLevelForPrestige(p)
@@ -55,7 +60,7 @@ enum GamificationLevelCalculator {
         // `isMaxed`, not `level >= maxLevel`. The level loop stops incrementing
         // at maxLevel, so a user one XP into level 25 has `level == 25` with an
         // unfilled bar; gating on level alone offered Prestige to them.
-        let canPrestige = isMaxed && prestige < 10
+        let canPrestige = isMaxed && prestige < maxPrestige
         return (level, xpIntoLevel, xpForNext, canPrestige)
     }
 
@@ -82,7 +87,7 @@ enum GamificationLevelCalculator {
         snapshots: [Int] = []
     ) -> Int {
         let clampedLevel = min(max(targetLevel, 1), maxLevelForPrestige(prestige))
-        let clampedPrestige = min(max(prestige, 0), 10)
+        let clampedPrestige = min(max(prestige, 0), maxPrestige)
         var total = 0
         for p in 0..<clampedPrestige {
             let fullRunXP = (1...maxLevelForPrestige(p)).reduce(0) { $0 + xpRequiredForLevel($1) }
@@ -104,7 +109,7 @@ enum GamificationLevelCalculator {
 
     /// Cumulative total XP snapshots after each completed prestige run (0..<prestige).
     static func buildSnapshotsForPrestige(_ prestige: Int) -> [Int] {
-        let clamped = min(max(prestige, 0), 10)
+        let clamped = min(max(prestige, 0), maxPrestige)
         guard clamped > 0 else { return [] }
         let runXP = (1...maxLevelForPrestige(0)).reduce(0) { $0 + xpRequiredForLevel($1) }
         var cumulative = 0

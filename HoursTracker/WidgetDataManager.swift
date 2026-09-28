@@ -130,7 +130,7 @@ class WidgetDataManager {
             nextPayday: paySettings.nextPayday,
             lastUpdated: Date(),
             currentStreak: currentStreak,
-            prestige: max(0, min(prestige, 10))
+            prestige: max(0, min(prestige, GamificationLevelCalculator.maxPrestige))
         )
     }
     

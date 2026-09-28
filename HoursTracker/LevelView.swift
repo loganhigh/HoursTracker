@@ -75,7 +75,7 @@ struct LevelView: View {
                 }
             }
         }
-        if p.prestige < 10 {
+        if p.prestige < GamificationLevelCalculator.maxPrestige {
             let next = PrestigeTheme.tier(for: p.prestige + 1)
             return LevelMilestone(
                 title: "Prestige \(p.prestige + 1) — \(next.name)",
