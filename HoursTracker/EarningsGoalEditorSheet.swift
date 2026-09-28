@@ -42,7 +42,8 @@ struct EarningsGoalEditorSheet: View {
     /// Empty means zero; anything typed must parse.
     private var parsedSaved: Double? {
         let raw = savedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if raw.isEmpty { return 0 }
+        // ChequeAmountParser rejects zero (a cheque can't be $0); here "0" just means nothing saved yet.
+        if raw.isEmpty || raw.allSatisfy({ !$0.isNumber || $0 == "0" }) { return 0 }
         guard let value = ChequeAmountParser.parse(raw), value >= 0, value.isFinite else { return nil }
         return value
     }
@@ -216,6 +217,10 @@ struct EarningsGoalEditorSheet: View {
                 TextField("0", text: text)
                     .keyboardType(.decimalPad)
                     .focused($focusedField, equals: field)
+                    .onChange(of: text.wrappedValue) { _, newValue in
+                        let grouped = Self.groupedAmountText(newValue)
+                        if grouped != newValue { text.wrappedValue = grouped }
+                    }
             }
         }
     }
@@ -248,13 +253,46 @@ struct EarningsGoalEditorSheet: View {
         }
     }
 
-    /// Plain editable text for a stored amount ("2400", "1599.5"), in the
-    /// locale's decimal separator so ChequeAmountParser reads it back.
+    /// Editable text for a stored amount ("2,400", "1,599.5"), in the same
+    /// grouped form the field produces while typing.
     private static func editableAmount(_ value: Double) -> String {
         let f = NumberFormatter()
         f.numberStyle = .decimal
         f.usesGroupingSeparator = false
         f.maximumFractionDigits = 2
-        return f.string(from: NSNumber(value: value)) ?? String(value)
+        return groupedAmountText(f.string(from: NSNumber(value: value)) ?? String(value))
+    }
+
+    /// Re-groups an amount as it's typed: "25000" → "25,000", "1234.5" →
+    /// "1,234.5", using the locale's separators. Grouping separators already
+    /// in the text (the field's own, or pasted) are dropped and rebuilt; the
+    /// first decimal separator is kept with at most two digits after it.
+    /// Idempotent, so writing the result back doesn't loop.
+    static func groupedAmountText(_ raw: String, locale: Locale = .current) -> String {
+        let decimal = Character(locale.decimalSeparator ?? ".")
+        let grouping = locale.groupingSeparator ?? ","
+        var whole = ""
+        var fraction: String?
+        for ch in raw {
+            if ch.isASCII, ch.isNumber {
+                if fraction == nil {
+                    whole.append(ch)
+                } else if fraction!.count < 2 {
+                    fraction!.append(ch)
+                }
+            } else if ch == decimal, fraction == nil {
+                fraction = ""
+            }
+        }
+        whole = String(whole.drop(while: { $0 == "0" }))
+        if whole.isEmpty, fraction != nil || raw.contains("0") { whole = "0" }
+
+        var grouped = ""
+        for (i, ch) in whole.enumerated() {
+            if i > 0, (whole.count - i) % 3 == 0 { grouped += grouping }
+            grouped.append(ch)
+        }
+        guard let fraction else { return grouped }
+        return grouped + String(decimal) + fraction
     }
 }
