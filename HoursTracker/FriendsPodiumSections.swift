@@ -97,6 +97,7 @@ struct PayPeriodPodiumCard: View {
                         uid: entry.id
                     )
                     .overlay(Circle().stroke(color, lineWidth: isWinner ? 3 : 2))
+                    .ascendedAvatarRing(prestige: entry.prestige, diameter: size, inset: isWinner ? 5 : 4)
 
                     Text("\(entry.rank)")
                         .font(.system(size: 12, weight: .heavy, design: .rounded))
@@ -109,9 +110,11 @@ struct PayPeriodPodiumCard: View {
                 .padding(.bottom, 10)
 
                 HStack(spacing: 4) {
-                    Text(entry.isMe ? "You" : entry.firstName)
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(AppColors.text)
+                    PrestigeNameText(
+                        name: entry.isMe ? "You" : entry.firstName,
+                        prestige: entry.prestige,
+                        font: .system(size: 14, weight: .bold, design: .rounded)
+                    )
                         .lineLimit(1)
                     if VerifiedTracker.isVerified(reviewed: entry.hasReviewedApp) {
                         // Three at most on the podium — shimmer is affordable.

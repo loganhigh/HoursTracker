@@ -42,13 +42,17 @@ struct LeaderboardRankRow: View {
                 photoURL: entry.photoURL,
                 uid: entry.id
             )
+            .ascendedAvatarRing(prestige: entry.prestige, diameter: 42, inset: 1.5)
             .avatarOnlineDot(isOnline, avatarSize: 42)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Text(entry.isMe ? "You" : entry.name)
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(entry.isMe ? AppColors.accent : AppColors.text)
+                    PrestigeNameText(
+                        name: entry.isMe ? "You" : entry.name,
+                        prestige: entry.prestige,
+                        font: .system(size: 15, weight: .bold, design: .rounded),
+                        style: AnyShapeStyle(entry.isMe ? AppColors.accent : AppColors.text)
+                    )
                         .lineLimit(1)
                         // Long usernames shrink instead of truncating to "…" —
                         // the full name always shows.

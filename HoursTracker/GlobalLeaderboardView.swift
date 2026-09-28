@@ -17,6 +17,8 @@ struct GlobalLeaderboardView: View {
     @ObservedObject private var verified = VerifiedStatusService.shared
 
     @State private var showingProofSheet = false
+    /// Tracker whose public glimpse sheet is open (any row or podium slot).
+    @State private var selectedTracker: TopTracker?
 
     /// Own row's vertical position in screen space — nil while unknown. Drives
     /// the "you moved" banner only when the row can't currently be seen.
@@ -73,6 +75,10 @@ struct GlobalLeaderboardView: View {
                 accountUid: myUid
             )
         }
+        .sheet(item: $selectedTracker) { tracker in
+            PublicProfileSheet(tracker: tracker, currentUid: myUid)
+                .environmentObject(authService)
+        }
         .task {
             await topTrackers.ensureFullLeaderboardLoaded()
         }
@@ -123,7 +129,8 @@ struct GlobalLeaderboardView: View {
                             entries: displayTrackers,
                             currentUid: myUid,
                             onlineUids: presence.onlineUids,
-                            movements: topTrackers.movements
+                            movements: topTrackers.movements,
+                            onSelect: select
                         )
                         .padding(.top, AppSpacing.xs)
                     }
@@ -236,18 +243,26 @@ struct GlobalLeaderboardView: View {
         return ownRowY < 0 || ownRowY > UIScreen.main.bounds.height
     }
 
+    private func select(_ tracker: TopTracker) {
+        Haptics.lightTap()
+        selectedTracker = tracker
+    }
+
     private var rankedList: some View {
         VStack(spacing: 0) {
             ForEach(listTrackers) { tracker in
-                // Rows are display-only: nobody's profile opens from the
-                // public board.
-                GlobalTrackerRow(
-                    tracker: tracker,
-                    currentUid: myUid,
-                    // Own row skips the dot — you're by definition here.
-                    isOnline: tracker.uid != myUid && presence.onlineUids.contains(tracker.uid),
-                    movement: topTrackers.movements[tracker.uid]
-                )
+                // Every row opens a view-only public glimpse of that tracker.
+                Button { select(tracker) } label: {
+                    GlobalTrackerRow(
+                        tracker: tracker,
+                        currentUid: myUid,
+                        // Own row skips the dot — you're by definition here.
+                        isOnline: tracker.uid != myUid && presence.onlineUids.contains(tracker.uid),
+                        movement: topTrackers.movements[tracker.uid]
+                    )
+                }
+                .buttonStyle(BoardRowPressStyle())
+                .accessibilityHint("Shows their public profile")
                 .id(tracker.uid)
                 .modifier(OwnRowGeometryReporter(
                     isOwnRow: tracker.uid == myUid,

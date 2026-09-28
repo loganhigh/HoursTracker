@@ -17,6 +17,8 @@ struct GlobalPodiumRow: View {
     /// Live rank deltas from the latest reorder — podium slots show the same
     /// transient chip the list rows do.
     var movements: [String: Int] = [:]
+    /// Tapping a slot opens that tracker's public glimpse.
+    var onSelect: ((TopTracker) -> Void)? = nil
 
     private var podium: [TopTracker] { Array(entries.prefix(3)) }
 
@@ -45,6 +47,8 @@ struct GlobalPodiumRow: View {
                     uid: entry.uid
                 )
                 .overlay(Circle().stroke(metal, lineWidth: isWinner ? 3 : 2))
+                // Ascended ring sits just outside the podium metal.
+                .ascendedAvatarRing(prestige: entry.prestige, diameter: avatarSize, inset: isWinner ? 5 : 4)
                 .avatarOnlineDot(
                     entry.uid != currentUid && onlineUids.contains(entry.uid),
                     avatarSize: avatarSize
@@ -52,9 +56,11 @@ struct GlobalPodiumRow: View {
                 .padding(.top, isWinner ? 4 : 0)
 
                 HStack(spacing: 4) {
-                    Text(entry.name)
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(AppColors.text)
+                    PrestigeNameText(
+                        name: entry.name,
+                        prestige: entry.prestige,
+                        font: .system(size: 15, weight: .bold, design: .rounded)
+                    )
                         .lineLimit(1)
                     if VerifiedTracker.isVerified(reviewed: entry.hasReviewedApp) {
                         // Only three of these on screen, so they can shimmer.
@@ -116,6 +122,7 @@ struct GlobalPodiumRow: View {
                 rankBadge(entry.rank, metal: metal)
                     .offset(x: -4, y: isWinner ? -12 : -10)
             }
+            .modifier(PodiumSlotTap(action: onSelect.map { select in { select(entry) } }))
         } else {
             // Keeps the three columns evenly spaced with fewer than 3 trackers.
             Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
@@ -146,6 +153,22 @@ struct GlobalPodiumRow: View {
                 currentUid: currentUid
             )
         )
+    }
+}
+
+/// Makes a podium slot a button (same pressed wash as the list rows) when the
+/// board supplies a selection handler; otherwise leaves it display-only.
+private struct PodiumSlotTap: ViewModifier {
+    let action: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let action {
+            Button(action: action) { content }
+                .buttonStyle(BoardRowPressStyle())
+                .accessibilityHint("Shows their public profile")
+        } else {
+            content
+        }
     }
 }
 
@@ -210,13 +233,16 @@ struct GlobalTrackerRow: View {
                 photoURL: tracker.photoURL,
                 uid: tracker.uid
             )
+            .ascendedAvatarRing(prestige: tracker.prestige, diameter: GlobalLeaderboardMetrics.avatarSize, inset: 1.5)
             .avatarOnlineDot(isOnline, avatarSize: GlobalLeaderboardMetrics.avatarSize)
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
-                    Text(tracker.name)
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(AppColors.text)
+                    PrestigeNameText(
+                        name: tracker.name,
+                        prestige: tracker.prestige,
+                        font: .system(size: 15, weight: .semibold, design: .rounded)
+                    )
                         .lineLimit(1)
                     if VerifiedTracker.isVerified(reviewed: tracker.hasReviewedApp) {
                         // Static in the list: the board scrolls hundreds of

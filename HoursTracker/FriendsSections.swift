@@ -20,6 +20,8 @@ struct UsernameCard: View {
     let onCopy: () -> Void
     let onAdd: () -> Void
     let onSetUsername: () -> Void
+    /// Own displayed prestige — Ascended ranks (P11+) get the marked name.
+    var prestige: Int = 0
 
     var body: some View {
         VStack(spacing: AppSpacing.md) {
@@ -31,9 +33,11 @@ struct UsernameCard: View {
                 if let username {
                     Button(action: onCopy) {
                         HStack(spacing: AppSpacing.sm) {
-                            Text(Username.display(username))
-                                .font(.system(size: 30, weight: .heavy, design: .rounded))
-                                .foregroundStyle(AppColors.text)
+                            PrestigeNameText(
+                                name: Username.display(username),
+                                prestige: prestige,
+                                font: .system(size: 30, weight: .heavy, design: .rounded)
+                            )
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.6)
                             Image(systemName: copyConfirmation ? "checkmark.circle.fill" : "doc.on.doc")
@@ -181,6 +185,7 @@ struct FriendStatsRow: View {
                     photoURL: friend.profilePhotoURL,
                     uid: friend.uid
                 )
+                .ascendedAvatarRing(prestige: friend.prestige, diameter: 48, inset: 2)
                 Text("\(friend.level)")
                     .font(.system(size: 10, weight: .heavy, design: .rounded))
                     .foregroundStyle(AppColors.textOnAccent)
@@ -193,9 +198,11 @@ struct FriendStatsRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
-                    Text(friend.displayName)
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundStyle(AppColors.text)
+                    PrestigeNameText(
+                        name: friend.displayName,
+                        prestige: friend.prestige,
+                        font: .system(size: 16, weight: .bold, design: .rounded)
+                    )
                         .lineLimit(1)
                     if VerifiedTracker.isVerified(reviewed: friend.hasReviewedApp) {
                         VerifiedBadgeView(variant: .static, size: 14)

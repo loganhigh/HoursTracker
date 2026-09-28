@@ -296,6 +296,8 @@ struct HomeFriendsCardContent: View {
         var hoursHidden: Bool = false
         /// Verified badge, same rule as every other surface.
         var hasReviewedApp: Bool = false
+        /// Drives the Ascended (P11+) name/avatar marks.
+        var prestige: Int = 0
     }
 
     /// Ranked standings: me plus every friend who shares hours. Sorted by
@@ -319,7 +321,8 @@ struct HomeFriendsCardContent: View {
                 levelLine: myLevelLine,
                 profilePhotoURL: ProfilePhotoManager.shared.remotePhotoURL,
                 isMe: true,
-                hasReviewedApp: VerifiedStatusService.shared.isVerified
+                hasReviewedApp: VerifiedStatusService.shared.isVerified,
+                prestige: store.displayedPrestige
             )
         ]
         rows += friendsService.friends
@@ -332,7 +335,8 @@ struct HomeFriendsCardContent: View {
                     levelLine: $0.levelDisplayLine,
                     profilePhotoURL: $0.profilePhotoURL,
                     isMe: false,
-                    hasReviewedApp: $0.hasReviewedApp
+                    hasReviewedApp: $0.hasReviewedApp,
+                    prestige: $0.prestige
                 )
             }
         return rows
@@ -356,7 +360,8 @@ struct HomeFriendsCardContent: View {
                     profilePhotoURL: $0.profilePhotoURL,
                     isMe: false,
                     hoursHidden: true,
-                    hasReviewedApp: $0.hasReviewedApp
+                    hasReviewedApp: $0.hasReviewedApp,
+                    prestige: $0.prestige
                 )
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -425,12 +430,12 @@ struct HomeFriendsCardContent: View {
                 photoURL: row.profilePhotoURL,
                 uid: row.id
             )
+            .ascendedAvatarRing(prestige: row.prestige, diameter: 32, inset: 1.5)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(row.name)
+                    PrestigeNameText(name: row.name, prestige: row.prestige)
                         .appText(.subheadline)
-                        .foregroundStyle(AppColors.text)
                         .lineLimit(1)
 
                     if VerifiedTracker.isVerified(reviewed: row.hasReviewedApp) {
@@ -566,9 +571,9 @@ struct HomeFriendsPickerSheet: View {
                                     photoURL: friend.profilePhotoURL,
                                     uid: friend.uid
                                 )
-                                Text(friend.displayName)
+                                .ascendedAvatarRing(prestige: friend.prestige, diameter: 34, inset: 1.5)
+                                PrestigeNameText(name: friend.displayName, prestige: friend.prestige)
                                     .appText(.body)
-                                    .foregroundStyle(AppColors.text)
                                     .lineLimit(1)
                                 if VerifiedTracker.isVerified(reviewed: friend.hasReviewedApp) {
                                     VerifiedBadgeView(variant: .static, size: 12)

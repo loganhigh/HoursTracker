@@ -168,9 +168,11 @@ struct FriendProfileDetailView: View {
             )
             .overlay(
                 Circle()
-                    .stroke(accent.opacity(0.75), lineWidth: 2)
+                    .stroke(accent.opacity(tier.isLegend ? 0 : 0.75), lineWidth: 2)
                     .padding(-4)
             )
+            // Ascended (P11+) swap the plain accent ring for their tier ring.
+            .ascendedAvatarRing(prestige: friend.prestige, diameter: 76, inset: 4)
             .onTapGesture {
                 if friend.profilePhotoURL != nil {
                     showFullPhoto = true
@@ -185,9 +187,11 @@ struct FriendProfileDetailView: View {
             }
 
             HStack(spacing: 5) {
-                Text(friend.displayName)
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.text)
+                PrestigeNameText(
+                    name: friend.displayName,
+                    prestige: friend.prestige,
+                    font: .system(size: 20, weight: .bold, design: .rounded)
+                )
                 if VerifiedTracker.isVerified(reviewed: friend.hasReviewedApp) {
                     // The profile is the badge's hero moment — one on screen,
                     // so it can shimmer like the podium's.
@@ -206,6 +210,7 @@ struct FriendProfileDetailView: View {
             HStack(spacing: 6) {
                 Image(systemName: tier.icon)
                     .font(.system(size: 12, weight: .bold))
+                    .legendShimmer(tier)
                 Text("Prestige \(friend.prestige) • \(tier.name)")
                     .font(.system(size: 13, weight: .bold, design: .rounded))
             }

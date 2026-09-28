@@ -185,7 +185,7 @@ struct AccountView: View {
         }
         .fullScreenCover(isPresented: $showingWrapped) {
             if let wrappedStats {
-                WrappedView(stats: wrappedStats, username: friendsService.myUsername)
+                WrappedView(stats: wrappedStats, username: friendsService.myUsername, prestige: store.displayedGamificationProfile().prestige)
             }
         }
         .onAppear {
@@ -206,7 +206,7 @@ struct AccountView: View {
             set: { if !$0 { debugWrappedStats = nil } }
         )) {
             if let debugWrappedStats {
-                WrappedView(stats: debugWrappedStats, username: friendsService.myUsername)
+                WrappedView(stats: debugWrappedStats, username: friendsService.myUsername, prestige: store.displayedGamificationProfile().prestige)
             }
         }
         #endif
@@ -245,6 +245,8 @@ struct AccountView: View {
         let profile = store.displayedGamificationProfile()
         let tier = PrestigeTheme.tier(for: profile.prestige)
         let ringColor = profile.prestige == 0 ? AppColors.accent : tier.primary
+        let myPrestige = profile.prestige
+        let isAscended = tier.isLegend
         // Read the auth state here (main-actor context) rather than inside the
         // PhotosPicker label, whose builder closure is treated as nonisolated.
         let avatarUID = authService.user?.uid
@@ -278,8 +280,11 @@ struct AccountView: View {
                     .padding(5)
                     .overlay(
                         Circle()
-                            .stroke(ringColor.opacity(0.7), lineWidth: 2)
+                            .stroke(ringColor.opacity(isAscended ? 0 : 0.7), lineWidth: 2)
                     )
+                    // Ascended (P11+) swap the plain ring for their tier ring,
+                    // on the same 106pt circle so the reserved padding holds.
+                    .ascendedAvatarRing(prestige: myPrestige, diameter: 106)
 
                     if isSignedIn {
                         cameraBadge
@@ -310,9 +315,13 @@ struct AccountView: View {
                 HStack(spacing: 6) {
                     // Shown as a handle ("@logan") once claimed; the prompt
                     // and any legacy name stay bare.
-                    Text(friendsService.myUsername.map { Username.display($0) } ?? displayName)
+                    // Only a claimed handle is marked; the prompt stays accent.
+                    PrestigeNameText(
+                        name: friendsService.myUsername.map { Username.display($0) } ?? displayName,
+                        prestige: friendsService.myUsername == nil ? 0 : myPrestige,
+                        style: AnyShapeStyle(friendsService.myUsername == nil ? AppColors.accent : AppColors.text)
+                    )
                         .appText(.title)
-                        .foregroundStyle(friendsService.myUsername == nil ? AppColors.accent : AppColors.text)
                         .multilineTextAlignment(.center)
                     // Own profile earns the badge on the same rule as every
                     // other surface. Shimmering here: one badge on screen.
@@ -342,6 +351,7 @@ struct AccountView: View {
                 HStack(spacing: 6) {
                     Image(systemName: tier.icon)
                         .font(.footnote.weight(.bold))
+                        .legendShimmer(tier)
                     Text("Prestige \(profile.prestige) • Level \(profile.level)")
                         .appText(.subheadline)
                         .fontWeight(.semibold)

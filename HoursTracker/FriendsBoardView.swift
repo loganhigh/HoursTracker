@@ -254,16 +254,29 @@ struct FriendsBoardView: View {
         return friendsService.friends.first { $0.uid == uid }?.hasReviewedApp == true
     }
 
+    /// Prestige for any author, same lookup as `authorIsVerified` — drives
+    /// the Ascended (P11+) name/avatar marks. Unknown authors read as P0.
+    private func authorPrestige(_ uid: String) -> Int {
+        if uid == currentUid { return store.displayedPrestige }
+        return friendsService.friends.first { $0.uid == uid }?.prestige ?? 0
+    }
+
     private func postCard(_ post: BoardPost) -> some View {
+        let prestige = authorPrestige(post.authorUid)
+        return
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 avatarCircle(initials: post.authorInitials, tint: avatarTint(for: post.authorUid))
+                    .ascendedAvatarRing(prestige: prestige, diameter: 40, inset: 1.5)
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(post.authorName)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(theme.textPrimary)
+                        PrestigeNameText(
+                            name: post.authorName,
+                            prestige: prestige,
+                            font: .system(size: 15, weight: .bold, design: .rounded),
+                            style: AnyShapeStyle(theme.textPrimary)
+                        )
                         if authorIsVerified(post.authorUid) {
                             VerifiedBadgeView(variant: .static, size: 13)
                         }
@@ -432,9 +445,12 @@ struct FriendsBoardView: View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(comment.authorName)
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(theme.textPrimary)
+                    PrestigeNameText(
+                        name: comment.authorName,
+                        prestige: authorPrestige(comment.authorId),
+                        font: .system(size: 13, weight: .bold, design: .rounded),
+                        style: AnyShapeStyle(theme.textPrimary)
+                    )
                     if authorIsVerified(comment.authorId) {
                         VerifiedBadgeView(variant: .static, size: 11)
                     }

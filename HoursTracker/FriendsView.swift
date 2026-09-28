@@ -142,7 +142,8 @@ struct FriendsView: View {
                             copyConfirmation: copyConfirmation,
                             onCopy: { copyUsername() },
                             onAdd: { Task { await sendRequest() } },
-                            onSetUsername: { showingUsernameSheet = true }
+                            onSetUsername: { showingUsernameSheet = true },
+                            prestige: store.displayedPrestige
                         )
                         notifyCaption
                         if let actionMessage {

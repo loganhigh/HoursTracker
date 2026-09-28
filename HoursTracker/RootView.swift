@@ -588,6 +588,7 @@ struct HoursHomeView: View {
                         year: wrappedStats.year,
                         totalHours: wrappedStats.totalHours,
                         username: friendsService.myUsername,
+                        prestige: store.displayedGamificationProfile().prestige,
                         onOpen: {
                             Haptics.lightTap()
                             showingWrapped = true
@@ -767,7 +768,7 @@ struct HoursHomeView: View {
         // a panel over Home.
         .fullScreenCover(isPresented: $showingWrapped) {
             if let wrappedStats {
-                WrappedView(stats: wrappedStats, username: friendsService.myUsername)
+                WrappedView(stats: wrappedStats, username: friendsService.myUsername, prestige: store.displayedGamificationProfile().prestige)
             }
         }
         .fullScreenCover(isPresented: $showingAdd) {
@@ -1247,7 +1248,7 @@ struct PrestigeInfoSheet: View {
                         VStack(alignment: .leading, spacing: 12) {
                             infoRow(icon: "arrow.up.circle.fill", text: "Reach Level 25 to Prestige")
                             infoRow(icon: "arrow.counterclockwise.circle.fill", text: "Level resets to 1, rank goes up")
-                            infoRow(icon: "crown.fill", text: "10 ranks — climb all the way to Prestige Master")
+                            infoRow(icon: "crown.fill", text: "\(GamificationLevelCalculator.maxPrestige) ranks — past Prestige Master comes Legend Status, up to \(PrestigeTheme.tier(for: GamificationLevelCalculator.maxPrestige).name)")
                         }
                         .padding(16)
                         .background(
@@ -1273,6 +1274,7 @@ struct PrestigeInfoSheet: View {
                                     Image(systemName: tier.icon)
                                         .font(.system(.callout, weight: .bold))
                                         .foregroundStyle(tier.color)
+                                        .legendShimmer(PrestigeTheme.tier(for: tier.level))
                                         .shadow(color: tier.level == currentPrestige ? tier.color.opacity(0.5) : .clear, radius: 6)
                                         .frame(width: 24)
 
@@ -1308,7 +1310,20 @@ struct PrestigeInfoSheet: View {
                                         : nil
                                 )
 
-                                if tier.level < 10 {
+                                if tier.level == 10 {
+                                    // Section break into the Legend family (P11+).
+                                    HStack(spacing: 8) {
+                                        Rectangle().fill(AppTheme.Colors.stroke).frame(height: 0.5)
+                                        Text("LEGEND STATUS")
+                                            .font(.system(.caption2, design: .rounded, weight: .black))
+                                            .tracking(1.5)
+                                            .foregroundStyle(AppTheme.Colors.subtext)
+                                            .fixedSize()
+                                        Rectangle().fill(AppTheme.Colors.stroke).frame(height: 0.5)
+                                    }
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                } else if tier.level < GamificationLevelCalculator.maxPrestige {
                                     Divider().overlay(AppTheme.Colors.stroke.opacity(0.5))
                                 }
                             }
