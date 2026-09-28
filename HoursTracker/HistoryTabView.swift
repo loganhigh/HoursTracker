@@ -14,6 +14,9 @@ struct HistoryTabView: View {
     /// pill (Paid / Pending / In Progress / Add Pay), leaving just the date,
     /// shift count, and hours on each row.
     @AppStorage("history_show_projected_pay") private var showProjectedPay = true
+    /// Data Completion card presentations (see DataCompletionCard).
+    @State private var missingShiftAddFor: MissingShiftDetector.Suggestion?
+    @State private var showingAllMissingShifts = false
 
     /// Hard stop on the backward walk. The loop normally ends at the earliest
     /// entry; this only bounds the worst case, so it scales with the period —
@@ -47,6 +50,11 @@ struct HistoryTabView: View {
             // down through later years.
             LazyVStack(spacing: AppSpacing.md) {
                 header
+                DataCompletionCard(
+                    store: store,
+                    addShiftFor: $missingShiftAddFor,
+                    showingAll: $showingAllMissingShifts
+                )
                 if store.entries.isEmpty {
                     AppEmptyState(
                         icon: "calendar",
@@ -79,6 +87,11 @@ struct HistoryTabView: View {
         .background(AppColors.bg.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
+        .dataCompletionPresentations(
+            store: store,
+            addShiftFor: $missingShiftAddFor,
+            showingAll: $showingAllMissingShifts
+        )
     }
 
     // MARK: - Header

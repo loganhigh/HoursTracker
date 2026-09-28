@@ -279,6 +279,7 @@ final class AuthService: NSObject, ObservableObject {
         LiveShiftManager.shared.discard()
         // Earnings goals are local-only and account-bound too.
         EarningsGoalStore.shared.removeAll()
+        MissingShiftDismissals.shared.removeAll()
     }
 
     // MARK: - Profile doc

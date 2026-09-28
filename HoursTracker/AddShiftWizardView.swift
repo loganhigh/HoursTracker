@@ -66,11 +66,16 @@ struct AddShiftWizardView: View {
 
     // MARK: - Init (defaults mirror EntryEditorView's add mode)
 
-    init(store: HoursStore) {
+    /// `initialDate` pre-selects a day other than today (the times keep the
+    /// most-recent-shift defaults, placed on that day).
+    init(store: HoursStore, initialDate: Date? = nil) {
         self.store = store
 
-        let now = Date()
         let cal = Calendar.current
+        let today = Date()
+        let now = initialDate.map { day in
+            min(cal.startOfDay(for: day), cal.startOfDay(for: today))
+        } ?? today
         let mostRecent = store.entries.filter { !$0.isOffDay }.sorted { $0.date > $1.date }.first
 
         _date = State(initialValue: cal.startOfDay(for: now))

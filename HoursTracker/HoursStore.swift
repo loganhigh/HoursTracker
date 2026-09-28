@@ -965,6 +965,7 @@ final class HoursStore: ObservableObject {
         AutoOffDayFiller.clearMarkers()
         LevelUpRatchet.resetAll()
         EarningsGoalStore.shared.removeAll()
+        MissingShiftDismissals.shared.removeAll()
         isLoaded = false
         UserDefaults.standard.removeObject(forKey: entriesKey)
         UserDefaults.standard.removeObject(forKey: settingsKey)

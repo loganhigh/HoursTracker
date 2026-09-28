@@ -18,12 +18,14 @@ import SwiftUI
 struct AddShiftEntryView: View {
     @ObservedObject var store: HoursStore
     @EnvironmentObject private var liveShift: LiveShiftManager
+    /// Day to pre-select in the manual wizard (e.g. a suggested missing shift).
+    var initialDate: Date? = nil
 
     var body: some View {
         if liveShift.activeShift != nil {
             LiveShiftTrackingView(store: store)
         } else {
-            AddShiftWizardView(store: store)
+            AddShiftWizardView(store: store, initialDate: initialDate)
         }
     }
 }
