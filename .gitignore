@@ -81,3 +81,8 @@ scripts/shadow-health/
 
 # UID-merge Firestore backups (contain user PII — never commit)
 functions/scripts/merge-backups/
+
+# Local agent tooling (not part of the app)
+.agents/
+.codex/
+AGENTS.md
