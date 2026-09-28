@@ -175,3 +175,91 @@ struct AccountRowHairline: View {
             .padding(.leading, AppSpacing.md + 30 + AppSpacing.sm)
     }
 }
+
+// MARK: - Prestige action (You tab)
+
+/// The Prestige button and its celebration, shown directly above the level
+/// bar once the run is finished. Eligibility and the action both go through
+/// the store, which refuses a second Prestige until the server is describing
+/// the same prestige run as this device.
+struct PrestigeActionSection: View {
+    @ObservedObject var store: HoursStore
+    /// Called after a successful Prestige. The celebration is presented by
+    /// the screen, not by this section: the button disappears the moment the
+    /// Prestige lands, and a cover hosted on it would be torn down with it.
+    let onPrestiged: () -> Void
+
+    private var isEligible: Bool {
+        store.gamificationProfile.canPrestige || store.displayedGamificationProfile().canPrestige
+    }
+
+    var body: some View {
+        Group {
+            if isEligible {
+                PrestigeCallToAction(currentPrestige: store.displayedGamificationProfile().prestige) {
+                    if store.performPrestige() {
+                        onPrestiged()
+                    } else {
+                        // Whatever went wrong, a dead button is worse — say so.
+                        Haptics.error()
+                    }
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.75), value: isEligible)
+    }
+}
+
+// MARK: - Prestige Call To Action
+
+struct PrestigeCallToAction: View {
+    let currentPrestige: Int
+    let onPrestige: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var glowPulse: CGFloat = 0.6
+
+    private var prestigeLevel: Int { 25 }
+
+    var body: some View {
+        Button {
+            Haptics.success()
+            onPrestige()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(.body, weight: .bold))
+                VStack(spacing: 1) {
+                    Text("YOU'VE REACHED LEVEL \(prestigeLevel)")
+                        .font(.system(.caption2, design: .rounded, weight: .bold))
+                        .tracking(1.5)
+                        .opacity(0.85)
+                    Text("Tap to Prestige →")
+                        .font(.system(.body, design: .rounded, weight: .black))
+                }
+                Image(systemName: "sparkles")
+                    .font(.system(.body, weight: .bold))
+            }
+            .foregroundStyle(AppColors.textOnAccent)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .background(
+                LinearGradient(
+                    colors: [AppTheme.Colors.accent, AppTheme.Colors.accent2, AppTheme.Colors.accentHighlight],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: AppTheme.Colors.accent.opacity(glowPulse * 0.8), radius: 16, y: 4)
+            .shadow(color: AppTheme.Colors.accentHighlight.opacity(glowPulse * 0.5), radius: 10, y: 2)
+        }
+        .buttonStyle(InteractiveButtonStyle())
+        .onAppear {
+            guard !reduceMotion else { return } // static glow under Reduce Motion
+            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
+                glowPulse = 1.0
+            }
+        }
+    }
+}

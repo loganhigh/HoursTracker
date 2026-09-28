@@ -37,6 +37,7 @@ struct AccountView: View {
     @State private var showingPhotoViewer = false
     @State private var showingPhotoPicker = false
     @State private var showingPrestigeInfo = false
+    @State private var showingPrestigeCelebration = false
     /// The most recent completed year worth watching, resolved when the You
     /// tab appears. nil when no year clears the data bar.
     @State private var wrappedStats: WrappedYearStats?
@@ -102,6 +103,9 @@ struct AccountView: View {
                     identityHero
                 }
                 .cardAppear(index: 0, group: "you")
+                // Renders nothing until the run is finished, so it takes no
+                // space for everyone who isn't at the cap.
+                PrestigeActionSection(store: store) { showingPrestigeCelebration = true }
                 ProfileXPCapsule(store: store)
                     .cardAppear(index: 1, group: "you")
                 lifetimeStatsSection
@@ -169,6 +173,15 @@ struct AccountView: View {
                     }
                 )
             }
+        }
+        .fullScreenCover(isPresented: $showingPrestigeCelebration) {
+            PrestigeCelebrationView(
+                prestige: store.gamificationProfile.prestige,
+                onDismiss: { showingPrestigeCelebration = false }
+            )
+            // Clear so the celebration's material backdrop has the real
+            // screen behind it to blur.
+            .presentationBackground(.clear)
         }
         .fullScreenCover(isPresented: $showingWrapped) {
             if let wrappedStats {

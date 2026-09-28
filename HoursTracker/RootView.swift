@@ -299,7 +299,6 @@ struct HoursHomeView: View {
     @AppStorage("company_name") private var companyName: String = ""
     @AppStorage("company_occupation") private var occupation: String = ""
     @State private var addButtonVisible = true
-    @State private var showingPrestigeConfetti = false
     @State private var showPaydayConfetti = false
     @State private var showPersonalBestBanner = false
     @State private var showStreakBurst = false
@@ -804,15 +803,6 @@ struct HoursHomeView: View {
                 accountUid: authService.user?.uid
             )
         }
-        .fullScreenCover(isPresented: $showingPrestigeConfetti) {
-            PrestigeCelebrationView(
-                prestige: store.gamificationProfile.prestige,
-                onDismiss: { showingPrestigeConfetti = false }
-            )
-            // Clear so the celebration's material backdrop has the real Home
-            // screen behind it to blur.
-            .presentationBackground(.clear)
-        }
         .onChange(of: store.xpGainEvent) { _, event in
             // Only fires for XP earned by a real user action (shift logged /
             // updated) — cloud pulls and pull-to-refresh recalcs never emit
@@ -993,24 +983,11 @@ struct HoursHomeView: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// Payday banner. The Prestige button used to sit here too; it now lives
+    /// on the You tab directly above the level bar it belongs to.
     private var progressionCard: some View {
         VStack(spacing: 12) {
             paydayBanner
-
-            // Either truth may earn the button: the local recompute or the
-            // server-preferred displayed level (performPrestige accepts both).
-            if store.gamificationProfile.canPrestige || store.displayedGamificationProfile().canPrestige {
-                PrestigeCallToAction(currentPrestige: store.displayedGamificationProfile().prestige) {
-                    if store.performPrestige() {
-                        showingPrestigeConfetti = true
-                    } else {
-                        // Whatever went wrong, a dead button is worse — say so.
-                        Haptics.error()
-                    }
-                }
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .animation(.spring(response: 0.4, dampingFraction: 0.75), value: store.gamificationProfile.canPrestige)
-            }
         }
     }
 
@@ -1151,59 +1128,6 @@ private func copyAllGroupedText(for entries: [WorkEntry]) -> String {
     return blocks.joined(separator: "\n\n")
 }
 
-
-// MARK: - Prestige Call To Action
-
-private struct PrestigeCallToAction: View {
-    let currentPrestige: Int
-    let onPrestige: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var glowPulse: CGFloat = 0.6
-
-    private var prestigeLevel: Int { 25 }
-
-    var body: some View {
-        Button {
-            Haptics.success()
-            onPrestige()
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "sparkles")
-                    .font(.system(.body, weight: .bold))
-                VStack(spacing: 1) {
-                    Text("YOU'VE REACHED LEVEL \(prestigeLevel)")
-                        .font(.system(.caption2, design: .rounded, weight: .bold))
-                        .tracking(1.5)
-                        .opacity(0.85)
-                    Text("Tap to Prestige →")
-                        .font(.system(.body, design: .rounded, weight: .black))
-                }
-                Image(systemName: "sparkles")
-                    .font(.system(.body, weight: .bold))
-            }
-            .foregroundStyle(AppColors.textOnAccent)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 18)
-            .background(
-                LinearGradient(
-                    colors: [AppTheme.Colors.accent, AppTheme.Colors.accent2, AppTheme.Colors.accentHighlight],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: AppTheme.Colors.accent.opacity(glowPulse * 0.8), radius: 16, y: 4)
-            .shadow(color: AppTheme.Colors.accentHighlight.opacity(glowPulse * 0.5), radius: 10, y: 2)
-        }
-        .buttonStyle(InteractiveButtonStyle())
-        .onAppear {
-            guard !reduceMotion else { return } // static glow under Reduce Motion
-            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
-                glowPulse = 1.0
-            }
-        }
-    }
-}
 
 // MARK: - Floating XP Gain Text
 
