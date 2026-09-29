@@ -64,8 +64,10 @@ extension WeatherService {
         )
     }
 
-    private struct DailyHistoryResponse: Decodable {
-        struct Daily: Decodable {
+    // nonisolated: decoded inside the nonisolated `dailySnapshot`, off the
+    // main actor (the target defaults to MainActor isolation).
+    nonisolated private struct DailyHistoryResponse: Decodable {
+        nonisolated struct Daily: Decodable {
             // Optional elements: the archive returns null for days it
             // doesn't have yet (its data trails by a few days).
             let temperature_2m_max: [Double?]
