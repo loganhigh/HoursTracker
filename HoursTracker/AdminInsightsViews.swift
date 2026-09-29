@@ -3,7 +3,7 @@ import SwiftUI
 
 // MARK: - Feature ideas
 
-/// Admin: every idea sent from the Home "What should we add next?" box,
+/// Admin: every idea sent from the Home "What should we add to Hour Tracker?" box,
 /// newest first. Read through `adminListSuggestions` (clients can't read
 /// the collection directly).
 struct AdminSuggestionsView: View {

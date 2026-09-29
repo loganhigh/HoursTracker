@@ -2,7 +2,7 @@ import FirebaseAuth
 import FirebaseFirestore
 import SwiftUI
 
-/// "What should we add next?" box on Home, under Top 5 Hour Trackers.
+/// "What should we add to Hour Tracker?" box on Home, under Top 5 Hour Trackers.
 /// Each idea is written to `featureSuggestions` (create-only for clients;
 /// see firestore.rules) and pushed to the developer by
 /// `notifyAdminOnSuggestion`.
@@ -27,7 +27,7 @@ struct FeatureSuggestionCard: View {
     var body: some View {
         VStack(spacing: 12) {
             VStack(spacing: 2) {
-                Text("WHAT SHOULD WE ADD NEXT?")
+                Text("WHAT SHOULD WE ADD TO HOUR TRACKER?")
                     .font(.system(.caption, design: .rounded, weight: .bold))
                     .tracking(1.6)
                     .foregroundStyle(AppTheme.Colors.subtext)
