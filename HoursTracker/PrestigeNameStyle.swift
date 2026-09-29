@@ -33,10 +33,70 @@ struct PrestigeNameText: View {
     }
 
     var body: some View {
-        if tier.isLegend {
-            AscendedNameFill(text: text, tier: tier)
+        let isOwner = DeveloperConfig.isOwnerName(name)
+        Group {
+            if isOwner {
+                // Gold, so the sweep reads (white light over white text is
+                // invisible) and the owner stands apart from any rank colour.
+                text.foregroundStyle(
+                    LinearGradient(
+                        colors: [AppColors.gold, AppColors.goldDeep, AppColors.gold],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+            } else if tier.isLegend {
+                AscendedNameFill(text: text, tier: tier)
+            } else {
+                text.foregroundStyle(style)
+            }
+        }
+        .modifier(OwnerNameShimmer(text: text, isOwner: isOwner))
+    }
+}
+
+/// The app owner's name (@logan) is gold with a band of light sweeping across it
+/// every few seconds. The sweep is drawn OVER the normal fill and masked to
+/// the glyphs, so the name itself is always fully visible. Its position comes
+/// straight from the clock (no restartable state animation that could stack
+/// when a row scrolls back into view). Reduce Motion: no sweep.
+private struct OwnerNameShimmer: ViewModifier {
+    let text: Text
+    let isOwner: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// One sweep plus a pause, in seconds.
+    private let cycle: Double = 3.2
+    /// Portion of the cycle the band is moving.
+    private let sweepFraction: Double = 0.45
+
+    func body(content: Content) -> some View {
+        if isOwner && !reduceMotion {
+            content.overlay {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                    let t = timeline.date.timeIntervalSinceReferenceDate
+                        .truncatingRemainder(dividingBy: cycle) / cycle
+                    let progress = min(1, t / sweepFraction)
+                    GeometryReader { geo in
+                        let w = max(geo.size.width, 1)
+                        let band = max(24, w * 0.35)
+                        LinearGradient(
+                            colors: [.clear, Color.white.opacity(0.85), .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: band, height: geo.size.height)
+                        .offset(x: -band + (w + band) * progress)
+                        .opacity(t < sweepFraction ? 1 : 0)
+                    }
+                    .mask(text)
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
         } else {
-            text.foregroundStyle(style)
+            content
         }
     }
 }
