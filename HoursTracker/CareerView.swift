@@ -145,8 +145,6 @@ struct CareerSections: View {
                     .padding(.vertical, AppSpacing.xs)
                 }
 
-                // Work-powered earnings goals, directly under Tracking history.
-                EarningsGoalsCard(store: store)
 
         }
     }

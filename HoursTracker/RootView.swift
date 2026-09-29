@@ -651,10 +651,15 @@ struct HoursHomeView: View {
                         .cardAppear(index: 6)
                 }
 
-                // Idea box, directly under Top 5 Hour Trackers; outside the
-                // friendsEnabled block so everyone can suggest features.
-                FeatureSuggestionCard(username: friendsService.myUsername)
+                // Savings goals, under Top 5 Hour Trackers. Outside the
+                // friendsEnabled block: goals are personal, not social.
+                EarningsGoalsCard(store: store)
                     .cardAppear(index: 7)
+
+                // Idea box, under Goals; also outside the friendsEnabled
+                // block so everyone can suggest features.
+                FeatureSuggestionCard(username: friendsService.myUsername)
+                    .cardAppear(index: 8)
 
                 // Below Top 5 Hour Trackers, and outside the friendsEnabled
                 // block so turning Friends off doesn't take the console with
@@ -665,7 +670,7 @@ struct HoursHomeView: View {
                         Haptics.lightTap()
                         showingAdminPanel = true
                     }
-                    .cardAppear(index: 8)
+                    .cardAppear(index: 9)
                 }
 
                 // Note + version travel as one tight, centred footer group —
