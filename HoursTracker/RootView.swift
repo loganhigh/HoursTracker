@@ -1260,7 +1260,9 @@ struct PrestigeInfoSheet: View {
                                     Text("P\(tier.level)")
                                         .font(.system(.footnote, design: .rounded, weight: .black))
                                         .foregroundStyle(tier.color)
-                                        .frame(width: 30, alignment: .leading)
+                                        .lineLimit(1)
+                                        .fixedSize()
+                                        .frame(width: 36, alignment: .leading)
 
                                     Text(tier.title)
                                         .font(.system(.subheadline, design: .rounded, weight: .semibold))

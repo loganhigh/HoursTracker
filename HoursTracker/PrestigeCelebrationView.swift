@@ -378,7 +378,7 @@ struct PrestigeCelebrationView: View {
         case 14: return "MVP. The one they count on."
         case 15: return "Superstar. Everyone knows the name."
         case 16: return "Hall of Fame. Your name is on the wall."
-        case 17: return "All-Time Great. Talked about for years."
+        case 17: return "Unstoppable. Nothing slows you down."
         case 18: return "Royalty. The crown is yours."
         case 19: return "One of One. There's nobody else like you."
         case 20: return "G.O.A.T. The greatest of all time."

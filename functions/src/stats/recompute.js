@@ -65,7 +65,7 @@ const PRESTIGE_TIER_NAMES = [
   "Unranked", "Bronze", "Silver", "Gold", "Platinum",
   "Diamond", "Master", "Grandmaster", "Champion", "Legend", "Prestige Master",
   "Elite", "Premier", "Supreme", "MVP", "Superstar",
-  "Hall of Fame", "All-Time Great", "Royalty", "One of One", "G.O.A.T.",
+  "Hall of Fame", "Unstoppable", "Royalty", "One of One", "G.O.A.T.",
 ];
 
 const MAX_LEVEL = 25;

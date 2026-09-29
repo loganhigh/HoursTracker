@@ -241,8 +241,8 @@ enum PrestigeTheme {
         ),
         Tier(
             prestige: 17,
-            name: "All-Time Great",
-            icon: "laurel.leading",
+            name: "Unstoppable",
+            icon: "flame.circle.fill",
             primary:    Color(hex: 0xFF5E6C),
             accent2:    Color(hex: 0xE0304A),
             highlight:  Color(hex: 0xFFB3A0),
