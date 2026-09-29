@@ -16,7 +16,6 @@
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>whatsapp</string>
-		<string>instagram-stories</string>
 		<string>snapchat</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>

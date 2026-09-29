@@ -328,8 +328,9 @@ struct JobSiteDraft {
     }
 }
 
-/// Name + detail fields and the icon picker — shared by the wizard's inline
-/// "add new" form and the Settings editor.
+/// Name + detail fields — shared by the wizard's inline "add new" form and
+/// the Settings editor. There's no icon picker: new sites get
+/// `JobSite.defaultIcon`, existing sites keep the icon they have.
 struct JobSiteFormFields: View {
     @Binding var draft: JobSiteDraft
     var nameFocused: FocusState<Bool>.Binding?
@@ -341,16 +342,6 @@ struct JobSiteFormFields: View {
                 .appText(.body)
                 .foregroundStyle(AppColors.text)
                 .tint(AppColors.accent)
-
-            Text("Icon")
-                .appText(.eyebrow)
-                .foregroundStyle(AppColors.subtext)
-
-            HStack(spacing: AppSpacing.xs) {
-                ForEach(JobSite.iconOptions, id: \.self) { icon in
-                    iconButton(icon)
-                }
-            }
         }
     }
 
@@ -370,29 +361,5 @@ struct JobSiteFormFields: View {
                 .tint(AppColors.accent)
                 .submitLabel(.done)
         }
-    }
-
-    private func iconButton(_ icon: String) -> some View {
-        let isSelected = draft.iconName == icon
-        return Button {
-            Haptics.lightTap()
-            draft.iconName = icon
-        } label: {
-            RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
-                .fill(AppColors.accent.opacity(isSelected ? 0.14 : 0.06))
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
-                        .stroke(isSelected ? AppColors.accent.opacity(0.45) : AppColors.stroke, lineWidth: 1)
-                )
-                .frame(height: 36)
-                .overlay(
-                    Image(systemName: icon)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(isSelected ? AppColors.accent : AppColors.subtext)
-                )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(icon)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }

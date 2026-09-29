@@ -20,6 +20,12 @@ struct ShiftEarnings: Equatable {
     let locationName: String
     /// Worked-day streak including this shift.
     let streak: Int
+    /// Gross for the whole pay period the shift falls in, this shift included.
+    var chequeGross: Double = 0
+    /// Last day of work on that cheque, for the "through" label.
+    var chequeCutoff: Date? = nil
+
+    var chequeTakeHome: Double { gross > 0 ? chequeGross * (takeHome / gross) : 0 }
 
     var netHourlyRate: Double { hours > 0 ? takeHome / hours : 0 }
 }
@@ -36,6 +42,10 @@ extension HoursStore {
         let gross = work.reduce(0) { $0 + payBreakdown(for: $1).pay }
         guard gross > 0 else { return nil }
         let ratio = TakeHomeEstimator.ratio(learned: learnedTakeHomeRatio())
+        let cycle = PayCycleEngine.cycle(containing: work.map(\.date).min() ?? Date(), settings: paySettings)
+        let chequeGross = PayCycleEngine.entries(entries, in: cycle)
+            .filter { !$0.isOffDay }
+            .reduce(0) { $0 + payBreakdown(for: $1).pay }
         return ShiftEarnings(
             date: work.map(\.date).min() ?? Date(),
             hours: hours,
@@ -47,7 +57,9 @@ extension HoursStore {
             locationName: work
                 .map { $0.locationName.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .first { !$0.isEmpty } ?? "",
-            streak: gamificationProfile.currentStreak
+            streak: gamificationProfile.currentStreak,
+            chequeGross: max(chequeGross, gross),
+            chequeCutoff: cycle.cutoff
         )
     }
 
@@ -80,6 +92,9 @@ struct ShiftEarningsView: View {
     let onDone: () -> Void
 
     @State private var shareImage: UIImage?
+    /// Hides every dollar figure (card and share image) so the card can be
+    /// shared without showing pay. Remembered between shifts.
+    @AppStorage("shift_card_hide_pay") private var hidePay = false
 
     /// Read live from the store: weather for a backdated shift lands a moment
     /// after the card opens, and the card (and share image) update with it.
@@ -93,20 +108,41 @@ struct ShiftEarningsView: View {
 
             VStack(spacing: AppSpacing.lg) {
                 Spacer(minLength: 0)
-                ShiftEarningsCard(earnings: earnings, weather: weather)
-                Text(footnote)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, AppSpacing.lg)
+                ShiftEarningsCard(earnings: earnings, weather: weather, showPay: !hidePay)
+                if !hidePay {
+                    Text(footnote)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, AppSpacing.lg)
+                }
                 Spacer(minLength: 0)
                 buttons
             }
             .padding(.horizontal, AppSpacing.lg)
             .padding(.bottom, AppSpacing.xl)
         }
+        .overlay(alignment: .topTrailing) { payToggle }
         .task { renderShareImage() }
         .onChange(of: weather) { _, _ in renderShareImage() }
+        .onChange(of: hidePay) { _, _ in renderShareImage() }
+    }
+
+    private var payToggle: some View {
+        Button {
+            Haptics.lightTap()
+            withAnimation(.easeInOut(duration: 0.2)) { hidePay.toggle() }
+        } label: {
+            Image(systemName: hidePay ? "eye.slash.fill" : "eye.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.white)
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(Color.white.opacity(0.14)))
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, AppSpacing.lg)
+        .padding(.top, AppSpacing.sm)
+        .accessibilityLabel(hidePay ? "Show pay" : "Hide pay")
     }
 
     private var footnote: String {
@@ -145,7 +181,7 @@ struct ShiftEarningsView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            ShiftEarningsCard(earnings: earnings, weather: weather)
+            ShiftEarningsCard(earnings: earnings, weather: weather, showPay: !hidePay)
                 .padding(28)
         }
         .frame(width: 390, height: 640)
@@ -161,6 +197,7 @@ struct ShiftEarningsView: View {
 struct ShiftEarningsCard: View {
     let earnings: ShiftEarnings
     let weather: WeatherSnapshot?
+    var showPay: Bool = true
 
     var body: some View {
         VStack(spacing: 22) {
@@ -210,12 +247,18 @@ struct ShiftEarningsCard: View {
                 }
             }
 
-            VStack(spacing: 0) {
-                row("Gross earned", money(earnings.gross))
-                divider
-                row("Estimated take-home", money(earnings.takeHome), emphasized: true)
-                divider
-                row("After deductions", money(earnings.netHourlyRate) + "/hr")
+            if showPay {
+                VStack(spacing: 0) {
+                    row("Gross earned", money(earnings.gross))
+                    divider
+                    row("Estimated take-home", money(earnings.takeHome), emphasized: true)
+                    divider
+                    row("After deductions", money(earnings.netHourlyRate) + "/hr")
+                    if earnings.chequeGross > earnings.gross + 0.005 {
+                        divider
+                        row(chequeLabel, money(earnings.chequeTakeHome))
+                    }
+                }
             }
         }
         .padding(.vertical, 28)
@@ -283,6 +326,9 @@ struct ShiftEarningsCard: View {
             : String(format: "%.2f", rounded).replacingOccurrences(of: #"0$"#, with: "", options: .regularExpression)
         return "\(text) \(rounded == 1 ? "hour" : "hours")"
     }
+
+    /// Take-home for the pay period so far, this shift included.
+    private var chequeLabel: String { "This cheque so far" }
 
     private var dateText: String {
         earnings.date.formatted(.dateTime.month(.abbreviated).day()).uppercased()

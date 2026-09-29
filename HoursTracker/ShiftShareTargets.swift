@@ -6,14 +6,10 @@ import Photos
 
 // MARK: - Share targets for the shift earnings card
 //
-// Four first-class destinations plus Save Image:
+// Three first-class destinations plus Save Image:
 //   - Messages: the in-app composer with the card attached.
 //   - WhatsApp: hands the image straight to WhatsApp via its documented
 //     `net.whatsapp.image` document type.
-//   - Instagram: posts to Stories through Instagram's official URL scheme.
-//     Meta requires a registered Facebook App ID for this; until one is set
-//     in `ShareConfig.metaAppID`, the button opens the share sheet instead,
-//     where Instagram appears when it's installed.
 //   - Snapchat: direct sharing needs Snap's Creative Kit SDK and client ID,
 //     so for now it opens the share sheet, where Snapchat appears when
 //     installed.
@@ -21,14 +17,8 @@ import Photos
 // Anything that can't go direct (app not installed, no attachments allowed)
 // falls back to a trimmed system share sheet rather than failing silently.
 
-enum ShareConfig {
-    /// Facebook App ID from developers.facebook.com, required by Instagram
-    /// for direct Stories sharing. nil → Instagram uses the share sheet.
-    static let metaAppID: String? = nil
-}
-
 enum ShiftShareTarget: String, CaseIterable, Identifiable {
-    case messages, whatsapp, instagram, snapchat, save
+    case messages, whatsapp, snapchat, save
 
     var id: String { rawValue }
 
@@ -36,7 +26,6 @@ enum ShiftShareTarget: String, CaseIterable, Identifiable {
         switch self {
         case .messages: return "Messages"
         case .whatsapp: return "WhatsApp"
-        case .instagram: return "Instagram"
         case .snapchat: return "Snapchat"
         case .save: return "Save Image"
         }
@@ -46,7 +35,6 @@ enum ShiftShareTarget: String, CaseIterable, Identifiable {
     var brandAsset: String? {
         switch self {
         case .whatsapp: return "BrandWhatsApp"
-        case .instagram: return "BrandInstagram"
         case .snapchat: return "BrandSnapchat"
         case .messages, .save: return nil
         }
@@ -100,18 +88,6 @@ enum ShiftSharer {
                   controller.presentOpenInMenu(from: host.view.bounds, in: host.view, animated: true) else {
                 return presentShareSheet(image)
             }
-
-        case .instagram:
-            guard let appID = ShareConfig.metaAppID,
-                  let url = URL(string: "instagram-stories://share?source_application=\(appID)"),
-                  UIApplication.shared.canOpenURL(url) else {
-                return presentShareSheet(image)
-            }
-            UIPasteboard.general.setItems(
-                [["com.instagram.sharedSticker.backgroundImage": png]],
-                options: [.expirationDate: Date().addingTimeInterval(300)]
-            )
-            UIApplication.shared.open(url)
 
         case .snapchat:
             presentShareSheet(image)
