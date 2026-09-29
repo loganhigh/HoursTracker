@@ -9,7 +9,7 @@ import SwiftUI
 
 struct BadgeStats {
     let totalHours: Double
-    let totalDays: Int           // total shifts (entries.count)
+    let totalDays: Int           // total worked shifts
     let distinctDays: Int        // unique calendar days worked
     let saturdays: Int           // distinct Saturdays worked
     let sundays: Int             // distinct Sundays worked
@@ -33,7 +33,12 @@ struct BadgeStats {
     let firstEntryDate: Date?
 
     init(from store: HoursStore) {
-        let entries = store.entries
+        // Worked shifts only. store.entries also holds off-day entries —
+        // including the "Off" days AutoOffDayFiller writes for every
+        // unlogged day — and counting those as days worked turned months of
+        // app use into "100 Days Straight Worked" / perfect-month badges for
+        // people whose real best work streak was 16 days.
+        let entries = store.entries.filter { !$0.isOffDay && $0.paidHours > 0 }
         let cal = Calendar.current
         let breakdowns = entries.map { store.payBreakdown(for: $0) }
 
