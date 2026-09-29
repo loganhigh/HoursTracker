@@ -8,6 +8,7 @@
 // (src/stats/localCalendar.js) — never Date's local methods, which follow the
 // server's clock rather than the user's.
 const { makeCalendar, resolveUserTimeZone } = require("./localCalendar");
+const { sanitizeBadgeSummaries } = require("./badgeSanity");
 
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 
@@ -1158,9 +1159,25 @@ async function recomputeUserStats(db, uid, options = {}) {
 
   // The badge list is a client-owned input mirrored on users/{uid}; republish it
   // to the public doc (gated by shareBadges) so friends read ONE document.
-  const unlockedBadgeSummaries = privacy.shareBadges && Array.isArray(userData.unlockedBadgeSummaries)
-    ? userData.unlockedBadgeSummaries
-    : [];
+  // Filtered against the server's own worked days: builds before 3.2 counted
+  // auto-filled Off days as worked and publish badges nobody earned.
+  const badgeSanity = sanitizeBadgeSummaries(
+    privacy.shareBadges && Array.isArray(userData.unlockedBadgeSummaries)
+      ? userData.unlockedBadgeSummaries
+      : [],
+    {
+      workedDayStrings: workedStrings,
+      bestStreak: best,
+      workedShiftCount: entries.filter((e) => !e.isOffDay && entryDate(e)).length,
+    }
+  );
+  const unlockedBadgeSummaries = badgeSanity.badges;
+  if (badgeSanity.dropped.length > 0) {
+    console.log(
+      `badgeSanity uid=${uid} dropped ${badgeSanity.dropped.length} of ` +
+      `${badgeSanity.dropped.length + unlockedBadgeSummaries.length} (bestStreak=${best})`
+    );
+  }
 
   // publicProfiles/{uid} is the SINGLE SOURCE OF TRUTH friends listen to. It
   // carries every field the friends list + friend profile screen render, so a
