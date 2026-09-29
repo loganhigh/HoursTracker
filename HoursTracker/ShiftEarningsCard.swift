@@ -103,26 +103,45 @@ struct ShiftEarningsView: View {
     }
 
     var body: some View {
-        ZStack {
-            WrappedBackdrop()
-
-            VStack(spacing: AppSpacing.lg) {
-                Spacer(minLength: 0)
-                ShiftEarningsCard(earnings: earnings, weather: weather, showPay: !hidePay)
-                if !hidePay {
-                    Text(footnote)
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, AppSpacing.lg)
+        // The card area scrolls only when it's taller than the space left
+        // (smaller phones); the share row and Done stay pinned below it. A
+        // plain VStack that overflows gets centred, which pushed the top row
+        // up under the status bar and Done off the bottom.
+        VStack(spacing: 0) {
+            // GeometryReader here only gets the space above the pinned
+            // buttons, so the content's min height never runs under them.
+            GeometryReader { geo in
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: AppSpacing.lg) {
+                        // In the layout (not an overlay) so the card can never slide
+                        // up under it on shorter screens.
+                        HStack {
+                            Spacer()
+                            payToggle
+                        }
+                        Spacer(minLength: 0)
+                        ShiftEarningsCard(earnings: earnings, weather: weather, showPay: !hidePay)
+                        if !hidePay {
+                            Text(footnote)
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color.white.opacity(0.7))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, AppSpacing.lg)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, AppSpacing.lg)
+                    .padding(.bottom, AppSpacing.md)
+                    .frame(minHeight: geo.size.height)
                 }
-                Spacer(minLength: 0)
-                buttons
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .padding(.horizontal, AppSpacing.lg)
-            .padding(.bottom, AppSpacing.xl)
+            buttons
+                .padding(.horizontal, AppSpacing.lg)
+                .padding(.top, AppSpacing.sm)
+                .padding(.bottom, AppSpacing.md)
         }
-        .overlay(alignment: .topTrailing) { payToggle }
+        .background { WrappedBackdrop() }
         .task { renderShareImage() }
         .onChange(of: weather) { _, _ in renderShareImage() }
         .onChange(of: hidePay) { _, _ in renderShareImage() }
@@ -140,7 +159,6 @@ struct ShiftEarningsView: View {
                 .background(Circle().fill(Color.white.opacity(0.14)))
         }
         .buttonStyle(.plain)
-        .padding(.trailing, AppSpacing.lg)
         .padding(.top, AppSpacing.sm)
         .accessibilityLabel(hidePay ? "Show pay" : "Hide pay")
     }
