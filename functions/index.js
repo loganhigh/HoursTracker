@@ -2400,6 +2400,34 @@ exports.adminListVerifiedInbox = onCall(
 );
 
 /**
+ * Admin-only: newest ideas from the Home "What should we add next?" box.
+ * Clients can't read featureSuggestions (create-only rules), so the admin
+ * panel lists them through here.
+ */
+exports.adminListSuggestions = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE] },
+  async (request) => {
+    assertAdmin(request);
+    const snap = await db.collection("featureSuggestions")
+      .orderBy("createdAt", "desc")
+      .limit(300)
+      .get();
+    const items = snap.docs.map((doc) => {
+      const d = doc.data() || {};
+      return {
+        id: doc.id,
+        uid: d.uid || "",
+        username: d.username || "",
+        text: d.text || "",
+        appVersion: d.appVersion || "",
+        createdAt: d.createdAt?.toMillis?.() ?? null,
+      };
+    });
+    return { ok: true, items };
+  }
+);
+
+/**
  * Admin-only: approve or reject a verified-mark submission.
  *
  * Approval writes the flag to users/{uid} (so every future recompute keeps

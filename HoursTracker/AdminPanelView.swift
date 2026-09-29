@@ -217,6 +217,36 @@ struct AdminPanelView: View {
                         .listRowBackground(AppTheme.Colors.card)
 
                         NavigationLink {
+                            AdminSuggestionsView(passcode: passcode)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "lightbulb.fill")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(AppTheme.Colors.accent)
+                                Text("Feature ideas")
+                            }
+                        }
+                        .listRowBackground(AppTheme.Colors.card)
+
+                        NavigationLink {
+                            AdminVersionsView(users: users)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "iphone.gen3")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(AppTheme.Colors.accent)
+                                Text("App versions")
+                                Spacer()
+                                if let stat = latestVersionStat {
+                                    Text("\(stat.onLatest)/\(stat.total) on v\(stat.version)")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(AppTheme.Colors.subtext)
+                                }
+                            }
+                        }
+                        .listRowBackground(AppTheme.Colors.card)
+
+                        NavigationLink {
                             AdminAnnouncementView(passcode: passcode)
                         } label: {
                             HStack(spacing: 8) {
