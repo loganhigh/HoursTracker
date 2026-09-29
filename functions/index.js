@@ -609,6 +609,32 @@ exports.notifySenderOnShiftNudgeReaction = onDocumentUpdated(
  * Triggered when a user writes a friend request doc.
  * Sends a push notification to the recipient.
  */
+/**
+ * Push each "What should we add next?" suggestion from Home to the developer.
+ */
+exports.notifyAdminOnSuggestion = onDocumentCreated(
+  {
+    document: "featureSuggestions/{docId}",
+    region: "us-central1",
+  },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data || data.uid === ADMIN_UID) return;
+    const text = String(data.text || "").trim();
+    if (!text) return;
+    const who = data.username ? `@${data.username}` : "Someone";
+    const adminSnap = await db.collection("users").doc(ADMIN_UID).get();
+    await sendPushToUser(ADMIN_UID, adminSnap.data(), {
+      title: `💡 Idea from ${who}`,
+      body: text.length > 180 ? `${text.slice(0, 177)}…` : text,
+      dataPayload: {
+        type: "admin_feature_suggestion",
+        suggestionId: event.params.docId,
+      },
+    });
+  }
+);
+
 exports.notifyOnFriendRequest = onDocumentCreated(
   {
     document: "users/{targetUid}/friendRequests/{fromUid}",

@@ -120,6 +120,25 @@ service cloud.firestore {
       allow delete: if isFriendshipParticipant();
     }
 
+    // "What should we add next?" box on Home. Signed-in users may create
+    // their own suggestion (shape-checked); nobody can read, edit or delete
+    // them from a client — the developer reads them via the Admin SDK and
+    // gets a push for each (notifyAdminOnSuggestion).
+    match /featureSuggestions/{docId} {
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'username', 'text', 'appVersion', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() >= 3
+        && request.resource.data.text.size() <= 500
+        && request.resource.data.username is string
+        && request.resource.data.username.size() <= 40
+        && request.resource.data.appVersion is string
+        && request.resource.data.appVersion.size() <= 20
+        && request.resource.data.createdAt == request.time;
+      allow read, update, delete: if false;
+    }
+
     // App-wide announcement broadcast. Published only by the admin
     // callable (Admin SDK); clients read the single doc on app open.
     match /announcements/{docId} {
