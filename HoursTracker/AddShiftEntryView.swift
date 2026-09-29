@@ -22,10 +22,12 @@ struct AddShiftEntryView: View {
     var initialDate: Date? = nil
 
     var body: some View {
-        if liveShift.activeShift != nil {
-            LiveShiftTrackingView(store: store)
-        } else {
-            AddShiftWizardView(store: store, initialDate: initialDate)
+        Group {
+            if liveShift.activeShift != nil {
+                LiveShiftTrackingView(store: store)
+            } else {
+                AddShiftWizardView(store: store, initialDate: initialDate)
+            }
         }
     }
 }

@@ -2,10 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Used to show today's local weather on the Home screen.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -17,5 +13,17 @@
 			</array>
 		</dict>
 	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+		<string>instagram-stories</string>
+		<string>snapchat</string>
+	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Used to show today's local weather on the Home screen.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Saves your shift card to your photos.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 </dict>
 </plist>

@@ -9,6 +9,10 @@ struct SettingsView: View {
     var onClose: (() -> Void)? = nil
 
     @State private var showingDeleteConfirm = false
+    /// Raw text of the Hourly wage field. Parsed and saved when editing ends —
+    /// a currency-formatted field reformatted mid-typing and dropped cents.
+    @State private var wageText = ""
+    @FocusState private var wageFocused: Bool
     @State private var showingPaydayPicker = false
     @State private var showingCutoffPicker = false
     @State private var showingNotificationsSheet = false
@@ -62,6 +66,43 @@ struct SettingsView: View {
                 Form {
                 // MARK: - Payday
                 Section {
+                    // The wage drives every pay figure in the app. Blank until
+                    // the user enters it; the $35 placeholder rate behind it is
+                    // never presented as theirs.
+                    HStack(spacing: AppSpacing.sm) {
+                        SettingsRowLabel(icon: "dollarsign.circle.fill", title: "Hourly wage")
+                        Spacer(minLength: AppSpacing.xs)
+                        HStack(spacing: 2) {
+                            if !wageText.isEmpty || wageFocused {
+                                Text("$").foregroundStyle(AppColors.subtext)
+                            }
+                            TextField("Not set", text: $wageText)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .monospacedDigit()
+                                .foregroundStyle(AppColors.text)
+                                .focused($wageFocused)
+                                .fixedSize()
+                                // The decimal pad has no return key; without
+                                // this there's no obvious way to finish.
+                                .toolbar {
+                                    ToolbarItemGroup(placement: .keyboard) {
+                                        Spacer()
+                                        Button("Done") { wageFocused = false }
+                                            .fontWeight(.semibold)
+                                    }
+                                }
+                        }
+                        .frame(maxWidth: 140, alignment: .trailing)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { wageFocused = true }
+                    .onAppear { wageText = Self.wageText(for: settings) }
+                    .onChange(of: wageFocused) { _, focused in
+                        if !focused { commitWage() }
+                    }
+                    .onDisappear { commitWage() }
+
                     Picker("Pay period", selection: Binding(
                         get: { settings.payPeriodType },
                         set: { newType in
@@ -544,5 +585,36 @@ struct SettingsView: View {
         } catch {
             backupErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+}
+
+// MARK: - Hourly wage field
+
+extension SettingsView {
+    static func wageText(for settings: PaySettings) -> String {
+        guard settings.hourlyRateSet else { return "" }
+        return String(format: "%.2f", settings.hourlyRate)
+    }
+
+    /// Accepts "46.61", "46,61" or "$46.61"; blank or zero clears the wage.
+    func commitWage() {
+        let cleaned = wageText
+            .replacingOccurrences(of: "$", with: "")
+            .replacingOccurrences(of: ",", with: ".")
+            .trimmingCharacters(in: .whitespaces)
+        if let value = Double(cleaned), value > 0, value.isFinite, value < 10_000 {
+            let rounded = (value * 100).rounded() / 100
+            if !settings.hourlyRateSet || settings.hourlyRate != rounded {
+                settings.hourlyRate = rounded
+                settings.hourlyRateSet = true
+                store.persist()
+            }
+        } else if cleaned.isEmpty || Double(cleaned) == 0 {
+            if settings.hourlyRateSet {
+                settings.hourlyRateSet = false
+                store.persist()
+            }
+        }
+        wageText = Self.wageText(for: settings)
     }
 }

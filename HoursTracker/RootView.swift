@@ -332,14 +332,7 @@ struct HoursHomeView: View {
     @State private var logShiftBurst = 0
     @State private var offDayBurst = 0
     @State private var holidayBurst = 0
-    @StateObject private var badgeUnlockTracker = BadgeUnlockTracker()
-    @State private var badgeUnlockPresentation: BadgeUnlockPresentation?
     @State private var showingAdminPanel = false
-
-    private struct BadgeUnlockPresentation: Identifiable {
-        let id: String
-        let displayName: String
-    }
 
     private var todayEntry: WorkEntry? {
         let cal = Calendar.current
@@ -838,20 +831,6 @@ struct HoursHomeView: View {
             evaluateLevelUpCelebration(celebrate: false)
             lastKnownStreak = store.gamificationProfile.currentStreak
             checkPersonalBest()
-        }
-        .onChange(of: store.gamificationProfile.unlockedBadges) { old, new in
-            let oldSet = Set(old)
-            // Prestige badges are already celebrated by the full-screen
-            // prestige ritual — a second confetti sheet on top is noise.
-            guard let badge = new.first(where: { !oldSet.contains($0) && !badgeUnlockTracker.hasCelebrated($0) && !$0.hasPrefix("prestige_") }) else { return }
-            badgeUnlockTracker.markCelebrated(badge)
-            let label = badge.replacingOccurrences(of: "_", with: " ").capitalized
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                badgeUnlockPresentation = BadgeUnlockPresentation(id: badge, displayName: label)
-            }
-        }
-        .sheet(item: $badgeUnlockPresentation) { presentation in
-            BadgeUnlockCelebrationSheet(badgeName: presentation.displayName)
         }
     }
 
