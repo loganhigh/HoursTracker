@@ -127,12 +127,16 @@ struct ShiftEarningsView: View {
                                 .foregroundStyle(Color.white.opacity(0.7))
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, AppSpacing.lg)
+                                .transition(.payRedact)
                         }
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, AppSpacing.lg)
                     .padding(.bottom, AppSpacing.md)
                     .frame(minHeight: geo.size.height)
+                    // Implicit: an @AppStorage write doesn't carry the
+                    // withAnimation transaction, so the toggle alone jumped.
+                    .animation(.spring(response: 0.45, dampingFraction: 0.86), value: hidePay)
                 }
                 .scrollBounceBehavior(.basedOnSize)
             }
@@ -150,9 +154,10 @@ struct ShiftEarningsView: View {
     private var payToggle: some View {
         Button {
             Haptics.lightTap()
-            withAnimation(.easeInOut(duration: 0.2)) { hidePay.toggle() }
+            hidePay.toggle()
         } label: {
             Image(systemName: hidePay ? "eye.slash.fill" : "eye.fill")
+                .contentTransition(.symbolEffect(.replace))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.white)
                 .frame(width: 40, height: 40)
@@ -277,6 +282,7 @@ struct ShiftEarningsCard: View {
                         row(chequeLabel, money(earnings.chequeTakeHome))
                     }
                 }
+                .transition(.payRedact)
             }
         }
         .padding(.vertical, 28)
@@ -359,5 +365,26 @@ struct ShiftEarningsCard: View {
         f.maximumFractionDigits = 2
         f.minimumFractionDigits = 2
         return f.string(from: NSNumber(value: amount)) ?? String(format: "$%.2f", amount)
+    }
+}
+
+// MARK: - Hide-pay animation
+
+private struct PayRedactModifier: ViewModifier {
+    let hidden: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: hidden ? 14 : 0)
+            .opacity(hidden ? 0 : 1)
+            .scaleEffect(hidden ? 0.94 : 1, anchor: .top)
+    }
+}
+
+extension AnyTransition {
+    /// Pay figures blur out as if censored (and sharpen back in) while the
+    /// card resizes around them, rather than blinking away.
+    static var payRedact: AnyTransition {
+        .modifier(active: PayRedactModifier(hidden: true), identity: PayRedactModifier(hidden: false))
     }
 }
