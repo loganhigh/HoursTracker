@@ -8,6 +8,7 @@ struct EarningsGoalsCard: View {
     @ObservedObject private var goalStore = EarningsGoalStore.shared
 
     @State private var showingNewGoal = false
+    @State private var showingExpenses = false
     @State private var openGoal: OpenGoal?
 
     private struct OpenGoal: Identifiable { let id: UUID }
@@ -43,6 +44,7 @@ struct EarningsGoalsCard: View {
                         .buttonStyle(.plain)
                         .accessibilityHint("Add savings or edit goal")
                     }
+                    expensesRow
                     Button {
                         Haptics.lightTap()
                         showingNewGoal = true
@@ -58,9 +60,53 @@ struct EarningsGoalsCard: View {
         .sheet(item: $openGoal) { item in
             EarningsGoalDetailSheet(goalID: item.id, store: store)
         }
+        .sheet(isPresented: $showingExpenses) {
+            GoalExpensesSheet(currencyCode: store.paySettings.currencyCode)
+        }
         .sheet(isPresented: $showingNewGoal) {
             EarningsGoalEditorSheet(existing: nil, currencyCode: store.paySettings.currencyCode)
         }
+    }
+
+    /// Entry to the expenses list the shift estimate subtracts.
+    private var expensesRow: some View {
+        let monthly = goalStore.monthlyExpenses
+        return Button {
+            Haptics.lightTap()
+            showingExpenses = true
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "creditcard.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(AppColors.accent)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(AppColors.accent.opacity(0.15)))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Expenses")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppColors.text)
+                    Text(monthly > 0
+                         ? "\(EarningsGoalFormat.money(monthly, code: store.paySettings.currencyCode)) a month"
+                         : "Add rent, bills and other costs for a realistic estimate")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.faint)
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                    .fill(AppColors.card2)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Edit the expenses your shift estimate accounts for")
     }
 
     private var emptyState: some View {
@@ -174,11 +220,18 @@ private struct EarningsGoalRow: View {
         if row.isComplete {
             return "You did it. Goal fully saved."
         }
+        if row.expensesExceedPay {
+            return "Your expenses use up what your shifts earn right now, so this goal won't grow at this pace."
+        }
         guard let needed = row.shiftsNeeded, needed > 0 else {
             return "Log a paid shift and we'll estimate how many more it takes."
         }
         let unit = needed == 1 ? "shift" : "shifts"
-        return "At your current average earnings, you need approximately \(needed) more \(unit)."
+        guard row.monthlyExpenses > 0 else {
+            return "At your current average earnings, you need approximately \(needed) more \(unit)."
+        }
+        let expenses = EarningsGoalFormat.money(row.monthlyExpenses, code: currencyCode)
+        return "After your \(expenses)/month in expenses, you need approximately \(needed) more \(unit)."
     }
 }
 

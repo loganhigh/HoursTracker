@@ -258,7 +258,7 @@ struct EarningsGoalEditorSheet: View {
 
     /// Editable text for a stored amount ("2,400", "1,599.5"), in the same
     /// grouped form the field produces while typing.
-    private static func editableAmount(_ value: Double) -> String {
+    static func editableAmount(_ value: Double) -> String {
         let f = NumberFormatter()
         f.numberStyle = .decimal
         f.usesGroupingSeparator = false
