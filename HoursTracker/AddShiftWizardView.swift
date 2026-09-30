@@ -29,11 +29,9 @@ struct AddShiftWizardView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var store: HoursStore
     @EnvironmentObject private var liveShift: LiveShiftManager
-    @EnvironmentObject private var premium: PremiumManager
 
     @State private var step: Step = .when
     @State private var direction: Int = 1
-    @State private var showingClockInPaywall = false
 
     @State private var date: Date
     @State private var start: Date
@@ -163,9 +161,6 @@ struct AddShiftWizardView: View {
                 locationLabel: $locationLabel
             )
         }
-        .sheet(isPresented: $showingClockInPaywall) {
-            PremiumUpgradeView()
-        }
         .sheet(isPresented: $showWagePrompt, onDismiss: afterWagePrompt) {
             WagePromptSheet(store: store)
         }
@@ -239,6 +234,8 @@ struct AddShiftWizardView: View {
 
     @ViewBuilder
     private var whenStep: some View {
+        entryModeToggle
+
         if shiftKind == .work, !store.shiftTemplates.isEmpty {
             templateStrip
         }
@@ -332,6 +329,43 @@ struct AddShiftWizardView: View {
             .buttonStyle(PrimaryButtonStyle())
             .disabled(!canSave)
             .opacity(canSave ? 1 : 0.55)
+    }
+
+    /// "Manual" / "Clock In" pill — manual is always the selected state here
+    /// (this screen only exists for manual entry); tapping Clock In starts a
+    /// live shift, and the parent router swaps this sheet for
+    /// `LiveShiftTrackingView` once `LiveShiftManager.activeShift` is set.
+    private var entryModeToggle: some View {
+        HStack(spacing: 4) {
+            Text("Manual")
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+                .foregroundStyle(AppColors.textOnAccent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 9)
+                .background(Capsule().fill(AppColors.accentGradient))
+
+            Button {
+                Haptics.mediumTap()
+                liveShift.clockIn()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "record.circle")
+                        .font(.system(size: 12, weight: .bold))
+                    Text("Clock In")
+                }
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                .foregroundStyle(AppColors.subtext)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 9)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(4)
+        .background(
+            Capsule()
+                .fill(AppColors.card)
+                .overlay(Capsule().stroke(AppColors.stroke, lineWidth: 1))
+        )
     }
 
     /// Saved templates as one-tap chips. Applying one fills times, break, and

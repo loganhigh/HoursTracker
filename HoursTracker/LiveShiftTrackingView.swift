@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Live Shift Tracking (Hour Tracker Pro — clock in/out/break)
+// MARK: - Live Shift Tracking (clock in/out/break — free for everyone)
 //
 // Fills the Add Shift sheet (`AddShiftEntryView`) whenever a live shift is
 // already running — reached either because Add Shift was opened mid-shift,
@@ -26,6 +26,10 @@ struct LiveShiftTrackingView: View {
 
     @State private var showingDiscardConfirm = false
     @State private var clockOutMessage: String?
+    /// Set after clocking out; swaps this screen for the earnings card.
+    @State private var earnings: ShiftEarnings?
+    @State private var savedForPrompt: [WorkEntry] = []
+    @State private var showWagePrompt = false
 
     private static let startedTimeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -34,6 +38,15 @@ struct LiveShiftTrackingView: View {
     }()
 
     var body: some View {
+        if let earnings {
+            ShiftEarningsView(store: store, earnings: earnings) { dismiss() }
+                .transition(.opacity)
+        } else {
+            trackingBody
+        }
+    }
+
+    private var trackingBody: some View {
         VStack(spacing: 0) {
             header
                 .padding(.horizontal, AppSpacing.lg)
@@ -58,6 +71,9 @@ struct LiveShiftTrackingView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This clocked-in time won't be saved.")
+        }
+        .sheet(isPresented: $showWagePrompt, onDismiss: afterWagePrompt) {
+            WagePromptSheet(store: store)
         }
     }
 
@@ -204,10 +220,26 @@ struct LiveShiftTrackingView: View {
                 : "Shift too short to save yet — keep going, or discard it."
             return
         }
-        _ = entry
         Haptics.success()
         clockOutMessage = nil
-        dismiss()
+        // Same landing as a manual save: the earnings card, or the wage
+        // prompt first when no wage is set yet.
+        if let result = store.shiftEarnings(for: [entry]) {
+            withAnimation(.easeInOut(duration: 0.35)) { earnings = result }
+        } else if !store.paySettings.hourlyRateSet, WagePromptSheet.shouldOffer() {
+            savedForPrompt = [entry]
+            showWagePrompt = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func afterWagePrompt() {
+        if let result = store.shiftEarnings(for: savedForPrompt) {
+            withAnimation(.easeInOut(duration: 0.35)) { earnings = result }
+        } else {
+            dismiss()
+        }
     }
 
     // MARK: Formatting
