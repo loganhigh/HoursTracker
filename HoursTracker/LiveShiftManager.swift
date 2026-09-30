@@ -311,8 +311,10 @@ final class LiveShiftManager: ObservableObject {
             return
         }
         guard refreshTimer == nil else { return }
+        // Scheduled on the main run loop, so the closure already runs on
+        // the main thread — no Task hop (which trips Swift 6's capture rules).
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.syncActivity() }
+            self?.refreshActivity()
         }
     }
 
