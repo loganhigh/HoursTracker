@@ -65,7 +65,11 @@ final class HoursStore: ObservableObject {
             lifetimeWorkStatsCache = nil
         }
     }
-    @Published var paySettings: PaySettings = PaySettings()
+    @Published var paySettings: PaySettings = PaySettings() {
+        // The week buckets follow "Week starts on" and skip stat holidays,
+        // so a settings change must rebuild them.
+        didSet { weekEntriesCache = nil }
+    }
     @Published var payHistoryEntries: [PayHistoryEntry] = []
     @Published var certificateEntries: [CertificateEntry] = []
     @Published var awardEntries: [AwardEntry] = []
@@ -802,6 +806,7 @@ final class HoursStore: ObservableObject {
             entry.end.timeIntervalSince1970.description,
             String(entry.breakMinutes),
             entry.isOffDay ? "off:\(entry.offDayReason)" : "work",
+            entry.holidayPayRule?.rawValue ?? "",
             entry.locationName,
             entry.notes
         ].joined(separator: "|")
@@ -1546,7 +1551,7 @@ final class HoursStore: ObservableObject {
     // MARK: - Pay
 
     struct PayBreakdown {
-        enum DayType { case weekday, saturday, sunday }
+        enum DayType { case weekday, saturday, sunday, holiday }
         let dayType: DayType
         let rawHours: Double
         let regularHours: Double
@@ -1555,42 +1560,49 @@ final class HoursStore: ObservableObject {
         /// Sum of overtimeHoursAt1_5 + overtimeHoursAt2_0 (for backward compatibility).
         var overtimeHours: Double { overtimeHoursAt1_5 + overtimeHoursAt2_0 }
         let multiplierUsed: Double
+        /// Stat holiday pay hours at the regular rate, on top of hours worked.
+        var statPayHours: Double = 0
         let pay: Double
     }
 
-    /// Week = Monday–Sunday. Returns start-of-week (Monday 00:00) for the given date.
-    private func weekStart(for date: Date, calendar: Calendar) -> Date? {
-        var cal = calendar
-        cal.firstWeekday = 2 // Monday
-        return cal.dateInterval(of: .weekOfYear, for: date)?.start
+    /// The pay week follows the "Week starts on" setting (Monday when unset).
+    private var payWeekCalendar: Calendar {
+        var cal = Calendar.current
+        cal.firstWeekday = paySettings.weekStartWeekday ?? 2
+        return cal
     }
 
-    /// Returns all non-off-day entries in the same Mon–Sun week as `date`, sorted oldest-first.
-    /// Memoized week buckets (week-start → that week's non-off-day entries,
-    /// ascending). Invalidated whenever `entries` changes (see the didSet on
-    /// `entries`). Building this once per entries-generation turns the weekly
-    /// overtime pay path from O(n²) — `weekEntries(for:)` previously re-filtered
-    /// the entire entries array on every call, and it's called once per entry
-    /// from `payBreakdown`, itself called per entry on every render and every
-    /// add/update — into O(n).
+    /// Returns start-of-week for the given date, per `payWeekCalendar`.
+    private func weekStart(for date: Date, calendar: Calendar) -> Date? {
+        payWeekCalendar.dateInterval(of: .weekOfYear, for: date)?.start
+    }
+
+    /// Returns the week's worked entries (no off days, no stat holidays —
+    /// holiday hours are paid by their own rule and never eat the weekly
+    /// threshold), sorted oldest-first.
+    /// Memoized week buckets (week-start → that week's entries, ascending).
+    /// Invalidated whenever `entries` or `paySettings` change. Building this
+    /// once per generation turns the weekly overtime pay path from O(n²) —
+    /// `weekEntries(for:)` previously re-filtered the entire entries array on
+    /// every call, and it's called once per entry from `payBreakdown`, itself
+    /// called per entry on every render and every add/update — into O(n).
     private var weekEntriesCache: [Date: [WorkEntry]]?
 
     private func weekEntries(for date: Date) -> [WorkEntry] {
-        var cal = Calendar.current
-        cal.firstWeekday = 2
+        let cal = payWeekCalendar
         guard let ws = cal.dateInterval(of: .weekOfYear, for: date)?.start else { return [] }
         if let cache = weekEntriesCache {
             return cache[ws] ?? []
         }
         var buckets: [Date: [WorkEntry]] = [:]
-        var c = Calendar.current
-        c.firstWeekday = 2
-        for entry in entries where !entry.isOffDay {
-            guard let start = c.dateInterval(of: .weekOfYear, for: entry.date)?.start else { continue }
+        for entry in entries where !entry.isOffDay && entry.holidayPayRule == nil {
+            guard let start = cal.dateInterval(of: .weekOfYear, for: entry.date)?.start else { continue }
             buckets[start, default: []].append(entry)
         }
         for key in buckets.keys {
-            buckets[key]?.sort { $0.date < $1.date }
+            // Same-day entries fall in the order they were worked, so the
+            // weekly threshold is spent deterministically.
+            buckets[key]?.sort { $0.date == $1.date ? $0.start < $1.start : $0.date < $1.date }
         }
         weekEntriesCache = buckets
         return buckets[ws] ?? []
@@ -1607,6 +1619,28 @@ final class HoursStore: ObservableObject {
         let wdAfter = paySettings.weekdayOvertimeAfterHours
         let wdMult = paySettings.weekdayOvertimeMultiplier
         let weeklyThreshold = paySettings.weeklyOvertimeThreshold
+        let dtAfter = paySettings.doubleTimeAfterHours
+        let statPay = entry.statPay(wage: wage)
+
+        // Stat holiday: the rule on the entry replaces every other rate.
+        if let rule = entry.holidayPayRule {
+            let worked = rule.isWorked ? raw : 0
+            let mult = rule.workedMultiplier
+            var pay = worked * wage * mult + statPay
+            if paySettings.vacationPayEnabled {
+                pay += pay * (paySettings.vacationPayPercentage / 100.0)
+            }
+            return PayBreakdown(
+                dayType: .holiday,
+                rawHours: worked,
+                regularHours: mult == 1.0 ? worked : 0,
+                overtimeHoursAt1_5: mult == 1.5 ? worked : 0,
+                overtimeHoursAt2_0: mult == 2.0 ? worked : 0,
+                multiplierUsed: mult,
+                statPayHours: entry.statPayHours,
+                pay: pay
+            )
+        }
 
         let effectiveWage: Double = (paySettings.holidayPayEnabled && entry.isHoliday)
             ? wage * paySettings.holidayPayMultiplier
@@ -1616,8 +1650,9 @@ final class HoursStore: ObservableObject {
         let dayType: PayBreakdown.DayType
         let mult: Double
 
-        // Saturday and Sunday always use their own per-day rules regardless of overtimeType.
-        if weekday == 7 || weekday == 1 {
+        // With weekend premiums on, Saturday and Sunday use their own per-day
+        // rules regardless of overtimeType. Off, they're ordinary work days.
+        if paySettings.weekendPremiumsEnabled && (weekday == 7 || weekday == 1) {
             b = OvertimeRules.breakdown(
                 weekday: weekday,
                 rawHours: raw,
@@ -1636,34 +1671,35 @@ final class HoursStore: ObservableObject {
                 mult = sunMult
             }
         } else {
-            // Weekday: route through the appropriate OT type
+            dayType = .weekday
             switch paySettings.overtimeType {
 
             case .daily:
                 b = OvertimeRules.breakdown(
-                    weekday: weekday,
+                    weekday: 2, // weekday rules, whatever the day
                     rawHours: raw,
                     wage: effectiveWage,
                     saturdayThreshold: sat,
                     saturdayMultiplier: satMult,
                     sundayMultiplier: sunMult,
                     weekdayOTAfterHours: wdAfter,
-                    weekdayOTMultiplier: wdMult
+                    weekdayOTMultiplier: wdMult,
+                    weekdayDoubleTimeAfterHours: dtAfter
                 )
-                dayType = .weekday
-                mult = b.overtimeHoursAt1_5 > 0 ? wdMult : 1.0
+                mult = b.overtimeHoursAt2_0 > 0 ? 2.0 : (b.overtimeHoursAt1_5 > 0 ? wdMult : 1.0)
 
             case .weekly:
                 let we = weekEntries(for: entry.date)
-                let (reg, ot) = OvertimeRules.weeklyBreakdown(entry: entry, weekEntries: we, weeklyCap: weeklyThreshold)
+                let (reg, ot, dt) = OvertimeRules.weeklyBreakdown(
+                    entry: entry, weekEntries: we, weeklyCap: weeklyThreshold, doubleTimeCap: dtAfter
+                )
                 b = OvertimeRules.Breakout(
                     regularHours: reg,
                     overtimeHoursAt1_5: ot,
-                    overtimeHoursAt2_0: 0,
-                    pay: reg * effectiveWage + ot * effectiveWage * wdMult
+                    overtimeHoursAt2_0: dt,
+                    pay: reg * effectiveWage + ot * effectiveWage * wdMult + dt * effectiveWage * 2.0
                 )
-                dayType = .weekday
-                mult = ot > 0 ? wdMult : 1.0
+                mult = dt > 0 ? 2.0 : (ot > 0 ? wdMult : 1.0)
 
             case .dailyAndWeekly:
                 let we = weekEntries(for: entry.date)
@@ -1676,7 +1712,6 @@ final class HoursStore: ObservableObject {
                 let totalOT = dailyOT + weeklyOT
                 let pay = regH * effectiveWage + totalOT * effectiveWage * wdMult
                 b = OvertimeRules.Breakout(regularHours: regH, overtimeHoursAt1_5: totalOT, overtimeHoursAt2_0: 0, pay: pay)
-                dayType = .weekday
                 mult = totalOT > 0 ? wdMult : 1.0
             }
         }

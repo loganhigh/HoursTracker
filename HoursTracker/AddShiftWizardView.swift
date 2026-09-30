@@ -52,6 +52,11 @@ struct AddShiftWizardView: View {
 
     @State private var shiftKind: EntryEditorView.ShiftKind = .work
     @State private var offDayReason: String = EntryEditorView.offDayReasons[0]
+    /// Stat holiday pay on a "Work" day; nil = an ordinary shift.
+    @State private var holidayRule: HolidayPayRule? = nil
+    /// The days picked for the "Holiday" shift type — any number, past or
+    /// future. Each saves as its own holiday day.
+    @State private var holidayDays: Set<DateComponents> = []
 
     @State private var expandedField: ExpandableField?
 
@@ -65,6 +70,10 @@ struct AddShiftWizardView: View {
     @State private var showSaveSuccess = false
     /// Set after a work shift saves; swaps the wizard for the earnings card.
     @State private var earnings: ShiftEarnings?
+    /// The saved entries, held while the wage prompt is up so the earnings
+    /// card can be built once a wage comes in.
+    @State private var savedForPrompt: [WorkEntry] = []
+    @State private var showWagePrompt = false
 
     // MARK: - Init (defaults mirror EntryEditorView's add mode)
 
@@ -141,6 +150,12 @@ struct AddShiftWizardView: View {
             start = merge(day: newDate, with: start)
             end = merge(day: newDate, with: end)
         }
+        .onChange(of: shiftKind) { _, kind in
+            // Holiday starts from the day already chosen above.
+            if kind == .holiday, holidayDays.isEmpty {
+                holidayDays = [Calendar.current.dateComponents([.calendar, .era, .year, .month, .day], from: date)]
+            }
+        }
         .sheet(isPresented: $showLocationPicker) {
             AddShiftLocationPickerSheet(
                 store: store,
@@ -151,6 +166,15 @@ struct AddShiftWizardView: View {
         .sheet(isPresented: $showingClockInPaywall) {
             PremiumUpgradeView()
         }
+        .sheet(isPresented: $showWagePrompt, onDismiss: afterWagePrompt) {
+            WagePromptSheet(store: store)
+        }
+    }
+
+    /// Times, break and location are asked for on anything that was worked:
+    /// a shift, or a stat holiday paid for hours on the clock.
+    private var needsTimes: Bool {
+        shiftKind == .work && (holidayRule?.isWorked ?? true)
     }
 
     @ViewBuilder
@@ -219,25 +243,29 @@ struct AddShiftWizardView: View {
             templateStrip
         }
 
-        AddShiftPanel {
-            AddShiftFieldRow(
-                icon: "calendar",
-                label: "Date",
-                value: dateText,
-                isExpanded: expandedField == .date,
-                accessory: .disclosure
-            ) { toggleField(.date) }
-            if expandedField == .date {
-                EntryRowDivider()
-                DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
-                    .datePickerStyle(.graphical)
-                    .labelsHidden()
-                    .tint(AppColors.accent)
-                    .padding(.top, AppSpacing.xxs)
+        if shiftKind == .holiday {
+            holidayDaysPanel
+        } else {
+            AddShiftPanel {
+                AddShiftFieldRow(
+                    icon: "calendar",
+                    label: "Date",
+                    value: dateText,
+                    isExpanded: expandedField == .date,
+                    accessory: .disclosure
+                ) { toggleField(.date) }
+                if expandedField == .date {
+                    EntryRowDivider()
+                    DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
+                        .datePickerStyle(.graphical)
+                        .labelsHidden()
+                        .tint(AppColors.accent)
+                        .padding(.top, AppSpacing.xxs)
+                }
             }
         }
 
-        if shiftKind == .work {
+        if needsTimes {
             AddShiftPanel {
                 AddShiftFieldRow(
                     icon: "sunrise",
@@ -261,7 +289,7 @@ struct AddShiftWizardView: View {
 
         // A day you didn't work has no job site — asking for one on an off
         // day or holiday was just a question with no right answer.
-        if shiftKind == .work {
+        if needsTimes {
             AddShiftPanel {
                 AddShiftFieldRow(
                     icon: "mappin.and.ellipse",
@@ -281,11 +309,17 @@ struct AddShiftWizardView: View {
         EntryShiftTypeSection(
             kind: $shiftKind,
             offDayReason: $offDayReason,
-            reasons: EntryEditorView.offDayReasons
+            reasons: EntryEditorView.offDayReasons,
+            holidayRule: $holidayRule,
+            statHours: store.paySettings.statHolidayPaidHours,
+            showsStatHoliday: store.paySettings.statHolidayOptionsEnabled
         )
 
-        if shiftKind == .work {
+        if needsTimes {
             AddShiftTotalTimePanel(hours: paidHours, caption: totalCaption)
+        }
+        if let rule = holidayRule, shiftKind == .work {
+            holidayPayPanel(rule)
         }
 
         if shiftKind == .work && isOvernight {
@@ -390,13 +424,50 @@ struct AddShiftWizardView: View {
             .clipped()
     }
 
+    /// Holiday: tap every day you're away. Past or future — a holiday is
+    /// often booked ahead.
+    private var holidayDaysPanel: some View {
+        AddShiftPanel {
+            AddShiftFieldRow(icon: "calendar", label: "Days", value: holidayDaysText, accessory: .hidden)
+            EntryRowDivider()
+            MultiDatePicker("Holiday days", selection: $holidayDays)
+                .labelsHidden()
+                .tint(AppColors.accent)
+                .padding(.top, AppSpacing.xxs)
+            Text("Tap each day you're off. Days already logged are skipped.")
+                .appText(.caption)
+                .foregroundStyle(AppColors.faint)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// The picked holiday days as real dates, oldest first.
+    private var holidayDates: [Date] {
+        let cal = Calendar.current
+        return holidayDays.compactMap { cal.date(from: $0) }.map { cal.startOfDay(for: $0) }.sorted()
+    }
+
+    private var holidayDaysText: String {
+        let days = holidayDates
+        guard let first = days.first, let last = days.last else { return "Pick the days" }
+        let f = DateFormatter()
+        f.dateFormat = "EEE, MMM d"
+        if days.count == 1 { return f.string(from: first) }
+        return "\(days.count) days · \(f.string(from: first)) → \(f.string(from: last))"
+    }
+
     // MARK: - Screen 2 · Review
 
     @ViewBuilder
     private var reviewStep: some View {
         AddShiftPanel {
-            AddShiftFieldRow(icon: "calendar", label: "Date", value: dateText, accessory: .hidden)
-            if shiftKind == .work {
+            AddShiftFieldRow(icon: "calendar", label: shiftKind == .holiday ? "Days" : "Date",
+                             value: shiftKind == .holiday ? holidayDaysText : dateText, accessory: .hidden)
+            if let rule = holidayRule, shiftKind == .work {
+                EntryRowDivider()
+                AddShiftFieldRow(icon: "star.circle", label: "Stat holiday", value: rule.title, accessory: .hidden)
+            }
+            if needsTimes {
                 EntryRowDivider()
                 AddShiftFieldRow(
                     icon: "sunrise",
@@ -415,7 +486,7 @@ struct AddShiftWizardView: View {
                         accessory: .hidden
                     )
                 }
-            } else {
+            } else if shiftKind != .work {
                 EntryRowDivider()
                 AddShiftFieldRow(
                     icon: shiftKind == .holiday ? "airplane" : "moon.zzz",
@@ -424,7 +495,7 @@ struct AddShiftWizardView: View {
                     accessory: .hidden
                 )
             }
-            if shiftKind == .work {
+            if needsTimes {
                 EntryRowDivider()
                 AddShiftFieldRow(
                     icon: "mappin.and.ellipse",
@@ -436,8 +507,11 @@ struct AddShiftWizardView: View {
             }
         }
 
-        if shiftKind == .work {
+        if needsTimes {
             AddShiftTotalTimePanel(hours: paidHours, caption: totalCaption)
+        }
+        if let rule = holidayRule, shiftKind == .work {
+            holidayPayPanel(rule)
         }
 
         AddShiftConfirmationPanel(
@@ -456,6 +530,16 @@ struct AddShiftWizardView: View {
                     .tint(AppColors.accent)
             }
         }
+    }
+
+    private func holidayPayPanel(_ rule: HolidayPayRule) -> some View {
+        AddShiftHolidayPayPanel(
+            rule: rule,
+            workedHours: rule.isWorked ? paidHours : 0,
+            statHours: store.paySettings.statHolidayPaidHours,
+            wage: store.paySettings.hourlyRateSet ? store.paySettings.hourlyWage : nil,
+            currencyCode: store.paySettings.currencyCode
+        )
     }
 
     // MARK: - Derived text
@@ -552,14 +636,16 @@ struct AddShiftWizardView: View {
 
     // MARK: - Validation & save (identical semantics to EntryEditorView)
 
-    private var isOffKind: Bool { shiftKind != .work }
+    private var isOffKind: Bool { !needsTimes }
 
     private var canSave: Bool {
+        if shiftKind == .holiday { return !holidayDays.isEmpty }
         if isOffKind { return true }
         return isValid
     }
 
     private var isValid: Bool {
+        if shiftKind == .holiday { return !holidayDays.isEmpty }
         if isOffKind { return true }
         return paidHours > 0 && paidHours <= 48
     }
@@ -578,7 +664,10 @@ struct AddShiftWizardView: View {
         case .offDay:
             return "Off day — no hours logged"
         case .holiday:
-            return "Holiday — no hours logged"
+            let n = holidayDays.count
+            return n == 0 ? "Pick at least one day" : "\(n) holiday \(n == 1 ? "day" : "days") — no hours logged"
+        case .work where holidayRule == .statPayOnly:
+            return "Stat holiday — \(HolidayPayRule.hoursText(store.paySettings.statHolidayPaidHours)) stat pay, no hours worked"
         case .work:
             if paidHours > 48 { return "Shift too long (max 48 hours)" }
             if paidHours <= 0 {
@@ -614,13 +703,31 @@ struct AddShiftWizardView: View {
         }
 
         let cal = Calendar.current
+
+        // Holiday: one off day per picked day; days already logged are left alone.
+        if shiftKind == .holiday {
+            let sharedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            var saved: [WorkEntry] = []
+            for day in holidayDates {
+                if store.entries.contains(where: { cal.isDate($0.date, inSameDayAs: day) }) { continue }
+                let entry = WorkEntry(date: day, start: day, end: day, breakMinutes: 0, notes: sharedNotes,
+                                      isOffDay: true, offDayReason: EntryEditorView.holidayReason)
+                withAnimation(AppMotion.Spring.smooth) { store.add(entry) }
+                saved.append(entry)
+            }
+            finishSave(saved: saved)
+            return
+        }
+
         let (s, e, br) = isOffKind
             ? (cal.startOfDay(for: date), cal.startOfDay(for: date), 0)
             : (start, end, breakMinutes)
 
         let reason: String
         switch shiftKind {
-        case .work: reason = ""
+        // A stat holiday that wasn't worked is saved as a "Holiday" off day
+        // (with stat pay); a worked one is a work entry flagged isHoliday.
+        case .work: reason = holidayRule == .statPayOnly ? EntryEditorView.holidayReason : ""
         case .offDay: reason = offDayReason
         case .holiday: reason = EntryEditorView.holidayReason
         }
@@ -649,7 +756,12 @@ struct AddShiftWizardView: View {
 
         var entry = WorkEntry(date: date, start: s, end: e, breakMinutes: br,
                               notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
-                              isOffDay: isOffKind, offDayReason: reason, isHoliday: false)
+                              isOffDay: isOffKind, offDayReason: reason,
+                              isHoliday: shiftKind == .work && (holidayRule?.isWorked ?? false))
+        if shiftKind == .work, let rule = holidayRule {
+            entry.holidayPayRule = rule
+            entry.statPayHours = rule.includesStatPay ? store.paySettings.statHolidayPaidHours : 0
+        }
         entry.locationName = isOffKind ? "" : locationLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         entry.locationURL = ""
         entry.latitude = nil
@@ -680,19 +792,33 @@ struct AddShiftWizardView: View {
     }
 
     /// After the save tick, a work shift shows its earnings card in place of
-    /// the wizard; anything else (off day, no wage set) just closes.
+    /// the wizard. With no wage set it asks for one first (now and then, not
+    /// every shift); anything else (off day) just closes.
     private func finishSave(saved: [WorkEntry]) {
         Haptics.success()
         showSaveSuccess = true
         // Only entries the store actually accepted (it drops duplicates).
         let accepted = saved.compactMap { entry in store.entries.first { $0.id == entry.id } }
         let result = store.shiftEarnings(for: accepted)
+        let paid = accepted.contains { ($0.isOffDay ? $0.statPayHours : $0.paidHours) > 0 }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
             if let result {
                 withAnimation(.easeInOut(duration: 0.35)) { earnings = result }
+            } else if paid, !store.paySettings.hourlyRateSet, WagePromptSheet.shouldOffer() {
+                savedForPrompt = accepted
+                showWagePrompt = true
             } else {
                 dismiss()
             }
+        }
+    }
+
+    /// Wage entered → the earnings card for the shift just saved; skipped → close.
+    private func afterWagePrompt() {
+        if let result = store.shiftEarnings(for: savedForPrompt) {
+            withAnimation(.easeInOut(duration: 0.35)) { earnings = result }
+        } else {
+            dismiss()
         }
     }
 }

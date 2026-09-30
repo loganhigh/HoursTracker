@@ -24,10 +24,21 @@ struct ShiftEarnings: Equatable {
     var chequeGross: Double = 0
     /// Last day of work on that cheque, for the "through" label.
     var chequeCutoff: Date? = nil
+    /// Set when the day is a stat holiday, with the stat hours it carried.
+    var holidayRule: HolidayPayRule? = nil
+    var statPayHours: Double = 0
+
+    /// Hours the day was worth at the regular rate (worked × multiplier + stat).
+    var paidHourEquivalent: Double {
+        holidayRule?.paidHourEquivalent(workedHours: hours, statHours: statPayHours) ?? hours
+    }
 
     var chequeTakeHome: Double { gross > 0 ? chequeGross * (takeHome / gross) : 0 }
 
-    var netHourlyRate: Double { hours > 0 ? takeHome / hours : 0 }
+    var netHourlyRate: Double {
+        let h = holidayRule == .statPayOnly ? statPayHours : hours
+        return h > 0 ? takeHome / h : 0
+    }
 }
 
 extension HoursStore {
@@ -36,7 +47,8 @@ extension HoursStore {
     /// anyone who hasn't entered their own wage — the card states dollar
     /// figures as fact, and the $35 placeholder rate isn't theirs.
     func shiftEarnings(for shifts: [WorkEntry]) -> ShiftEarnings? {
-        let work = shifts.filter { !$0.isOffDay && $0.paidHours > 0 }
+        // A stat holiday that wasn't worked is an off day, but it's paid.
+        let work = shifts.filter { ($0.isOffDay ? $0.statPayHours : $0.paidHours) > 0 }
         guard !work.isEmpty, paySettings.hourlyRateSet, paySettings.hourlyWage > 0 else { return nil }
         let hours = work.reduce(0) { $0 + $1.paidHours }
         let gross = work.reduce(0) { $0 + payBreakdown(for: $1).pay }
@@ -44,7 +56,6 @@ extension HoursStore {
         let ratio = TakeHomeEstimator.ratio(learned: learnedTakeHomeRatio())
         let cycle = PayCycleEngine.cycle(containing: work.map(\.date).min() ?? Date(), settings: paySettings)
         let chequeGross = PayCycleEngine.entries(entries, in: cycle)
-            .filter { !$0.isOffDay }
             .reduce(0) { $0 + payBreakdown(for: $1).pay }
         return ShiftEarnings(
             date: work.map(\.date).min() ?? Date(),
@@ -59,7 +70,9 @@ extension HoursStore {
                 .first { !$0.isEmpty } ?? "",
             streak: gamificationProfile.currentStreak,
             chequeGross: max(chequeGross, gross),
-            chequeCutoff: cycle.cutoff
+            chequeCutoff: cycle.cutoff,
+            holidayRule: work.compactMap(\.holidayPayRule).first,
+            statPayHours: work.reduce(0) { $0 + $1.statPayHours }
         )
     }
 
@@ -74,7 +87,6 @@ extension HoursStore {
             cursor = PayCycleEngine.previousCycle(before: cursor, settings: paySettings)
             if let payout = actualPayout(for: cursor) {
                 let gross = PayCycleEngine.entries(entries, in: cursor)
-                    .filter { !$0.isOffDay }
                     .reduce(0) { $0 + payBreakdown(for: $1).pay }
                 samples.append(.init(gross: gross, payout: payout))
                 if samples.count >= TakeHomeEstimator.maxSamples { break }
@@ -225,11 +237,11 @@ struct ShiftEarningsCard: View {
     var body: some View {
         VStack(spacing: 22) {
             VStack(spacing: 6) {
-                Text("SHIFT COMPLETE · \(dateText)")
+                Text("\(earnings.holidayRule == nil ? "SHIFT COMPLETE" : "STAT HOLIDAY") · \(dateText)")
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .tracking(2)
                     .foregroundStyle(Color.white.opacity(0.7))
-                Text("You worked")
+                Text(earnings.holidayRule == .statPayOnly ? "You're paid for" : "You worked")
                     .font(.system(size: 18, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.85))
                 Text(hoursText)
@@ -272,6 +284,10 @@ struct ShiftEarningsCard: View {
 
             if showPay {
                 VStack(spacing: 0) {
+                    if let rule = earnings.holidayRule, rule.isWorked {
+                        row("Paid as", "\(HolidayPayRule.hoursText(earnings.paidHourEquivalent)) · \(rule.shortTitle)")
+                        divider
+                    }
                     row("Gross earned", money(earnings.gross))
                     divider
                     row("Estimated take-home", money(earnings.takeHome), emphasized: true)
@@ -314,6 +330,10 @@ struct ShiftEarningsCard: View {
         } else if !city.isEmpty {
             out.append(Stat(symbol: "mappin.circle.fill", value: city, label: "Location"))
         }
+        if let rule = earnings.holidayRule {
+            out.append(Stat(symbol: "star.circle.fill", value: rule.isWorked ? "\(HolidayPayRule.multText(rule.workedMultiplier))×" : "Paid",
+                            label: "Stat holiday"))
+        }
         if earnings.streak > 0 {
             out.append(Stat(symbol: "flame.fill", value: "\(earnings.streak)", label: "day streak"))
         }
@@ -343,7 +363,7 @@ struct ShiftEarningsCard: View {
     }
 
     private var hoursText: String {
-        let h = earnings.hours
+        let h = earnings.holidayRule == .statPayOnly ? earnings.statPayHours : earnings.hours
         let rounded = (h * 100).rounded() / 100
         let text = rounded == rounded.rounded()
             ? String(Int(rounded))

@@ -51,6 +51,18 @@ struct PaySettings: Codable, Equatable {
     var saturdayOvertimeAfterHours: Double = 4.0
     var saturdayMultiplier: Double = 1.5
     var sundayMultiplier: Double = 2.0
+    /// Saturday / Sunday premium rules (first 4h Saturday regular then 1.5×,
+    /// all of Sunday 2×). Off for agreements where the weekend is just part
+    /// of the work week and only the weekly threshold matters.
+    var weekendPremiumsEnabled: Bool = true
+    /// Hours after which overtime becomes double time. In daily mode it's
+    /// hours in one shift; in weekly mode it's hours in the week. nil = never.
+    var doubleTimeAfterHours: Double? = nil
+    /// Hours of stat pay a holiday is worth at the regular rate.
+    var statHolidayPaidHours: Double = 8.0
+    /// Off hides the stat holiday options in the shift editors for people
+    /// who only want to track hours.
+    var statHolidayOptionsEnabled: Bool = true
 
     // Bi-weekly alignment
     // 1=Sunday ... 7=Saturday
@@ -99,6 +111,7 @@ struct PaySettings: Codable, Equatable {
         case overtimeType, weekdayOvertimeAfterHours, weekdayOvertimeMultiplier
         case weeklyOvertimeThreshold, weeklyOvertimeAfterHours
         case saturdayOvertimeAfterHours, saturdayMultiplier, sundayMultiplier
+        case weekendPremiumsEnabled, doubleTimeAfterHours, statHolidayPaidHours, statHolidayOptionsEnabled
         case paydayWeekday, nextPayday
         case payPeriodUsesCutoff, nextCutoff, payCutoffWeekday, daysFromCutoffToPayday
         case weekStartWeekday
@@ -152,6 +165,10 @@ struct PaySettings: Codable, Equatable {
         saturdayOvertimeAfterHours = req(.saturdayOvertimeAfterHours, fallback.saturdayOvertimeAfterHours)
         saturdayMultiplier = req(.saturdayMultiplier, fallback.saturdayMultiplier)
         sundayMultiplier = req(.sundayMultiplier, fallback.sundayMultiplier)
+        weekendPremiumsEnabled = req(.weekendPremiumsEnabled, fallback.weekendPremiumsEnabled)
+        doubleTimeAfterHours = opt(.doubleTimeAfterHours)
+        statHolidayPaidHours = req(.statHolidayPaidHours, fallback.statHolidayPaidHours)
+        statHolidayOptionsEnabled = req(.statHolidayOptionsEnabled, fallback.statHolidayOptionsEnabled)
         paydayWeekday = req(.paydayWeekday, fallback.paydayWeekday)
         nextPayday = opt(.nextPayday)
         payPeriodUsesCutoff = req(.payPeriodUsesCutoff, fallback.payPeriodUsesCutoff)

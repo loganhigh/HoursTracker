@@ -22,6 +22,12 @@ struct WorkEntry: Identifiable, Codable, Equatable {
     
     /// True when this shift was worked on a statutory holiday (for holiday pay calculation).
     var isHoliday: Bool = false
+    /// How the stat holiday is paid (see `HolidayPayRule`). nil on ordinary
+    /// days and on holidays logged by builds that predate the field.
+    var holidayPayRule: HolidayPayRule? = nil
+    /// Hours of stat pay at the regular rate, on top of any hours worked.
+    /// Captured from the settings when the day is saved.
+    var statPayHours: Double = 0
 
     /// When the entry was logged (not worked). `date` is always start-of-day,
     /// so anything about *when the user logged* needs this. nil on entries
@@ -83,6 +89,7 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         case id, date, start, end, breakMinutes, notes
         case locationName, locationURL, latitude, longitude
         case isOffDay, offDayReason, isHoliday
+        case holidayPayRule, statPayHours
         case createdAt
         case modifiedAt
         case weather
@@ -124,6 +131,8 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         isOffDay = try c.decodeIfPresent(Bool.self, forKey: .isOffDay) ?? false
         offDayReason = try c.decodeIfPresent(String.self, forKey: .offDayReason) ?? ""
         isHoliday = try c.decodeIfPresent(Bool.self, forKey: .isHoliday) ?? false
+        holidayPayRule = try? c.decodeIfPresent(HolidayPayRule.self, forKey: .holidayPayRule)
+        statPayHours = max(0, (try? c.decodeIfPresent(Double.self, forKey: .statPayHours)) ?? 0)
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
         modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt)
         weather = try c.decodeIfPresent(WeatherSnapshot.self, forKey: .weather)
@@ -144,6 +153,8 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         try c.encode(isOffDay, forKey: .isOffDay)
         try c.encode(offDayReason, forKey: .offDayReason)
         try c.encode(isHoliday, forKey: .isHoliday)
+        try c.encodeIfPresent(holidayPayRule, forKey: .holidayPayRule)
+        if statPayHours > 0 { try c.encode(statPayHours, forKey: .statPayHours) }
         try c.encodeIfPresent(createdAt, forKey: .createdAt)
         try c.encodeIfPresent(modifiedAt, forKey: .modifiedAt)
         try c.encodeIfPresent(weather, forKey: .weather)

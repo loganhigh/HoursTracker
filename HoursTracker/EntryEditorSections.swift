@@ -244,6 +244,13 @@ struct EntryShiftTypeSection: View {
     @Binding var kind: EntryEditorView.ShiftKind
     @Binding var offDayReason: String
     let reasons: [String]
+    /// Stat holiday pay for a "Work" day; nil = an ordinary shift. The
+    /// options sit under Work behind a toggle, off by default.
+    @Binding var holidayRule: HolidayPayRule?
+    /// Stat pay hours from Settings, for the option copy.
+    var statHours: Double = 8
+    /// Settings → Stat Holidays switch; off hides the toggle entirely.
+    var showsStatHoliday: Bool = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let all: [(EntryEditorView.ShiftKind, String, String)] = [
@@ -277,11 +284,40 @@ struct EntryShiftTypeSection: View {
                     }
                 }
             } else if kind == .holiday {
-                Text("Logged as a single holiday day — no hours counted.")
+                Text("Holiday — no hours counted.")
                     .appText(.caption)
                     .foregroundStyle(AppColors.faint)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, AppSpacing.xxs)
+            } else if showsStatHoliday {
+                EntryEditorCard {
+                    Toggle(isOn: Binding(
+                        get: { holidayRule != nil },
+                        set: { on in
+                            Haptics.lightTap()
+                            withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
+                                holidayRule = on ? .statPayOnly : nil
+                            }
+                        }
+                    )) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "star.circle.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(AppColors.accent)
+                            Text("Stat holiday")
+                                .appText(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(AppColors.text)
+                        }
+                    }
+                    .tint(AppColors.accent)
+                }
+                if let rule = holidayRule {
+                    HolidayPayPicker(
+                        rule: Binding(get: { rule }, set: { holidayRule = $0 }),
+                        statHours: statHours
+                    )
+                }
             }
         }
     }

@@ -730,6 +730,10 @@ final class CloudSyncManager: ObservableObject {
         if settings.nextCutoff == nil {
             json["nextCutoff"] = NSNull()
         }
+        // Same for double time: switching it off must clear the cloud value.
+        if settings.doubleTimeAfterHours == nil {
+            json["doubleTimeAfterHours"] = NSNull()
+        }
         // Same watchdog as saveEntry: on devices where the direct SDK write
         // channel hangs, this setData never completes — the cloud paySettings
         // doc went stale for WEEKS, so the server computed the friend-facing

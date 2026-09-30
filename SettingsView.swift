@@ -185,75 +185,7 @@ struct SettingsView: View {
                 .listRowSeparatorTint(AppColors.stroke)
 
                 // MARK: - Overtime Rules
-                Section {
-                    // Type picker
-                    Picker("Overtime type", selection: Binding(
-                        get: { settings.overtimeType },
-                        set: { settings.overtimeType = $0; store.persist() }
-                    )) {
-                        ForEach(OvertimeType.settingsCases, id: \.self) { type in
-                            Text(type.displayName).tag(type)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.vertical, AppSpacing.xxs)
-
-                    // Daily threshold
-                    if settings.overtimeType == .daily {
-                        HStack(spacing: AppSpacing.sm) {
-                            SettingsRowLabel(icon: "sun.max.fill", title: "Daily OT after")
-                            Spacer(minLength: AppSpacing.xs)
-                            OTHoursStepper(
-                                value: Binding(
-                                    get: { settings.weekdayOvertimeAfterHours },
-                                    set: { settings.weekdayOvertimeAfterHours = $0; store.persist() }
-                                ),
-                                range: 1...24,
-                                step: 0.5
-                            )
-                        }
-                    }
-
-                    // Weekly threshold
-                    if settings.overtimeType == .weekly {
-                        HStack(spacing: AppSpacing.sm) {
-                            SettingsRowLabel(icon: "calendar.badge.clock", title: "Weekly OT after")
-                            Spacer(minLength: AppSpacing.xs)
-                            OTHoursStepper(
-                                value: Binding(
-                                    get: { settings.weeklyOvertimeThreshold },
-                                    set: { settings.weeklyOvertimeThreshold = $0; store.persist() }
-                                ),
-                                range: 1...168,
-                                step: 1
-                            )
-                        }
-                    }
-
-                    // OT pay multiplier
-                    HStack(spacing: AppSpacing.sm) {
-                        SettingsRowLabel(icon: "multiply.circle.fill", title: "OT rate")
-                        Spacer(minLength: AppSpacing.xs)
-                        OTHoursStepper(
-                            value: Binding(
-                                get: { settings.weekdayOvertimeMultiplier },
-                                set: { settings.weekdayOvertimeMultiplier = $0; store.persist() }
-                            ),
-                            range: 1.0...4.0,
-                            step: 0.25,
-                            format: "×%.2g"
-                        )
-                    }
-
-                } header: {
-                    SectionEyebrow("Overtime Rules")
-                } footer: {
-                    Text(settings.overtimeType.description)
-                        .appText(.caption)
-                        .foregroundStyle(AppColors.subtext)
-                }
-                .listRowBackground(AppColors.card.opacity(0.55))
-                .listRowSeparatorTint(AppColors.stroke)
+                OvertimeRulesSettingsSection(store: store, settings: $settings)
 
                 // MARK: - Friends
                 Section {

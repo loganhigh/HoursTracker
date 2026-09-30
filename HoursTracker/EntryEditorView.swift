@@ -41,6 +41,7 @@ struct EntryEditorView: View {
 
     @State private var shiftKind: ShiftKind
     @State private var offDayReason: String
+    @State private var holidayRule: HolidayPayRule?
 
     @State private var selectedPreset: EditorPreset = .custom
     @State private var expandedField: ExpandableField?
@@ -102,6 +103,7 @@ struct EntryEditorView: View {
             _notes = State(initialValue: "")
             _shiftKind = State(initialValue: .work)
             _offDayReason = State(initialValue: Self.offDayReasons[0])
+            _holidayRule = State(initialValue: nil)
             _showCustomBreak = State(initialValue: false)
 
             yesterdayPreset = EntryShiftPreset.yesterday(in: store.entries, calendar: cal)
@@ -116,11 +118,14 @@ struct EntryEditorView: View {
             _locationLabel = State(initialValue: entry.locationName)
             _notes = State(initialValue: entry.notes)
 
-            if entry.isOffDay {
+            // A stat holiday (paid, worked or not) edits as a Work day with
+            // the stat toggle on; a plain "Holiday" off day stays Holiday.
+            if entry.isOffDay && entry.holidayPayRule == nil {
                 _shiftKind = State(initialValue: entry.offDayReason == Self.holidayReason ? .holiday : .offDay)
             } else {
                 _shiftKind = State(initialValue: .work)
             }
+            _holidayRule = State(initialValue: entry.holidayPayRule)
             // Keep the stored reason ("Off", or anything from an older build) so
             // saving an untouched off day cannot rewrite what it is.
             let keepsReason = entry.isOffDay
@@ -155,17 +160,29 @@ struct EntryEditorView: View {
                     VStack(spacing: AppSpacing.md) {
                         if !isEditing { presetsRow }
                         dateCard
-                        if shiftKind == .work {
+                        if needsTimes {
                             timesCard
                             EntryBreakSection(breakMinutes: $breakMinutes, showCustom: $showCustomBreak)
                         }
                         EntryShiftTypeSection(kind: $shiftKind, offDayReason: $offDayReason,
-                                              reasons: Self.reasonOptions(including: offDayReason))
-                        if shiftKind == .work { summarySection }
+                                              reasons: Self.reasonOptions(including: offDayReason),
+                                              holidayRule: $holidayRule,
+                                              statHours: store.paySettings.statHolidayPaidHours,
+                                              showsStatHoliday: store.paySettings.statHolidayOptionsEnabled)
+                        if needsTimes { summarySection }
+                        if let rule = holidayRule, shiftKind == .work {
+                            AddShiftHolidayPayPanel(
+                                rule: rule,
+                                workedHours: rule.isWorked ? paidHours : 0,
+                                statHours: store.paySettings.statHolidayPaidHours,
+                                wage: store.paySettings.hourlyRateSet ? store.paySettings.hourlyWage : nil,
+                                currencyCode: store.paySettings.currencyCode
+                            )
+                        }
                         EntryDetailsSection(
                             locationLabel: $locationLabel,
                             notes: $notes,
-                            showsLocation: shiftKind == .work
+                            showsLocation: needsTimes
                         )
                         if isEditing {
                             EntryDeleteRow { showDeleteConfirm = true }
@@ -389,13 +406,20 @@ struct EntryEditorView: View {
         entry.end = end
         entry.breakMinutes = breakMinutes
         entry.isOffDay = false
-        entry.isHoliday = false
+        entry.isHoliday = shiftKind == .work && holidayRule != nil
+        entry.holidayPayRule = shiftKind == .work ? holidayRule : nil
+        entry.statPayHours = 0
         return entry
+    }
+
+    /// Times are asked for on a shift, unless it's a stat holiday not worked.
+    private var needsTimes: Bool {
+        shiftKind == .work && (holidayRule?.isWorked ?? true)
     }
 
     // MARK: - Validation & save (unchanged semantics)
 
-    private var isOffKind: Bool { shiftKind != .work }
+    private var isOffKind: Bool { !needsTimes }
 
     private var canSave: Bool {
         if isOffKind { return true }
@@ -422,6 +446,8 @@ struct EntryEditorView: View {
             return "Off day — no hours logged"
         case .holiday:
             return "Holiday — no hours logged"
+        case .work where holidayRule == .statPayOnly:
+            return "Stat holiday — paid, no hours worked"
         case .work:
             if paidHours > 48 { return "Shift too long (max 48 hours)" }
             if paidHours <= 0 {
@@ -459,12 +485,16 @@ struct EntryEditorView: View {
             ? (cal.startOfDay(for: date), cal.startOfDay(for: date), 0)
             : (start, end, breakMinutes)
 
+        let rule: HolidayPayRule? = shiftKind == .work ? holidayRule : nil
         let reason: String
         switch shiftKind {
-        case .work: reason = ""
+        // A stat holiday not worked is saved as a "Holiday" off day with stat pay.
+        case .work: reason = rule == .statPayOnly ? Self.holidayReason : ""
         case .offDay: reason = offDayReason
         case .holiday: reason = Self.holidayReason
         }
+        let isHolidayWorked = rule?.isWorked ?? false
+        let statHours = (rule?.includesStatPay ?? false) ? store.paySettings.statHolidayPaidHours : 0
 
         let trimmedLabel = locationLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -472,7 +502,9 @@ struct EntryEditorView: View {
         switch mode {
         case .add:
             var entry = WorkEntry(date: date, start: s, end: e, breakMinutes: br, notes: trimmedNotes,
-                                  isOffDay: isOffKind, offDayReason: reason, isHoliday: false)
+                                  isOffDay: isOffKind, offDayReason: reason, isHoliday: isHolidayWorked)
+            entry.holidayPayRule = rule
+            entry.statPayHours = statHours
             entry.locationName = trimmedLabel
             entry.locationURL = ""
             entry.latitude = nil
@@ -491,7 +523,10 @@ struct EntryEditorView: View {
             updated.longitude = nil
             updated.isOffDay = isOffKind
             updated.offDayReason = reason
-            updated.isHoliday = false
+            updated.isHoliday = isHolidayWorked
+            updated.holidayPayRule = rule
+            // Keep the stat hours the day was saved with unless the rule changed.
+            updated.statPayHours = (rule == old.holidayPayRule && old.statPayHours > 0) ? old.statPayHours : statHours
             withAnimation(AppMotion.Spring.smooth) { store.update(updated) }
         }
         Haptics.success()

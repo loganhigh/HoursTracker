@@ -58,6 +58,11 @@ struct PayCycleDetailView: View {
         workEntries.reduce(0) { $0 + store.payBreakdown(for: $1).overtimeHours }
     }
 
+    /// Stat pay hours on holidays this cheque (paid at the regular rate).
+    private var aggregatedStatPay: Double {
+        cycleEntries.reduce(0) { $0 + $1.statPayHours }
+    }
+
     private var cycleDayProgress: (elapsed: Int, total: Int, fraction: Double) {
         let cal = Calendar.current
         let total = max(1, selectedCycle.spanDays)
@@ -438,6 +443,9 @@ struct PayCycleDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 breakdownRow(title: "Regular hours", value: AppTheme.Format.hours(aggregatedRegular, suffix: ""))
                 breakdownRow(title: "Overtime hours", value: AppTheme.Format.hours(aggregatedOT, suffix: ""))
+                if aggregatedStatPay > 0 {
+                    breakdownRow(title: "Stat holiday pay", value: AppTheme.Format.hours(aggregatedStatPay, suffix: ""))
+                }
                 breakdownRow(title: "Off days", value: "\(offDayCount)", valueColor: offDayCount > 0 ? AppTheme.Colors.danger : AppTheme.Colors.text)
                 if store.paySettings.showPayCalculations {
                     breakdownRow(title: "Estimated pay", value: formattedCurrency(periodPay))

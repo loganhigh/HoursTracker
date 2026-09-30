@@ -29,7 +29,8 @@ struct EntryRowView: View {
                     }
                 }
 
-                if !entry.isOffDay {
+                // Off days have nothing to say; a stat-paid holiday shows its pay.
+                if !entry.isOffDay || entry.statPayHours > 0 {
                     Text(timeRangeText)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(AppTheme.Colors.subtext)
@@ -47,9 +48,9 @@ struct EntryRowView: View {
                             .foregroundStyle(AppTheme.Colors.accent)
                     }
 
-                    Text(entry.isOffDay ? "Off" : AppTheme.Format.hours(entry.paidHours))
+                    Text(statusLabel)
                         .font(AppDesignSystem.Typography.heroNumerals(size: showPay ? 15 : 17, weight: .bold))
-                        .foregroundStyle(entry.isOffDay ? AppTheme.Colors.danger : (showPay ? AppTheme.Colors.subtext : AppTheme.Colors.text))
+                        .foregroundStyle(statusColor)
 
                     ForEach(periodDayMarkers, id: \.self) { marker in
                         Text(marker)
@@ -100,8 +101,28 @@ struct EntryRowView: View {
         return 0
     }
 
+    /// A holiday reads "Holiday" in green (it's a day you're meant to be
+    /// off, not a missed one); any other off day stays a red "Off".
+    private var isHoliday: Bool {
+        entry.isOffDay && entry.offDayReason == EntryEditorView.holidayReason
+    }
+
+    private var statusLabel: String {
+        if isHoliday { return "Holiday" }
+        return entry.isOffDay ? "Off" : AppTheme.Format.hours(entry.paidHours)
+    }
+
+    private var statusColor: Color {
+        if isHoliday { return AppTheme.Colors.success }
+        if entry.isOffDay { return AppTheme.Colors.danger }
+        return showPay ? AppTheme.Colors.subtext : AppTheme.Colors.text
+    }
+
     // MARK: - Time range extraction (tries common property names)
     private var timeRangeText: String {
+        if isHoliday {
+            return entry.statPayHours > 0 ? "Holiday · \(HolidayPayRule.hoursText(entry.statPayHours)) stat pay" : "Holiday"
+        }
         if entry.isOffDay {
             let reason = entry.offDayReason.isEmpty ? "Off" : entry.offDayReason
             return "Off – \(reason)"

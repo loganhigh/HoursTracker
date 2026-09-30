@@ -56,7 +56,9 @@ struct OvertimeRules {
         saturdayMultiplier: Double,
         sundayMultiplier: Double,
         weekdayOTAfterHours: Double,
-        weekdayOTMultiplier: Double
+        weekdayOTMultiplier: Double,
+        weekdayDoubleTimeAfterHours: Double? = nil,
+        doubleTimeMultiplier: Double = 2.0
     ) -> Breakout {
         let r = max(0, rawHours)
         let reg: Double
@@ -72,10 +74,11 @@ struct OvertimeRules {
             reg = 0
             ot15 = 0
             ot20 = r
-        default: // Weekday
+        default: // Weekday: regular → overtime → double time
             reg = min(r, weekdayOTAfterHours)
-            ot15 = max(0, r - weekdayOTAfterHours)
-            ot20 = 0
+            let dtAfter = max(weekdayOTAfterHours, weekdayDoubleTimeAfterHours ?? .infinity)
+            ot20 = max(0, r - dtAfter)
+            ot15 = max(0, r - reg - ot20)
         }
 
         let pay: Double
@@ -84,7 +87,7 @@ struct OvertimeRules {
         } else if weekday == 1 {
             pay = ot20 * wage * sundayMultiplier
         } else {
-            pay = (reg * wage) + (ot15 * wage * weekdayOTMultiplier)
+            pay = (reg * wage) + (ot15 * wage * weekdayOTMultiplier) + (ot20 * wage * doubleTimeMultiplier)
         }
 
         return Breakout(regularHours: reg, overtimeHoursAt1_5: ot15, overtimeHoursAt2_0: ot20, pay: pay)
@@ -99,15 +102,32 @@ struct OvertimeRules {
         weekEntries: [WorkEntry],
         weeklyCap: Double
     ) -> (regular: Double, overtime: Double) {
-        var remaining = weeklyCap
-        var result: (Double, Double) = (0, 0)
+        let b = weeklyBreakdown(entry: entry, weekEntries: weekEntries, weeklyCap: weeklyCap, doubleTimeCap: nil)
+        return (b.regular, b.overtime)
+    }
+
+    /// Weekly mode with an optional double-time threshold: the week's hours
+    /// are spent oldest-first — regular up to `weeklyCap`, overtime up to
+    /// `doubleTimeCap`, double time beyond it. So on a 44-hour week with
+    /// double time after 52, Monday–Friday's 40h and Saturday's first 4h
+    /// are regular, the next 8h are overtime, and anything after is 2×.
+    static func weeklyBreakdown(
+        entry: WorkEntry,
+        weekEntries: [WorkEntry],
+        weeklyCap: Double,
+        doubleTimeCap: Double?
+    ) -> (regular: Double, overtime: Double, doubleTime: Double) {
+        let otCap = max(weeklyCap, doubleTimeCap ?? .infinity)
+        var spent: Double = 0
+        var result: (Double, Double, Double) = (0, 0, 0)
         for e in weekEntries {
-            let h = e.paidHours
-            let reg = min(h, max(0, remaining))
-            let ot = h - reg
-            remaining -= reg
+            let h = max(0, e.paidHours)
+            let reg = max(0, min(h, weeklyCap - spent))
+            let ot = max(0, min(h - reg, otCap - spent - reg))
+            let dt = max(0, h - reg - ot)
+            spent += h
             if e.id == entry.id {
-                result = (reg, ot)
+                result = (reg, ot, dt)
             }
         }
         return result

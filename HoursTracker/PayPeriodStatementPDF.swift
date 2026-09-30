@@ -16,6 +16,9 @@ struct PayPeriodStatement {
         let isOffDay: Bool
         let offDayReason: String
         let isHoliday: Bool
+        /// Stat holiday rule and its stat-pay hours, when the day is one.
+        let holidayRule: HolidayPayRule?
+        let statPayHours: Double
         let notes: String
     }
 
@@ -36,7 +39,10 @@ struct PayPeriodStatement {
     var totalHours: Double { workRows.reduce(0) { $0 + $1.totalHours } }
     var regularHours: Double { workRows.reduce(0) { $0 + $1.regularHours } }
     var overtimeHours: Double { workRows.reduce(0) { $0 + $1.overtimeHours } }
-    var grossPay: Double { workRows.reduce(0) { $0 + $1.pay } }
+    /// Stat pay hours across the period (paid at the regular rate, not worked).
+    var statPayHours: Double { rows.reduce(0) { $0 + $1.statPayHours } }
+    /// Includes stat pay on holidays that weren't worked.
+    var grossPay: Double { rows.reduce(0) { $0 + $1.pay } }
     var daysWorked: Int { Set(workRows.map { Calendar.current.startOfDay(for: $0.date) }).count }
 
     @MainActor
@@ -53,6 +59,7 @@ struct PayPeriodStatement {
                     totalHours: entry.paidHours, pay: b.pay,
                     isOffDay: entry.isOffDay, offDayReason: entry.offDayReason,
                     isHoliday: entry.isHoliday,
+                    holidayRule: entry.holidayPayRule, statPayHours: b.statPayHours,
                     notes: entry.notes.trimmingCharacters(in: .whitespacesAndNewlines)
                 )
             }
@@ -266,6 +273,7 @@ private struct PayPeriodStatementRenderer {
             ("Overtime", hours(statement.overtimeHours)),
             ("Days worked", "\(statement.daysWorked)"),
         ]
+        if statement.statPayHours > 0 { tiles.append(("Stat pay", hours(statement.statPayHours))) }
         if statement.showPay { tiles.append(("Gross pay", currency(statement.grossPay))) }
         let gap: CGFloat = 8
         let tileWidth = (contentWidth - gap * CGFloat(tiles.count - 1)) / CGFloat(tiles.count)
@@ -308,13 +316,22 @@ private struct PayPeriodStatementRenderer {
         if index % 2 == 1 { fill(CGRect(x: margin, y: y, width: contentWidth, height: h), zebra) }
         let font = UIFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular)
         var dateText = Self.rowDate.string(from: row.date)
-        if row.isHoliday { dateText += " · Holiday" }
+        if let rule = row.holidayRule { dateText += " · \(rule.shortTitle)" }
+        else if row.isHoliday { dateText += " · Holiday" }
 
         var x = margin
         let cols = columns
         drawCell(dateText, x: x, width: cols[0].width, rowY: y, rowHeight: rowHeight, alignRight: false, font: .systemFont(ofSize: 9, weight: .medium), color: ink)
         x += cols[0].width
-        if row.isOffDay {
+        if row.isOffDay && row.statPayHours > 0 {
+            // Stat holiday not worked: paid hours at the regular rate.
+            let payWidth = statement.showPay ? cols.last!.width : 0
+            drawCell("Stat holiday · \(hours(row.statPayHours)) stat pay", x: x, width: contentWidth - cols[0].width - payWidth, rowY: y, rowHeight: rowHeight,
+                     alignRight: false, font: .italicSystemFont(ofSize: 9), color: muted)
+            if statement.showPay {
+                drawCell(currency(row.pay), x: margin + contentWidth - payWidth, width: payWidth, rowY: y, rowHeight: rowHeight, alignRight: true, font: font, color: ink)
+            }
+        } else if row.isOffDay {
             let reason = row.offDayReason.trimmingCharacters(in: .whitespacesAndNewlines)
             drawCell(reason.isEmpty ? "Day off" : "Day off · \(reason)", x: x, width: contentWidth - cols[0].width, rowY: y, rowHeight: rowHeight,
                      alignRight: false, font: .italicSystemFont(ofSize: 9), color: muted)
