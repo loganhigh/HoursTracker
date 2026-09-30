@@ -1,7 +1,7 @@
 import ActivityKit
 import Foundation
 
-/// Live Activity state for an in-progress clocked-in shift (Hour Tracker Pro).
+/// Live Activity state for an in-progress clocked-in shift.
 ///
 /// Duplicated field-for-field in
 /// `HoursTrackerWidget/LiveShiftActivityAttributes.swift` — the widget
@@ -23,5 +23,12 @@ struct LiveShiftActivityAttributes: ActivityAttributes {
         var isOnBreak: Bool
         /// Start of the in-progress break, when `isOnBreak` is true.
         var breakStartDate: Date?
+        /// Pay so far, from the app's own pay rules (overtime included), as
+        /// of `updatedAt`. nil when no wage is set — the card shows no money.
+        var earned: Double?
+        /// The rate the next hour earns at ("$69.00/hr" during overtime).
+        var currentRate: Double?
+        var currencyCode: String
+        var updatedAt: Date
     }
 }

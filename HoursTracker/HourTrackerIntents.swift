@@ -162,5 +162,38 @@ struct HourTrackerShortcuts: AppShortcutsProvider {
             shortTitle: "Hours This Week",
             systemImageName: "chart.bar.fill"
         )
+        AppShortcut(
+            intent: ClockInIntent(),
+            phrases: [
+                "Clock in to \(.applicationName)",
+                "Clock in with \(.applicationName)",
+                "Start my shift in \(.applicationName)",
+                "I'm at work in \(.applicationName)",
+                "Just got to work in \(.applicationName)"
+            ],
+            shortTitle: "Clock In",
+            systemImageName: "record.circle"
+        )
+        AppShortcut(
+            intent: ClockOutIntent(),
+            phrases: [
+                "Clock out of \(.applicationName)",
+                "Clock out with \(.applicationName)",
+                "Just finished work in \(.applicationName)",
+                "I'm done work in \(.applicationName)",
+                "End my shift in \(.applicationName)"
+            ],
+            shortTitle: "Clock Out",
+            systemImageName: "stop.circle.fill"
+        )
+        AppShortcut(
+            intent: ShiftStatusIntent(),
+            phrases: [
+                "Am I clocked in to \(.applicationName)",
+                "How long have I been working in \(.applicationName)"
+            ],
+            shortTitle: "Shift Status",
+            systemImageName: "clock.fill"
+        )
     }
 }

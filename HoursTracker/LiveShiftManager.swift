@@ -229,6 +229,13 @@ final class LiveShiftManager: ObservableObject {
 
     // MARK: - Live Activity (Dynamic Island / Lock Screen)
 
+    /// Re-publishes the activity with the current earnings. Cheap no-op
+    /// when nothing is clocked in.
+    func refreshActivity() {
+        guard activeShift != nil else { return }
+        syncActivity()
+    }
+
     /// Starts, updates, or ends this shift's Live Activity to match
     /// `activeShift`. Best-effort: Live Activities can be disabled in
     /// system Settings, and a live shift never depends on the Activity
@@ -238,17 +245,23 @@ final class LiveShiftManager: ObservableObject {
             endActivity()
             return
         }
+        let now = Date()
         let completedBreakSeconds = shift.breaks
             .compactMap { brk -> Int? in
                 guard let end = brk.end else { return nil }
                 return Int(max(0, end.timeIntervalSince(brk.start)))
             }
             .reduce(0, +)
+        let money = earningsSoFar(shift, at: now)
         let state = LiveShiftActivityAttributes.ContentState(
             startDate: shift.startDate,
             completedBreakSeconds: completedBreakSeconds,
             isOnBreak: shift.isOnBreak,
-            breakStartDate: shift.isOnBreak ? shift.breaks.last?.start : nil
+            breakStartDate: shift.isOnBreak ? shift.breaks.last?.start : nil,
+            earned: money?.earned,
+            currentRate: money?.rate,
+            currencyCode: HoursStore.current?.paySettings.currencyCode ?? "CAD",
+            updatedAt: now
         )
         let content = ActivityContent(state: state, staleDate: nil)
 
@@ -256,11 +269,56 @@ final class LiveShiftManager: ObservableObject {
             Task { await activity.update(content) }
         } else {
             guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
-            _ = try? Activity.request(attributes: LiveShiftActivityAttributes(), content: content)
+            do {
+                _ = try Activity.request(attributes: LiveShiftActivityAttributes(), content: content)
+            } catch {
+                #if DEBUG
+                print("LiveShift: Activity.request failed: \(error)")
+                #endif
+            }
+        }
+        scheduleRefresh()
+    }
+
+    /// Pay so far and the rate the shift is earning at right now, from the
+    /// app's own pay rules (overtime and weekend premiums included). nil
+    /// until the user has set a wage — the placeholder rate isn't theirs.
+    private func earningsSoFar(_ shift: LiveShift, at now: Date) -> (earned: Double, rate: Double)? {
+        guard let store = HoursStore.current,
+              store.paySettings.hourlyRateSet, store.paySettings.hourlyWage > 0 else { return nil }
+        let cal = Calendar.current
+        let draft = WorkEntry(
+            date: cal.startOfDay(for: shift.startDate),
+            start: shift.startDate,
+            end: now,
+            breakMinutes: shift.totalBreakMinutes(at: now),
+            notes: ""
+        )
+        let breakdown = store.payBreakdown(for: draft)
+        let earned = draft.paidHours > 0 ? breakdown.pay : 0
+        return (earned, store.paySettings.hourlyWage * breakdown.multiplierUsed)
+    }
+
+    /// The money figure can't tick on its own (only timers do), so while the
+    /// app is running the activity is refreshed once a minute. In the
+    /// background it holds the last figure until the app next runs.
+    private var refreshTimer: Timer?
+
+    private func scheduleRefresh() {
+        guard activeShift != nil else {
+            refreshTimer?.invalidate()
+            refreshTimer = nil
+            return
+        }
+        guard refreshTimer == nil else { return }
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.syncActivity() }
         }
     }
 
     private func endActivity() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
         for activity in Activity<LiveShiftActivityAttributes>.activities {
             Task { await activity.end(nil, dismissalPolicy: .immediate) }
         }

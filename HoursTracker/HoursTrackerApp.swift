@@ -99,8 +99,12 @@ struct HoursTrackerApp: App {
             if case .active = newPhase {
                 startMonetizationIfNeeded()
                 PresenceService.shared.startHeartbeating()
+                // The Live Activity's money figure only moves while the app
+                // runs; bring it up to date every time we come forward.
+                LiveShiftManager.shared.refreshActivity()
             }
             if case .background = newPhase {
+                LiveShiftManager.shared.refreshActivity()
                 PresenceService.shared.stopHeartbeating()
                 sessionManager.resetSession(reason: .background)
                 WidgetDataManager.shared.updateWidgetData(

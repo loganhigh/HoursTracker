@@ -1588,6 +1588,15 @@ final class HoursStore: ObservableObject {
     /// called per entry on every render and every add/update — into O(n).
     private var weekEntriesCache: [Date: [WorkEntry]]?
 
+    /// The week's entries with `entry` guaranteed present: a draft that
+    /// isn't saved yet (the editor's live summary, a running live shift) is
+    /// treated as the week's latest, so it's paid at the rate it would get
+    /// once saved rather than dropping to zero.
+    private func weekEntries(including entry: WorkEntry) -> [WorkEntry] {
+        let week = weekEntries(for: entry.date)
+        return week.contains { $0.id == entry.id } ? week : week + [entry]
+    }
+
     private func weekEntries(for date: Date) -> [WorkEntry] {
         let cal = payWeekCalendar
         guard let ws = cal.dateInterval(of: .weekOfYear, for: date)?.start else { return [] }
@@ -1689,7 +1698,7 @@ final class HoursStore: ObservableObject {
                 mult = b.overtimeHoursAt2_0 > 0 ? 2.0 : (b.overtimeHoursAt1_5 > 0 ? wdMult : 1.0)
 
             case .weekly:
-                let we = weekEntries(for: entry.date)
+                let we = weekEntries(including: entry)
                 let (reg, ot, dt) = OvertimeRules.weeklyBreakdown(
                     entry: entry, weekEntries: we, weeklyCap: weeklyThreshold, doubleTimeCap: dtAfter
                 )
@@ -1702,7 +1711,7 @@ final class HoursStore: ObservableObject {
                 mult = dt > 0 ? 2.0 : (ot > 0 ? wdMult : 1.0)
 
             case .dailyAndWeekly:
-                let we = weekEntries(for: entry.date)
+                let we = weekEntries(including: entry)
                 let (regH, dailyOT, weeklyOT) = OvertimeRules.dailyAndWeeklyBreakdown(
                     entry: entry,
                     weekEntries: we,
