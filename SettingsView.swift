@@ -22,6 +22,7 @@ struct SettingsView: View {
     @State private var showRestoreSuccessAlert = false
     @State private var backupErrorMessage: String?
     @State private var showingPremiumSheet = false
+    @State private var showingTipJar = false
     @AppStorage("auto_yearly_reset_enabled") private var autoYearlyResetEnabled = true
     /// Master switch for the Friends/social experience on this device. Absence
     /// of the stored value reads as `true`, so fresh installs and upgrading
@@ -298,6 +299,28 @@ struct SettingsView: View {
                     .listRowSeparatorTint(AppColors.stroke)
                 }
 
+                // MARK: - Support
+                Section {
+                    Button {
+                        Haptics.lightTap()
+                        showingTipJar = true
+                    } label: {
+                        HStack(spacing: AppSpacing.sm) {
+                            SettingsRowLabel(
+                                icon: "heart.fill",
+                                title: "Support Hour Tracker",
+                                subtitle: "Leave a small tip. Entirely optional."
+                            )
+                            Spacer(minLength: AppSpacing.xs)
+                            SettingsChevron()
+                        }
+                    }
+                } header: {
+                    SectionEyebrow("Support")
+                }
+                .listRowBackground(AppColors.card.opacity(0.55))
+                .listRowSeparatorTint(AppColors.stroke)
+
                 // MARK: - Data & Backup
                 Section {
                     Button {
@@ -457,6 +480,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingPremiumSheet) {
                 PremiumUpgradeView()
+            }
+            .sheet(isPresented: $showingTipJar) {
+                TipJarView()
             }
             // Crew sheets and the join-crew deep-link consumption are paused
             // with the Teams section. A pending join code from a deep link is

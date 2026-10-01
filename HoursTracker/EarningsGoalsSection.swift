@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// "Goals" card on Home, under Top 5 Hour Trackers. Each goal
+/// "Goals" card on the You tab, directly under Tracking history. Each goal
 /// tracks what the user records putting aside (tap a goal to add to it);
 /// the card turns what's left into a shift count at their recent average.
 struct EarningsGoalsCard: View {

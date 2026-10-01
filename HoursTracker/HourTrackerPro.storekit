@@ -1,117 +1,163 @@
 {
-  "identifier" : "3CE07824-9EC3-4169-B2F1-8F25C4D36887",
-  "nonRenewingSubscriptions" : [],
-  "products" : [],
-  "settings" : {
-    "_applicationInternalID" : "com.loganh.HourTracker",
-    "_developerTeamID" : "",
-    "_failTransactionsEnabled" : false,
-    "_lastSynchronizedDate" : 0,
-    "_locale" : "en_US",
-    "_storefront" : "USA",
-    "_storeKitErrors" : [
+  "identifier": "3CE07824-9EC3-4169-B2F1-8F25C4D36887",
+  "nonRenewingSubscriptions": [],
+  "products": [
+    {
+      "displayPrice": "0.25",
+      "familyShareable": false,
+      "internalID": "A1B2C3D4-0001-4000-8000-000000000025",
+      "localizations": [
+        {
+          "description": "A small tip to help keep Hour Tracker running.",
+          "displayName": "Tip $0.25",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.loganh.HourTracker.tip.025",
+      "referenceName": "Tip 0.25",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "0.50",
+      "familyShareable": false,
+      "internalID": "A1B2C3D4-0001-4000-8000-000000000050",
+      "localizations": [
+        {
+          "description": "A small tip to help keep Hour Tracker running.",
+          "displayName": "Tip $0.50",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.loganh.HourTracker.tip.050",
+      "referenceName": "Tip 0.50",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "1.00",
+      "familyShareable": false,
+      "internalID": "A1B2C3D4-0001-4000-8000-000000000100",
+      "localizations": [
+        {
+          "description": "A small tip to help keep Hour Tracker running.",
+          "displayName": "Tip $1.00",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.loganh.HourTracker.tip.100",
+      "referenceName": "Tip 1.00",
+      "type": "Consumable"
+    }
+  ],
+  "settings": {
+    "_applicationInternalID": "com.loganh.HourTracker",
+    "_developerTeamID": "",
+    "_failTransactionsEnabled": false,
+    "_lastSynchronizedDate": 0,
+    "_locale": "en_US",
+    "_storefront": "USA",
+    "_storeKitErrors": [
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Load Products"
+        "current": null,
+        "enabled": false,
+        "name": "Load Products"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Purchase"
+        "current": null,
+        "enabled": false,
+        "name": "Purchase"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Verification"
+        "current": null,
+        "enabled": false,
+        "name": "Verification"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "App Store Sync"
+        "current": null,
+        "enabled": false,
+        "name": "App Store Sync"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Subscription Status"
+        "current": null,
+        "enabled": false,
+        "name": "Subscription Status"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "App Transaction"
+        "current": null,
+        "enabled": false,
+        "name": "App Transaction"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Manage Subscriptions Sheet"
+        "current": null,
+        "enabled": false,
+        "name": "Manage Subscriptions Sheet"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Refund Request Sheet"
+        "current": null,
+        "enabled": false,
+        "name": "Refund Request Sheet"
       },
       {
-        "current" : null,
-        "enabled" : false,
-        "name" : "Offer Code Redeem Sheet"
+        "current": null,
+        "enabled": false,
+        "name": "Offer Code Redeem Sheet"
       }
     ]
   },
-  "subscriptionGroups" : [
+  "subscriptionGroups": [
     {
-      "id" : "774642EA-63DE-49D4-838B-05E212B2AB10",
-      "localizations" : [],
-      "name" : "hourtracker_pro",
-      "subscriptions" : [
+      "id": "774642EA-63DE-49D4-838B-05E212B2AB10",
+      "localizations": [],
+      "name": "hourtracker_pro",
+      "subscriptions": [
         {
-          "adHocOffers" : [],
-          "codeOffers" : [],
-          "displayPrice" : "0.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "8392DC80-11DD-4CA0-9AA1-30770AC12D9D",
-          "introductoryOffer" : null,
-          "localizations" : [
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "0.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "8392DC80-11DD-4CA0-9AA1-30770AC12D9D",
+          "introductoryOffer": null,
+          "localizations": [
             {
-              "description" : "Live shift tracking, Live Activities, shift templates, unlimited locations, and professional PDF reports — billed monthly.",
-              "displayName" : "Hour Tracker Pro — Monthly",
-              "locale" : "en_US"
+              "description": "Live shift tracking, Live Activities, shift templates, unlimited locations, and professional PDF reports \u2014 billed monthly.",
+              "displayName": "Hour Tracker Pro \u2014 Monthly",
+              "locale": "en_US"
             }
           ],
-          "productID" : "com.loganh.HourTracker.pro.monthly.v2",
-          "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Hour Tracker Pro — Monthly",
-          "subscriptionGroupID" : "774642EA-63DE-49D4-838B-05E212B2AB10",
-          "type" : "RecurringSubscription",
-          "winbackOffers" : []
+          "productID": "com.loganh.HourTracker.pro.monthly.v2",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Hour Tracker Pro \u2014 Monthly",
+          "subscriptionGroupID": "774642EA-63DE-49D4-838B-05E212B2AB10",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
         },
         {
-          "adHocOffers" : [],
-          "codeOffers" : [],
-          "displayPrice" : "6.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "6F1A0C13-2B4E-4B7E-9C5A-2E7F3D8A9B10",
-          "introductoryOffer" : null,
-          "localizations" : [
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "6.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "6F1A0C13-2B4E-4B7E-9C5A-2E7F3D8A9B10",
+          "introductoryOffer": null,
+          "localizations": [
             {
-              "description" : "Live shift tracking, Live Activities, shift templates, unlimited locations, and professional PDF reports — billed yearly, best value.",
-              "displayName" : "Hour Tracker Pro — Yearly",
-              "locale" : "en_US"
+              "description": "Live shift tracking, Live Activities, shift templates, unlimited locations, and professional PDF reports \u2014 billed yearly, best value.",
+              "displayName": "Hour Tracker Pro \u2014 Yearly",
+              "locale": "en_US"
             }
           ],
-          "productID" : "com.loganh.HourTracker.pro.yearly",
-          "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "Hour Tracker Pro — Yearly",
-          "subscriptionGroupID" : "774642EA-63DE-49D4-838B-05E212B2AB10",
-          "type" : "RecurringSubscription",
-          "winbackOffers" : []
+          "productID": "com.loganh.HourTracker.pro.yearly",
+          "recurringSubscriptionPeriod": "P1Y",
+          "referenceName": "Hour Tracker Pro \u2014 Yearly",
+          "subscriptionGroupID": "774642EA-63DE-49D4-838B-05E212B2AB10",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
         }
       ]
     }
   ],
-  "version" : {
-    "major" : 3,
-    "minor" : 0
+  "version": {
+    "major": 3,
+    "minor": 0
   }
 }
