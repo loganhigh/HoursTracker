@@ -379,6 +379,7 @@ final class TopTrackersService: ObservableObject {
             let name = username.isEmpty ? firstNameOnly(displayName) : username
             let countryCode = (data["countryCode"] as? String) ?? ""
             let photo = (data["profilePhotoURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            SupporterRegistry.shared.record(name: name, isSupporter: data["isSupporter"] as? Bool ?? false)
             return TopTracker(
                 uid: doc.documentID,
                 name: name.isEmpty ? "Tracker" : name,

@@ -3,48 +3,93 @@
   "nonRenewingSubscriptions": [],
   "products": [
     {
-      "displayPrice": "0.25",
+      "displayPrice": "0.99",
       "familyShareable": false,
-      "internalID": "A1B2C3D4-0001-4000-8000-000000000025",
+      "internalID": "A1B2C3D4-0001-4000-8000-000000000099",
       "localizations": [
         {
-          "description": "A small tip to help keep Hour Tracker running.",
-          "displayName": "Tip $0.25",
+          "description": "A small tip to help keep Hour Tracker free and ad-free.",
+          "displayName": "Tip $0.99",
           "locale": "en_US"
         }
       ],
       "productID": "com.loganh.HourTracker.tip.025",
-      "referenceName": "Tip 0.25",
+      "referenceName": "Tip 0.99",
       "type": "Consumable"
     },
     {
-      "displayPrice": "0.50",
+      "displayPrice": "1.99",
       "familyShareable": false,
-      "internalID": "A1B2C3D4-0001-4000-8000-000000000050",
+      "internalID": "A1B2C3D4-0001-4000-8000-000000000199",
       "localizations": [
         {
-          "description": "A small tip to help keep Hour Tracker running.",
-          "displayName": "Tip $0.50",
+          "description": "A small tip to help keep Hour Tracker free and ad-free.",
+          "displayName": "Tip $1.99",
           "locale": "en_US"
         }
       ],
-      "productID": "com.loganh.HourTracker.tip.050",
-      "referenceName": "Tip 0.50",
+      "productID": "com.loganh.HourTracker.tip.199",
+      "referenceName": "Tip 1.99",
       "type": "Consumable"
     },
     {
-      "displayPrice": "1.00",
+      "displayPrice": "4.99",
       "familyShareable": false,
-      "internalID": "A1B2C3D4-0001-4000-8000-000000000100",
+      "internalID": "A1B2C3D4-0001-4000-8000-000000000499",
       "localizations": [
         {
-          "description": "A small tip to help keep Hour Tracker running.",
-          "displayName": "Tip $1.00",
+          "description": "A small tip to help keep Hour Tracker free and ad-free.",
+          "displayName": "Tip $4.99",
           "locale": "en_US"
         }
       ],
-      "productID": "com.loganh.HourTracker.tip.100",
-      "referenceName": "Tip 1.00",
+      "productID": "com.loganh.HourTracker.tip.499",
+      "referenceName": "Tip 4.99",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "9.99",
+      "familyShareable": false,
+      "internalID": "A1B2C3D4-0001-4000-8000-000000000999",
+      "localizations": [
+        {
+          "description": "A small tip to help keep Hour Tracker free and ad-free.",
+          "displayName": "Tip $9.99",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.loganh.HourTracker.tip.999",
+      "referenceName": "Tip 9.99",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "19.99",
+      "familyShareable": false,
+      "internalID": "A1B2C3D4-0001-4000-8000-000000001999",
+      "localizations": [
+        {
+          "description": "A small tip to help keep Hour Tracker free and ad-free.",
+          "displayName": "Tip $19.99",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.loganh.HourTracker.tip.1999",
+      "referenceName": "Tip 19.99",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "49.99",
+      "familyShareable": false,
+      "internalID": "A1B2C3D4-0001-4000-8000-000000004999",
+      "localizations": [
+        {
+          "description": "A small tip to help keep Hour Tracker free and ad-free.",
+          "displayName": "Tip $49.99",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "com.loganh.HourTracker.tip.4999",
+      "referenceName": "Tip 49.99",
       "type": "Consumable"
     }
   ],

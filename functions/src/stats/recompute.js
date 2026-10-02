@@ -1190,6 +1190,10 @@ async function recomputeUserStats(db, uid, options = {}) {
     // Verified badge. Client-owned (it records tapping through to the review
     // page), so it rides along unchanged rather than being derived here.
     hasReviewedApp: userData.hasReviewedApp === true,
+    // Supporter shimmer. Client-owned like the verified badge: the device
+    // writes it to its own users doc when a tip goes through, and it rides
+    // along unchanged. Purely cosmetic, so it is not verified against receipts.
+    isSupporter: userData.isSupporter === true,
     // The public handle. Server-owned (claimUsername), so it rides along
     // unmoderated — it was validated and filtered when it was claimed.
     username: userData.username || null,

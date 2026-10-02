@@ -23,6 +23,7 @@ struct SettingsView: View {
     @State private var backupErrorMessage: String?
     @State private var showingPremiumSheet = false
     @State private var showingTipJar = false
+    @AppStorage(TipJarPreferences.showCardKey) private var showTipCard = true
     @AppStorage("auto_yearly_reset_enabled") private var autoYearlyResetEnabled = true
     /// Master switch for the Friends/social experience on this device. Absence
     /// of the stored value reads as `true`, so fresh installs and upgrading
@@ -314,6 +315,10 @@ struct SettingsView: View {
                             Spacer(minLength: AppSpacing.xs)
                             SettingsChevron()
                         }
+                    }
+
+                    Toggle(isOn: $showTipCard) {
+                        SettingsRowLabel(icon: "house.fill", title: "Show on Home")
                     }
                 } header: {
                     SectionEyebrow("Support")

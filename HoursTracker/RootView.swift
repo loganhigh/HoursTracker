@@ -629,9 +629,6 @@ struct HoursHomeView: View {
                 YearlyOverviewSection(store: store)
                     .cardAppear(index: 4)
 
-                TipJarHomeCard()
-                    .cardAppear(index: 4)
-
                 if friendsEnabled {
                     HomeFriendsCard(
                         friendsService: friendsService,
@@ -648,9 +645,9 @@ struct HoursHomeView: View {
                         .cardAppear(index: 6)
                 }
 
-                // Idea box, directly under Top 5 Hour Trackers; outside the
-                // friendsEnabled block so everyone can suggest features.
-                FeatureSuggestionCard(username: friendsService.myUsername)
+                // Support card, directly under Top 5 Hour Trackers; outside the
+                // friendsEnabled block so everyone sees it.
+                TipJarHomeCard()
                     .cardAppear(index: 7)
 
                 // Below Top 5 Hour Trackers, and outside the friendsEnabled
@@ -685,7 +682,11 @@ struct HoursHomeView: View {
             }
             .padding(.horizontal, AppTheme.Spacing.md)
             .padding(.top, 12)
+            // Pin the content to the screen width so one over-wide child
+            // can never make Home pan sideways.
+            .containerRelativeFrame(.horizontal)
             }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             .scrollContentBackground(.hidden)
         }
         // Tapping a leaderboard push lands on the board itself, not just the

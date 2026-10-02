@@ -921,6 +921,7 @@ final class FriendsService: ObservableObject {
             hasReviewedApp: data["hasReviewedApp"] as? Bool ?? false,
             privacy: privacy
         )
+        SupporterRegistry.shared.record(name: profile.displayName, isSupporter: data["isSupporter"] as? Bool ?? false)
         if let idx = friends.firstIndex(where: { $0.uid == uid }) {
             friends[idx] = profile
         } else {

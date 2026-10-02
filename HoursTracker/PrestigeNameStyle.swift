@@ -25,6 +25,8 @@ struct PrestigeNameText: View {
     /// The fill used for P0–P10 — pass what the call site used before.
     var style: AnyShapeStyle = AnyShapeStyle(AppColors.text)
 
+    @ObservedObject private var supporters = SupporterRegistry.shared
+
     private var tier: PrestigeTheme.Tier { PrestigeTheme.tier(for: prestige) }
 
     private var text: Text {
@@ -34,6 +36,7 @@ struct PrestigeNameText: View {
 
     var body: some View {
         let isOwner = DeveloperConfig.isOwnerName(name)
+        let isSupporter = !isOwner && supporters.contains(name)
         Group {
             if isOwner {
                 // Gold, so the sweep reads (white light over white text is
@@ -47,16 +50,26 @@ struct PrestigeNameText: View {
                 )
             } else if tier.isLegend {
                 AscendedNameFill(text: text, tier: tier)
+            } else if isSupporter {
+                // Tinted rather than the plain name colour, so the sweep of
+                // light has something to show against.
+                text.foregroundStyle(
+                    LinearGradient(
+                        colors: [AppColors.accent, AppColors.accentHighlight, AppColors.accent],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
             } else {
                 text.foregroundStyle(style)
             }
         }
-        .modifier(OwnerNameShimmer(text: text, isOwner: isOwner))
+        .modifier(OwnerNameShimmer(text: text, isOwner: isOwner || isSupporter))
     }
 }
 
-/// The app owner's name (@logan) is gold with a band of light sweeping across it
-/// every few seconds. The sweep is drawn OVER the normal fill and masked to
+/// The app owner's name (@logan) is gold, and supporters' names tinted, with a
+/// band of light sweeping across it every few seconds. The sweep is drawn OVER the normal fill and masked to
 /// the glyphs, so the name itself is always fully visible. Its position comes
 /// straight from the clock (no restartable state animation that could stack
 /// when a row scrolls back into view). Reduce Motion: no sweep.

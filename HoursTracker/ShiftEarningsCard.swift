@@ -103,7 +103,6 @@ struct ShiftEarningsView: View {
     let earnings: ShiftEarnings
     let onDone: () -> Void
 
-    @State private var shareImage: UIImage?
     /// Hides every dollar figure (card and share image) so the card can be
     /// shared without showing pay. Remembered between shifts.
     @AppStorage("shift_card_hide_pay") private var hidePay = false
@@ -158,9 +157,6 @@ struct ShiftEarningsView: View {
                 .padding(.bottom, AppSpacing.md)
         }
         .background { WrappedBackdrop() }
-        .task { renderShareImage() }
-        .onChange(of: weather) { _, _ in renderShareImage() }
-        .onChange(of: hidePay) { _, _ in renderShareImage() }
     }
 
     private var payToggle: some View {
@@ -190,41 +186,15 @@ struct ShiftEarningsView: View {
     }
 
     private var buttons: some View {
-        VStack(spacing: AppSpacing.md) {
-            ShiftShareRow(image: shareImage)
-            Button(action: onDone) {
-                Text("Done")
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Capsule().fill(Color.white.opacity(0.14)))
-            }
-            .buttonStyle(.plain)
+        Button(action: onDone) {
+            Text("Done")
+                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(Capsule().fill(Color.white.opacity(0.14)))
         }
-    }
-
-    /// A still of the card on its own backdrop, for sharing. Rendered once;
-    /// the backdrop is frozen at its resting pose.
-    @MainActor
-    private func renderShareImage() {
-        let content = ZStack {
-            WrappedRibbonField.night
-            WrappedRibbonField(time: 0)
-            LinearGradient(
-                colors: [WrappedRibbonField.night.opacity(0.20), WrappedRibbonField.night.opacity(0.50)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            ShiftEarningsCard(earnings: earnings, weather: weather, showPay: !hidePay)
-                .padding(28)
-        }
-        .frame(width: 390, height: 640)
-        .clipped()
-
-        let renderer = ImageRenderer(content: content)
-        renderer.scale = 3
-        shareImage = renderer.uiImage
+        .buttonStyle(.plain)
     }
 }
 

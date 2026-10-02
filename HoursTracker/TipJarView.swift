@@ -8,14 +8,19 @@ import StoreKit
 final class TipJarManager: ObservableObject {
     static let shared = TipJarManager()
 
+    /// Fixed-price consumables, one per tip button.
     static let tipProductIDs = [
-        "com.loganh.HourTracker.tip.025",
-        "com.loganh.HourTracker.tip.050",
-        "com.loganh.HourTracker.tip.100"
+        "com.loganh.HourTracker.tip.025",   // $0.99 (id predates the price)
+        "com.loganh.HourTracker.tip.199",
+        "com.loganh.HourTracker.tip.499",
+        "com.loganh.HourTracker.tip.999",
+        "com.loganh.HourTracker.tip.1999",
+        "com.loganh.HourTracker.tip.4999"
     ]
 
     @Published private(set) var products: [Product] = []
     @Published private(set) var isLoading = false
+    @Published private(set) var isPurchasing = false
     @Published private(set) var purchasingID: String?
     @Published private(set) var didTip = false
     @Published var errorMessage: String?
@@ -33,18 +38,20 @@ final class TipJarManager: ObservableObject {
     }
 
     func tip(_ product: Product) async {
-        guard purchasingID == nil else { return }
+        guard !isPurchasing else { return }
+        isPurchasing = true
+        defer { isPurchasing = false; purchasingID = nil }
         purchasingID = product.id
-        defer { purchasingID = nil }
         do {
             switch try await product.purchase() {
             case .success(let verification):
-                if case .verified(let transaction) = verification {
-                    await transaction.finish()
-                    didTip = true
-                } else {
+                guard case .verified(let transaction) = verification else {
                     errorMessage = "That purchase couldn't be verified."
+                    return
                 }
+                await transaction.finish()
+                SupporterRegistry.shared.markSelfSupporter()
+                didTip = true
             case .pending, .userCancelled:
                 break
             @unknown default:
@@ -75,8 +82,8 @@ struct TipJarView: View {
                         .appText(.title)
                         .foregroundStyle(AppColors.text)
                     Text(manager.didTip
-                         ? "That genuinely helps keep Hour Tracker running."
-                         : "Hour Tracker is free to use. If you find it useful and want to help with the cost of keeping it running, you can leave a small tip.")
+                         ? "Your username now shimmers. That genuinely helps keep Hour Tracker running."
+                         : "Hour Tracker is free to use. If you find it useful and want to help with the cost of keeping it running, you can leave a small tip. Your support helps keep Hour Tracker free and ad-free!")
                         .appText(.body)
                         .foregroundStyle(AppColors.subtext)
                         .multilineTextAlignment(.center)
@@ -84,10 +91,6 @@ struct TipJarView: View {
                 .padding(.horizontal, AppSpacing.lg)
 
                 tipButtons
-
-                Text("Tips are optional and unlock nothing.")
-                    .appText(.caption)
-                    .foregroundStyle(AppColors.faint)
 
                 Spacer()
             }
@@ -121,72 +124,121 @@ struct TipJarView: View {
             Button("Try Again") { Task { await manager.load() } }
                 .appText(.headline)
         } else {
-            HStack(spacing: AppSpacing.sm) {
-                ForEach(manager.products, id: \.id) { product in
-                    Button {
-                        Haptics.lightTap()
-                        Task { await manager.tip(product) }
-                    } label: {
-                        ZStack {
-                            if manager.purchasingID == product.id {
-                                ProgressView()
-                            } else {
-                                Text(product.displayPrice)
-                                    .appText(.headline)
-                            }
+            let rows = stride(from: 0, to: manager.products.count, by: 3).map {
+                Array(manager.products[$0..<min($0 + 3, manager.products.count)])
+            }
+            VStack(spacing: AppSpacing.sm) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    HStack(spacing: AppSpacing.sm) {
+                        // A short last row keeps its buttons the same size,
+                        // centred, instead of stretching them.
+                        if row.count < 3 { Color.clear.frame(maxWidth: .infinity, minHeight: 1, maxHeight: 1) }
+                        ForEach(row, id: \.id) { product in
+                            tipButton(product)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 52)
-                        .foregroundStyle(AppColors.textOnAccent)
-                        .background(AppColors.accentGradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        if row.count < 3 { Color.clear.frame(maxWidth: .infinity, minHeight: 1, maxHeight: 1) }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(manager.purchasingID != nil || !AppStore.canMakePayments)
                 }
             }
         }
     }
-}
 
-/// Home-screen entry to the tip jar. Owns its own sheet so Home only has to
-/// place it.
-struct TipJarHomeCard: View {
-    @State private var showingTipJar = false
-
-    var body: some View {
+    private func tipButton(_ product: Product) -> some View {
         Button {
             Haptics.lightTap()
-            showingTipJar = true
+            Task { await manager.tip(product) }
         } label: {
-            HStack(spacing: AppSpacing.sm) {
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(AppColors.accent)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(AppColors.accentMuted))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Support Hour Tracker")
+            ZStack {
+                if manager.purchasingID == product.id {
+                    ProgressView()
+                } else {
+                    Text(product.displayPrice)
                         .appText(.headline)
-                        .foregroundStyle(AppColors.text)
-                    Text("Free to use. Leave a small tip to help cover the costs.")
-                        .appText(.caption)
-                        .foregroundStyle(AppColors.subtext)
-                        .multilineTextAlignment(.leading)
                 }
-                Spacer(minLength: AppSpacing.xs)
-                SettingsChevron()
             }
-            .padding(16)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(AppColors.card.opacity(0.55))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(AppColors.stroke, lineWidth: 0.5)
-                    )
-            )
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .foregroundStyle(AppColors.textOnAccent)
+            .background(AppColors.accentGradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
+        .disabled(manager.isPurchasing || !AppStore.canMakePayments)
+    }
+}
+
+enum TipJarPreferences {
+    static let showCardKey = "show_tip_card_on_home"
+}
+
+/// Home-screen entry to the tip jar, in the same eyebrow-plus-card layout as
+/// the other Home sections. Owns its own sheet so Home only has to place it.
+struct TipJarHomeCard: View {
+    @State private var showingTipJar = false
+    /// Also driven by the toggle in Settings, so a dismissed card can return.
+    @AppStorage(TipJarPreferences.showCardKey) private var showCard = true
+
+    var body: some View {
+        if showCard { content }
+    }
+
+    private var content: some View {
+        VStack(spacing: 12) {
+            VStack(spacing: 2) {
+                Text("SUPPORT HOUR TRACKER")
+                    .font(.system(.caption, design: .rounded, weight: .bold))
+                    .tracking(1.6)
+                    .foregroundStyle(AppTheme.Colors.subtext)
+                Text("Help keep it free and ad-free")
+                    .font(.system(.caption, weight: .medium))
+                    .foregroundStyle(AppTheme.Colors.faint)
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+
+            Button {
+                Haptics.lightTap()
+                showingTipJar = true
+            } label: {
+                VStack(spacing: 10) {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(AppColors.accent)
+                    Text("Hour Tracker is free to use. If you find it useful, you can leave a small tip to help cover the cost of keeping it running.")
+                        .font(.system(size: 15))
+                        .foregroundStyle(AppColors.subtext)
+                        .multilineTextAlignment(.center)
+                    Text("Leave a tip")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(AppColors.textOnAccent)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 9)
+                        .background(Capsule().fill(AppTheme.Colors.accent))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(AppTheme.Colors.card.opacity(0.55))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .overlay(alignment: .topTrailing) {
+                Button {
+                    Haptics.lightTap()
+                    withAnimation(AppMotion.Spring.smooth) { showCard = false }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(AppColors.faint)
+                        .frame(width: 36, height: 36)
+                }
+                .accessibilityLabel("Hide support card")
+            }
+        }
+        .frame(maxWidth: .infinity)
         .sheet(isPresented: $showingTipJar) { TipJarView() }
     }
 }
