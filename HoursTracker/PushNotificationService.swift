@@ -54,6 +54,12 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
                 NotificationRouter.shared.openGlobalLeaderboard = true
             }
         }
+        if let kind = userInfo["kind"] as? String, kind == "appUpdate" {
+            // "New Update Available!" — straight to the App Store listing.
+            Task { @MainActor in
+                AppActions.openAppStoreListing()
+            }
+        }
         completionHandler()
     }
 }

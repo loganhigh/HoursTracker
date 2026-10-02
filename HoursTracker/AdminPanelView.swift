@@ -1472,6 +1472,7 @@ struct AdminAnnouncementView: View {
     @State private var title = "Update available!"
     @State private var message = "A new version of Hour Tracker is out with new features and fixes. Update now to get the latest."
     @State private var isUpdatePrompt = true
+    @State private var alsoSendPush = true
     @State private var isPublishing = false
     @State private var isClearing = false
     @State private var statusMessage: String?
@@ -1488,10 +1489,15 @@ struct AdminAnnouncementView: View {
                 Toggle(isOn: $isUpdatePrompt) {
                     Text("Update button (opens the App Store)")
                 }
+                if isUpdatePrompt {
+                    Toggle(isOn: $alsoSendPush) {
+                        Text("Also push \"New Update Available!\"")
+                    }
+                }
             } header: {
                 Text("Compose")
             } footer: {
-                Text("Shows once to every user the next time they open the app — a card like the country-flag prompt, with \(isUpdatePrompt ? "an Update Now button that opens the App Store listing" : "a Got it button") and Not Now. Publishing again later re-prompts everyone. Write {name} anywhere in the title or message and each user sees their own username there.")
+                Text("Only the latest announcement is ever shown: publishing replaces the previous one. It shows once to every user the next time they open the app — a card like the country-flag prompt, with \(isUpdatePrompt ? "an Update Now button that opens the App Store listing" : "a Got it button") and Not Now. Publishing again later re-prompts everyone. Write {name} anywhere in the title or message and each user sees their own username there.")
             }
             .listRowBackground(AppTheme.Colors.card)
 
@@ -1545,8 +1551,17 @@ struct AdminAnnouncementView: View {
                 "message": message.trimmingCharacters(in: .whitespaces),
                 "kind": isUpdatePrompt ? "update" : "info",
             ])
+            var status = "Published. Every user sees it on their next app open."
+            if isUpdatePrompt && alsoSendPush {
+                let result = try await functions.httpsCallable("adminSendUpdatePush")
+                    .call(["passcode": passcode])
+                if let dict = result.data as? [String: Any],
+                   let sent = dict["sent"] as? Int, let devices = dict["devices"] as? Int {
+                    status += " Push sent to \(sent) of \(devices) devices."
+                }
+            }
             Haptics.success()
-            statusMessage = "Published. Every user sees it on their next app open."
+            statusMessage = status
         } catch {
             Haptics.error()
             errorMessage = error.localizedDescription
