@@ -111,9 +111,9 @@ class WidgetDataManager {
             .filter { $0.date >= monthStart && $0.date < monthEnd }
             .reduce(0) { $0 + $1.paidHours }
         
-        // Calculate hours this week (Mon–Sun, respecting firstWeekday)
+        // Calculate hours this week, honouring the "Week starts on" setting (Monday when unset)
         var weekCal = calendar
-        weekCal.firstWeekday = 2 // Monday
+        weekCal.firstWeekday = paySettings.weekStartWeekday ?? 2
         let weekStart = weekCal.dateInterval(of: .weekOfYear, for: now)?.start ?? weekCal.startOfDay(for: now)
         let weekEnd = weekCal.date(byAdding: .weekOfYear, value: 1, to: weekStart) ?? now
         let hoursThisWeek = entries

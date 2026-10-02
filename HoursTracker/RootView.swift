@@ -632,12 +632,6 @@ struct HoursHomeView: View {
                 TipJarHomeCard()
                     .cardAppear(index: 4)
 
-                if !premium.isPremium {
-                    BannerAdView()
-                        .frame(height: 50)
-                        .frame(maxWidth: .infinity)
-                }
-
                 if friendsEnabled {
                     HomeFriendsCard(
                         friendsService: friendsService,

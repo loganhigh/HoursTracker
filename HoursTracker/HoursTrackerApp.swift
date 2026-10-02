@@ -1,8 +1,5 @@
 import SwiftUI
 import FirebaseCore
-#if canImport(GoogleMobileAds)
-import GoogleMobileAds
-#endif
 
 @main
 struct HoursTrackerApp: App {
@@ -49,18 +46,6 @@ struct HoursTrackerApp: App {
         PremiumManager.shared.configure()
     }
 
-    /// Starts the ads SDK once after launch. No App Tracking Transparency
-    /// prompt — ads aren't active in this build and we don't track users
-    /// across apps (required for App Store privacy / review).
-    @State private var didStartMonetization = false
-    private func startMonetizationIfNeeded() {
-        guard !didStartMonetization else { return }
-        didStartMonetization = true
-        #if canImport(GoogleMobileAds)
-        MobileAds.shared.start(completionHandler: nil)
-        #endif
-    }
-
     var body: some Scene {
         WindowGroup {
             AppRootView()
@@ -97,7 +82,6 @@ struct HoursTrackerApp: App {
         }
         .onChange(of: scenePhase) { _, newPhase in
             if case .active = newPhase {
-                startMonetizationIfNeeded()
                 PresenceService.shared.startHeartbeating()
                 // The Live Activity's money figure only moves while the app
                 // runs; bring it up to date every time we come forward.

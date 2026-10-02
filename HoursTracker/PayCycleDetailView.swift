@@ -82,7 +82,7 @@ struct PayCycleDetailView: View {
 
     private var weekSections: [(label: String, entries: [WorkEntry])] {
         var cal = Calendar.current
-        cal.firstWeekday = 2
+        cal.firstWeekday = store.paySettings.weekStartWeekday ?? 2
         let grouped = Dictionary(grouping: cycleEntries) { entry -> Date in
             cal.dateInterval(of: .weekOfYear, for: entry.date)?.start ?? entry.date
         }

@@ -281,11 +281,11 @@ struct HomeXPStrip: View {
 struct HomeStatTriplet: View {
     @ObservedObject var store: HoursStore
 
-    // MARK: Week sums (Mon–Sun, matching the pay engine's week)
+    // MARK: Week sums (follows the "Week starts on" setting, matching the pay engine's week)
 
     private func hoursInWeek(containing date: Date) -> Double {
         var cal = Calendar.current
-        cal.firstWeekday = 2
+        cal.firstWeekday = store.paySettings.weekStartWeekday ?? 2
         guard let interval = cal.dateInterval(of: .weekOfYear, for: date) else { return 0 }
         return store.entries
             .filter { !$0.isOffDay && $0.date >= interval.start && $0.date < interval.end }
