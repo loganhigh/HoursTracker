@@ -18,7 +18,7 @@ struct EarningsGoalDetailSheet: View {
     /// Live row from the store, so deposits and edits show immediately.
     private var row: EarningsGoalProgress? {
         guard let goal = goalStore.goals.first(where: { $0.id == goalID }) else { return nil }
-        return EarningsGoalCalculator.progress(for: [goal], store: store).first
+        return EarningsGoalCalculator.progress(for: [goal]).first
     }
 
     private var parsedAmount: Double? {
@@ -137,6 +137,11 @@ struct EarningsGoalDetailSheet: View {
                  : "\(EarningsGoalFormat.money(row.remaining, code: currencyCode)) remaining")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(row.isComplete ? AppColors.positive : AppColors.subtext)
+            if let months = row.monthsToGo {
+                Text("\(EarningsGoalCalculator.timelineText(months: months)) at \(EarningsGoalFormat.money(row.goal.monthlyContribution, code: currencyCode)) a month")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+            }
         }
         .padding(.vertical, 6)
     }

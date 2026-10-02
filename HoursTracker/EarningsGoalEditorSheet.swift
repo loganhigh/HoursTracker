@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// Add / edit sheet for an earnings goal: name, target, and an optional
-/// amount already put aside. Editing keeps the goal's creation date, so the
-/// shifts already counted toward it stay counted.
+/// Add / edit sheet for a savings goal: name, target, an optional amount
+/// already put aside, and an optional monthly amount for the timeline.
 struct EarningsGoalEditorSheet: View {
     let existing: EarningsGoal?
     let currencyCode: String
@@ -13,10 +12,11 @@ struct EarningsGoalEditorSheet: View {
     @State private var name: String = ""
     @State private var targetText: String = ""
     @State private var savedText: String = ""
+    @State private var monthlyText: String = ""
     @State private var showingDeleteConfirm = false
     @FocusState private var focusedField: Field?
 
-    private enum Field { case name, target, saved }
+    private enum Field { case name, target, saved, monthly }
 
     init(existing: EarningsGoal?, currencyCode: String) {
         self.existing = existing
@@ -25,6 +25,9 @@ struct EarningsGoalEditorSheet: View {
         _targetText = State(initialValue: existing.map { Self.editableAmount($0.targetAmount) } ?? "")
         _savedText = State(initialValue: existing.flatMap {
             $0.alreadySaved > 0 ? Self.editableAmount($0.alreadySaved) : nil
+        } ?? "")
+        _monthlyText = State(initialValue: existing.flatMap {
+            $0.monthlyContribution > 0 ? Self.editableAmount($0.monthlyContribution) : nil
         } ?? "")
     }
 
@@ -48,6 +51,18 @@ struct EarningsGoalEditorSheet: View {
         return value
     }
 
+    /// Empty or zero means no plan; anything else typed must parse.
+    private var parsedMonthly: Double? {
+        let raw = monthlyText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw.isEmpty || raw.allSatisfy({ !$0.isNumber || $0 == "0" }) { return 0 }
+        guard let value = ChequeAmountParser.parse(raw), value >= 0, value.isFinite else { return nil }
+        return value
+    }
+
+    private var monthlyError: String? {
+        parsedMonthly == nil ? "Enter a valid amount, or leave it blank." : nil
+    }
+
     private var nameError: String? {
         trimmedName.isEmpty && !name.isEmpty ? "Give your goal a name." : nil
     }
@@ -62,7 +77,7 @@ struct EarningsGoalEditorSheet: View {
     }
 
     private var canSave: Bool {
-        !trimmedName.isEmpty && parsedTarget != nil && parsedSaved != nil
+        !trimmedName.isEmpty && parsedTarget != nil && parsedSaved != nil && parsedMonthly != nil
     }
 
     private var currencySymbol: String {
@@ -95,7 +110,13 @@ struct EarningsGoalEditorSheet: View {
                             field: .saved,
                             error: savedError
                         )
-                        Text("Tap the goal any time to add what you've put aside.")
+                        amountField(
+                            title: "Plan to save each month (optional)",
+                            text: $monthlyText,
+                            field: .monthly,
+                            error: monthlyError
+                        )
+                        Text("Add a monthly amount and the goal shows about how many months are left. Tap the goal any time to add what you've put aside.")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(AppColors.faint)
                     }
@@ -167,7 +188,7 @@ struct EarningsGoalEditorSheet: View {
     // MARK: - Actions
 
     private func save() {
-        guard canSave, let target = parsedTarget, let saved = parsedSaved else {
+        guard canSave, let target = parsedTarget, let saved = parsedSaved, let monthly = parsedMonthly else {
             Haptics.error()
             return
         }
@@ -178,9 +199,10 @@ struct EarningsGoalEditorSheet: View {
             goal.name = trimmedName
             goal.targetAmount = target
             goal.alreadySaved = saved
+            goal.monthlyContribution = monthly
             goalStore.update(goal)
         } else {
-            goalStore.add(EarningsGoal(name: trimmedName, targetAmount: target, alreadySaved: saved))
+            goalStore.add(EarningsGoal(name: trimmedName, targetAmount: target, alreadySaved: saved, monthlyContribution: monthly))
         }
         Haptics.success()
         dismiss()
