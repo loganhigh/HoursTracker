@@ -165,22 +165,12 @@ struct TipJarView: View {
     }
 }
 
-enum TipJarPreferences {
-    static let showCardKey = "show_tip_card_on_home"
-}
-
 /// Home-screen entry to the tip jar, in the same eyebrow-plus-card layout as
 /// the other Home sections. Owns its own sheet so Home only has to place it.
 struct TipJarHomeCard: View {
     @State private var showingTipJar = false
-    /// Also driven by the toggle in Settings, so a dismissed card can return.
-    @AppStorage(TipJarPreferences.showCardKey) private var showCard = true
 
     var body: some View {
-        if showCard { content }
-    }
-
-    private var content: some View {
         VStack(spacing: 12) {
             VStack(spacing: 2) {
                 Text("SUPPORT HOUR TRACKER")
@@ -225,18 +215,6 @@ struct TipJarHomeCard: View {
                 )
             }
             .buttonStyle(.plain)
-            .overlay(alignment: .topTrailing) {
-                Button {
-                    Haptics.lightTap()
-                    withAnimation(AppMotion.Spring.smooth) { showCard = false }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(AppColors.faint)
-                        .frame(width: 36, height: 36)
-                }
-                .accessibilityLabel("Hide support card")
-            }
         }
         .frame(maxWidth: .infinity)
         .sheet(isPresented: $showingTipJar) { TipJarView() }
