@@ -2316,6 +2316,22 @@ exports.adminSetUserProgression = onCall(
       }
     }
 
+    // Clearing the admin title. Builds before 3.4 published the override as
+    // the user's own `equippedTitle` (users doc and gamification/current), so
+    // once the override is gone the publish path falls back to that copy and
+    // the title never leaves. If the stored title IS the admin title, drop it
+    // too so the user gets the title for their level back.
+    if (update.adminEquippedTitle === FieldValue.delete()) {
+      const before = (await db.collection("users").doc(targetUid).get()).data() || {};
+      const oldAdmin = stripWrappingQuotes(before.adminEquippedTitle);
+      if (oldAdmin && stripWrappingQuotes(before.equippedTitle) === oldAdmin) {
+        update.equippedTitle = FieldValue.delete();
+        await db.collection("users").doc(targetUid)
+          .collection("gamification").doc("current")
+          .set({ equippedTitle: FieldValue.delete() }, { merge: true });
+      }
+    }
+
     if (rawCountry === null) {
       update.countryCode = FieldValue.delete();
     } else if (rawCountry !== undefined) {

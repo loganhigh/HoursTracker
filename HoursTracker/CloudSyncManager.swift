@@ -1816,7 +1816,11 @@ private struct ProfileSnapshotInputs {
             ? AchievementsView.earnedBadgesForSharing(from: store)
             : []
         let equippedTitle = privacy.shareBadges ? (profile.equippedTitle ?? "") : ""
-        let publishedEquippedTitle = store.adminEquippedTitleOverride ?? equippedTitle
+        // The user's own title only. The admin override lives in
+        // `adminEquippedTitle` and the server overlays it when it publishes;
+        // folding it in here wrote it into the user's own `equippedTitle`,
+        // which then survived the override being removed.
+        let publishedEquippedTitle = equippedTitle
         let currentCycle = store.currentPayCycle()
         let cycleEntries = PayCycleEngine.entries(store.entries, in: currentCycle)
 

@@ -685,12 +685,19 @@ final class HoursStore: ObservableObject {
 
     /// Stores the admin title override so profile sync re-publishes it.
     func applyAdminEquippedTitle(_ title: String?) {
-        guard let title else {
-            adminEquippedTitleOverride = nil
-            return
-        }
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previous = adminEquippedTitleOverride?.strippingWrappingQuotes
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         adminEquippedTitleOverride = trimmed.isEmpty ? nil : trimmed
+
+        // Override just removed. Older builds published it as the user's own
+        // `equippedTitle` and pulled it back as if they had chosen it, so it
+        // outlived the override; drop that copy so the level title returns.
+        if adminEquippedTitleOverride == nil,
+           let previous, !previous.isEmpty,
+           gamificationProfile.equippedTitle?.strippingWrappingQuotes == previous {
+            gamificationProfile.equippedTitle = nil
+            persist()
+        }
     }
 
     /// Title shown on profile cards — admin override wins when set.
