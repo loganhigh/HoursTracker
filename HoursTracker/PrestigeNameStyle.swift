@@ -24,6 +24,10 @@ struct PrestigeNameText: View {
     var font: Font? = nil
     /// The fill used for P0–P10 — pass what the call site used before.
     var style: AnyShapeStyle = AnyShapeStyle(AppColors.text)
+    /// Whose name this is, when the call site knows. The owner's gold is
+    /// keyed on this as well as the handle, so it holds on surfaces that
+    /// show a display name ("logan high") rather than the username.
+    var uid: String? = nil
 
     @ObservedObject private var supporters = SupporterRegistry.shared
 
@@ -35,7 +39,7 @@ struct PrestigeNameText: View {
     }
 
     var body: some View {
-        let isOwner = DeveloperConfig.isOwnerName(name)
+        let isOwner = DeveloperConfig.isOwnerName(name) || DeveloperConfig.isCEO(uid: uid)
         let isSupporter = !isOwner && supporters.contains(name)
         Group {
             if isOwner {

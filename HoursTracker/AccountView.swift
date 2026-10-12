@@ -319,7 +319,8 @@ struct AccountView: View {
                     PrestigeNameText(
                         name: friendsService.myUsername.map { Username.display($0) } ?? displayName,
                         prestige: friendsService.myUsername == nil ? 0 : myPrestige,
-                        style: AnyShapeStyle(friendsService.myUsername == nil ? AppColors.accent : AppColors.text)
+                        style: AnyShapeStyle(friendsService.myUsername == nil ? AppColors.accent : AppColors.text),
+                        uid: authService.user?.uid
                     )
                         .appText(.title)
                         .multilineTextAlignment(.center)

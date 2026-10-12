@@ -434,7 +434,7 @@ struct HomeFriendsCardContent: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    PrestigeNameText(name: row.name, prestige: row.prestige)
+                    PrestigeNameText(name: row.name, prestige: row.prestige, uid: row.id)
                         .appText(.subheadline)
                         .lineLimit(1)
 
@@ -572,7 +572,7 @@ struct HomeFriendsPickerSheet: View {
                                     uid: friend.uid
                                 )
                                 .ascendedAvatarRing(prestige: friend.prestige, diameter: 34, inset: 1.5)
-                                PrestigeNameText(name: friend.displayName, prestige: friend.prestige)
+                                PrestigeNameText(name: friend.displayName, prestige: friend.prestige, uid: friend.uid)
                                     .appText(.body)
                                     .lineLimit(1)
                                 if VerifiedTracker.isVerified(reviewed: friend.hasReviewedApp) {

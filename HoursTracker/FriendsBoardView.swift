@@ -274,7 +274,8 @@ struct FriendsBoardView: View {
                             name: post.authorName,
                             prestige: prestige,
                             font: .system(size: 15, weight: .bold, design: .rounded),
-                            style: AnyShapeStyle(theme.textPrimary)
+                            style: AnyShapeStyle(theme.textPrimary),
+                            uid: post.authorUid
                         )
                         if authorIsVerified(post.authorUid) {
                             VerifiedBadgeView(variant: .static, size: 13)
@@ -448,7 +449,8 @@ struct FriendsBoardView: View {
                         name: comment.authorName,
                         prestige: authorPrestige(comment.authorId),
                         font: .system(size: 13, weight: .bold, design: .rounded),
-                        style: AnyShapeStyle(theme.textPrimary)
+                        style: AnyShapeStyle(theme.textPrimary),
+                        uid: comment.authorId
                     )
                     if authorIsVerified(comment.authorId) {
                         VerifiedBadgeView(variant: .static, size: 11)

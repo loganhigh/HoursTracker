@@ -113,7 +113,8 @@ struct PayPeriodPodiumCard: View {
                     PrestigeNameText(
                         name: entry.isMe ? "You" : entry.firstName,
                         prestige: entry.prestige,
-                        font: .system(size: 14, weight: .bold, design: .rounded)
+                        font: .system(size: 14, weight: .bold, design: .rounded),
+                        uid: entry.id
                     )
                         .lineLimit(1)
                     if VerifiedTracker.isVerified(reviewed: entry.hasReviewedApp) {

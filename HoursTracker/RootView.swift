@@ -1044,10 +1044,14 @@ struct HoursHomeView: View {
             }
 
             HStack(spacing: 5) {
-                Text(tracker.name)
-                    .font(.system(size: 15, weight: tracker.rank <= 3 ? .semibold : .medium))
-                    .foregroundStyle(AppTheme.Colors.text)
-                    .lineLimit(1)
+                PrestigeNameText(
+                    name: tracker.name,
+                    prestige: tracker.prestige,
+                    font: .system(size: 15, weight: tracker.rank <= 3 ? .semibold : .medium),
+                    style: AnyShapeStyle(AppTheme.Colors.text),
+                    uid: tracker.uid
+                )
+                .lineLimit(1)
                 if let flag = CountryFlag.emoji(
                     for: CountryFlag.leaderboardCode(
                         trackerUid: tracker.uid,

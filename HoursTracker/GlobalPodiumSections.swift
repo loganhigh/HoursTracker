@@ -59,7 +59,8 @@ struct GlobalPodiumRow: View {
                     PrestigeNameText(
                         name: entry.name,
                         prestige: entry.prestige,
-                        font: .system(size: 15, weight: .bold, design: .rounded)
+                        font: .system(size: 15, weight: .bold, design: .rounded),
+                        uid: entry.uid
                     )
                         .lineLimit(1)
                     if VerifiedTracker.isVerified(reviewed: entry.hasReviewedApp) {
@@ -241,7 +242,8 @@ struct GlobalTrackerRow: View {
                     PrestigeNameText(
                         name: tracker.name,
                         prestige: tracker.prestige,
-                        font: .system(size: 15, weight: .semibold, design: .rounded)
+                        font: .system(size: 15, weight: .semibold, design: .rounded),
+                        uid: tracker.uid
                     )
                         .lineLimit(1)
                     if VerifiedTracker.isVerified(reviewed: tracker.hasReviewedApp) {

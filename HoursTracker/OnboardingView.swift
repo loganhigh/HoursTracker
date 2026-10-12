@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 // MARK: - Onboarding persistence
 //
@@ -52,6 +53,13 @@ struct OnboardingView: View {
     @State private var nameValidationMessage: String?
     @FocusState private var usernameFieldFocused: Bool
 
+    // Screen 4 — profile photo. Saved on-device only here (there's no
+    // account yet); it uploads once sign-in completes.
+    @ObservedObject private var photoManager = ProfilePhotoManager.shared
+    @State private var showingPhotoPicker = false
+    @State private var photoPickerItem: PhotosPickerItem?
+    @State private var pendingCropImage: UIImage?
+
     @State private var payPeriodDraft: PayPeriodType = .biWeekly
     @State private var paydayDraft = OnboardingView.defaultPayday()
     @State private var usesCutoffDraft = false
@@ -71,11 +79,12 @@ struct OnboardingView: View {
 
     // Setup first, sign-in last: the account is the final step, so the pager
     // ends on it and auth completion ends onboarding.
-    private let pageCount = 6
+    private let pageCount = 7
     private let namePageIndex = 2
-    private let payPageIndex = 3
-    private let companyPageIndex = 4
-    private let signInPageIndex = 5
+    private let photoPageIndex = 3
+    private let payPageIndex = 4
+    private let companyPageIndex = 5
+    private let signInPageIndex = 6
 
     /// Seeds the payday picker with the next Friday — the most common payday,
     /// and a date the user is more likely to adjust than to type from scratch.
@@ -109,6 +118,33 @@ struct OnboardingView: View {
         .onChange(of: authService.isSignedIn) { _, _ in advanceIfReady() }
         .onChange(of: authService.isSigningIn) { _, _ in advanceIfReady() }
         .onAppear { advanceIfReady() }
+        .photosPicker(isPresented: $showingPhotoPicker, selection: $photoPickerItem, matching: .images)
+        .onChange(of: photoPickerItem) { _, item in
+            guard let item else { return }
+            Task {
+                defer { photoPickerItem = nil }
+                guard let data = try? await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data) else { return }
+                pendingCropImage = image
+            }
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { pendingCropImage != nil },
+            set: { if !$0 { pendingCropImage = nil } }
+        )) {
+            if let pendingCropImage {
+                ProfilePhotoCropView(
+                    image: pendingCropImage,
+                    onCancel: { self.pendingCropImage = nil },
+                    onConfirm: { cropped in
+                        self.pendingCropImage = nil
+                        // Signed out at this point, so this only writes the
+                        // local copy; finishOnboarding uploads it after auth.
+                        Task { try? await photoManager.setPhoto(cropped) }
+                    }
+                )
+            }
+        }
         .task {
             // Dev-only rehearsal, same pattern as LEVELUP_DEMO: auto-walks the
             // pager so onboarding can be reviewed in the Simulator without
@@ -118,6 +154,7 @@ struct OnboardingView: View {
             let lastPage: Int
             switch demo {
             case "name":    lastPage = namePageIndex
+            case "photo":   lastPage = photoPageIndex
             case "pay":     lastPage = payPageIndex
             case "company": lastPage = companyPageIndex
             default:     lastPage = signInPageIndex
@@ -168,6 +205,9 @@ struct OnboardingView: View {
 
             namePage
                 .tag(namePageIndex)
+
+            photoPage
+                .tag(photoPageIndex)
 
             payPage
                 .tag(payPageIndex)
@@ -362,7 +402,91 @@ struct OnboardingView: View {
         UserDefaults.standard.set(username, forKey: "pending_username")
         Haptics.success()
         withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
-            page = payPageIndex
+            page = photoPageIndex
+        }
+    }
+
+    // MARK: - Screen 4 — profile photo
+
+    private var photoPage: some View {
+        let hasPhoto = photoManager.localImage != nil
+        let initial = String(canonicalUsernameDraft.prefix(1)).uppercased()
+        return VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            VStack(spacing: AppSpacing.lg) {
+                Button {
+                    Haptics.lightTap()
+                    showingPhotoPicker = true
+                } label: {
+                    ZStack(alignment: .bottomTrailing) {
+                        if let image = photoManager.localImage {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 132, height: 132)
+                                .clipShape(Circle())
+                        } else {
+                            Circle()
+                                .fill(AppColors.accent.opacity(0.18))
+                                .frame(width: 132, height: 132)
+                                .overlay(
+                                    Text(initial.isEmpty ? "?" : initial)
+                                        .font(.system(size: 52, weight: .bold, design: .rounded))
+                                        .foregroundStyle(AppColors.accent)
+                                )
+                        }
+                        Image(systemName: hasPhoto ? "pencil" : "plus")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(AppColors.textOnAccent)
+                            .frame(width: 36, height: 36)
+                            .background(Circle().fill(AppColors.accent))
+                            .overlay(Circle().stroke(AppColors.bg, lineWidth: 3))
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(hasPhoto ? "Change photo" : "Add a photo")
+
+                VStack(spacing: AppSpacing.sm) {
+                    Text(hasPhoto ? "Looking good" : "Add a photo")
+                        .appText(.title)
+                        .foregroundStyle(AppColors.text)
+                        .multilineTextAlignment(.center)
+
+                    Text("Friends and the leaderboard see it next to your name. You can change it any time.")
+                        .appText(.subheadline)
+                        .foregroundStyle(AppColors.subtext)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                VStack(spacing: AppSpacing.sm) {
+                    Button(hasPhoto ? "Continue" : "Choose a photo") {
+                        Haptics.lightTap()
+                        if hasPhoto {
+                            withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
+                                page = payPageIndex
+                            }
+                        } else {
+                            showingPhotoPicker = true
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+
+                    if !hasPhoto {
+                        Button("Skip for now") {
+                            Haptics.lightTap()
+                            withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
+                                page = payPageIndex
+                            }
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                    }
+                }
+            }
+            .padding(.horizontal, AppSpacing.xl)
+
+            Spacer(minLength: 0)
         }
     }
 
@@ -653,6 +777,14 @@ struct OnboardingView: View {
             Task {
                 defer { UserDefaults.standard.removeObject(forKey: "pending_username") }
                 try? await FriendsService.shared.claimUsername(pendingUsername)
+            }
+        }
+        // The photo picked two screens back was saved on-device only (no
+        // account yet). Now there is one: upload it and publish the URL.
+        if authService.user != nil {
+            Task {
+                await photoManager.uploadLocalPhotoIfNeeded()
+                store.syncProfileSnapshotToCloud()
             }
         }
         AppTutorialStorage.markComplete()

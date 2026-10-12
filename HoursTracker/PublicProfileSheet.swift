@@ -131,7 +131,8 @@ struct PublicProfileSheet: View {
                 PrestigeNameText(
                     name: handle,
                     prestige: prestige,
-                    font: .system(size: 20, weight: .bold, design: .rounded)
+                    font: .system(size: 20, weight: .bold, design: .rounded),
+                    uid: tracker.uid
                 )
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)

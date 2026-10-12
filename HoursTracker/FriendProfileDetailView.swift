@@ -190,7 +190,8 @@ struct FriendProfileDetailView: View {
                 PrestigeNameText(
                     name: friend.displayName,
                     prestige: friend.prestige,
-                    font: .system(size: 20, weight: .bold, design: .rounded)
+                    font: .system(size: 20, weight: .bold, design: .rounded),
+                    uid: friend.uid
                 )
                 if VerifiedTracker.isVerified(reviewed: friend.hasReviewedApp) {
                     // The profile is the badge's hero moment — one on screen,

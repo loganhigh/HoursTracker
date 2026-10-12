@@ -201,7 +201,8 @@ struct FriendStatsRow: View {
                     PrestigeNameText(
                         name: friend.displayName,
                         prestige: friend.prestige,
-                        font: .system(size: 16, weight: .bold, design: .rounded)
+                        font: .system(size: 16, weight: .bold, design: .rounded),
+                        uid: friend.uid
                     )
                         .lineLimit(1)
                     if VerifiedTracker.isVerified(reviewed: friend.hasReviewedApp) {

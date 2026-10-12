@@ -51,7 +51,8 @@ struct LeaderboardRankRow: View {
                         name: entry.isMe ? "You" : entry.name,
                         prestige: entry.prestige,
                         font: .system(size: 15, weight: .bold, design: .rounded),
-                        style: AnyShapeStyle(entry.isMe ? AppColors.accent : AppColors.text)
+                        style: AnyShapeStyle(entry.isMe ? AppColors.accent : AppColors.text),
+                        uid: entry.id
                     )
                         .lineLimit(1)
                         // Long usernames shrink instead of truncating to "…" —
