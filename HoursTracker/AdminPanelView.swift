@@ -42,8 +42,25 @@ struct AdminUser: Identifiable, Equatable {
     /// users who haven't opened a build that stamps it.
     var appVersion: String = ""
     var appBuild: String = ""
+    /// Tip ledger roll-up: how many tips and the running total (in the
+    /// currency of the latest one — tips from one person are almost always
+    /// in a single currency).
+    var tipCount: Int = 0
+    var tipTotal: Double = 0
+    var tipCurrency: String = ""
+    var lastTipAt: Date?
 
     var id: String { uid }
+
+    /// "2 tips · $1.98 CAD" / "1 tip · $0.99 CAD" / "—".
+    var tipSummary: String {
+        guard tipCount > 0 else { return "—" }
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.currencyCode = tipCurrency.isEmpty ? "USD" : tipCurrency
+        let money = f.string(from: NSNumber(value: tipTotal)) ?? String(format: "%.2f", tipTotal)
+        return "\(tipCount) \(tipCount == 1 ? "tip" : "tips") · \(money) \(tipCurrency)"
+    }
 
     /// "3.0 (30)" / "3.0" / "—".
     var appVersionDisplay: String {
@@ -257,6 +274,25 @@ struct AdminPanelView: View {
                             }
                         }
                         .listRowBackground(AppTheme.Colors.card)
+
+                        NavigationLink {
+                            AdminTipsView(passcode: passcode)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "heart.fill")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(AppTheme.Colors.accent)
+                                Text("Tips")
+                                Spacer()
+                                let supporters = users.filter { $0.tipCount > 0 }.count
+                                if supporters > 0 {
+                                    Text("\(supporters) \(supporters == 1 ? "supporter" : "supporters")")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(AppTheme.Colors.subtext)
+                                }
+                            }
+                        }
+                        .listRowBackground(AppTheme.Colors.card)
                     }
 
                     Section {
@@ -377,6 +413,12 @@ struct AdminPanelView: View {
                         .lineLimit(1)
                     if user.hasReviewedApp {
                         VerifiedBadgeView(variant: .static, size: 13)
+                    }
+                    if user.tipCount > 0 {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(AppTheme.Colors.accent)
+                            .accessibilityLabel("Supporter")
                     }
                     if let flag = CountryFlag.emoji(for: user.countryCode) {
                         Text(flag)
@@ -714,6 +756,10 @@ private extension AdminUser {
         user.lastShiftAt = date("lastShiftMs")
         user.appVersion = dict["appVersion"] as? String ?? ""
         user.appBuild = dict["appBuild"] as? String ?? ""
+        user.tipCount = int("tipCount") ?? 0
+        user.tipTotal = double("tipTotal")
+        user.tipCurrency = dict["tipCurrency"] as? String ?? ""
+        user.lastTipAt = date("lastTipMs")
         return user
     }
 }
@@ -854,6 +900,21 @@ private struct AdminEditUserSheet: View {
                         Text(user.appVersionDisplay)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
+                    }
+                    HStack {
+                        Text("Tips")
+                        Spacer()
+                        Text(user.tipSummary)
+                            .foregroundStyle(user.tipCount > 0 ? AppTheme.Colors.accent : .secondary)
+                            .monospacedDigit()
+                    }
+                    if let lastTipAt = user.lastTipAt {
+                        HStack {
+                            Text("Last tip")
+                            Spacer()
+                            Text(Self.absoluteDate(lastTipAt))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     copyRow("UID", user.uid, copyable: !user.uid.isEmpty)
                     HStack {
@@ -1629,7 +1690,7 @@ enum AdminUserSort: CaseIterable {
 }
 
 enum AdminUserFilter: CaseIterable {
-    case activeToday, activeThisWeek, newUsers, verified, prestige, inactive7d, atRisk
+    case activeToday, activeThisWeek, newUsers, verified, supporters, prestige, inactive7d, atRisk
 
     var label: String {
         switch self {
@@ -1637,6 +1698,7 @@ enum AdminUserFilter: CaseIterable {
         case .activeThisWeek: return "Active This Week"
         case .newUsers: return "New (7 days)"
         case .verified: return "Verified"
+        case .supporters: return "Supporters"
         case .prestige: return "Prestige Users"
         case .inactive7d: return "Inactive 7+ Days"
         case .atRisk: return "At Risk"
@@ -1654,6 +1716,8 @@ enum AdminUserFilter: CaseIterable {
             return (user.createdAt ?? .distantPast) >= Date().addingTimeInterval(-7 * day)
         case .verified:
             return user.hasReviewedApp
+        case .supporters:
+            return user.tipCount > 0
         case .prestige:
             return user.prestige > 0
         case .inactive7d:

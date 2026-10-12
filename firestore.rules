@@ -146,6 +146,29 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Tip ledger. A device writes one doc per App Store transaction when a
+    // tip goes through (create-only, shape-checked); nobody reads or edits
+    // them from a client. notifyAdminOnTip rolls them up onto the user's doc
+    // and the admin panel reads the list through adminListTips (Admin SDK).
+    match /tips/{transactionId} {
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'productID', 'productName', 'amount', 'currency', 'appVersion', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.productID is string
+        && request.resource.data.productID.size() <= 80
+        && request.resource.data.productName is string
+        && request.resource.data.productName.size() <= 40
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.amount <= 1000
+        && request.resource.data.currency is string
+        && request.resource.data.currency.size() <= 3
+        && request.resource.data.appVersion is string
+        && request.resource.data.appVersion.size() <= 20
+        && request.resource.data.createdAt == request.time;
+      allow read, update, delete: if false;
+    }
+
     match /users/{uid} {
       // Profile docs are readable by any signed-in user so friend-code lookup
       // (query on `friendCode`) works before a friendship exists. Push device

@@ -50,7 +50,7 @@ final class TipJarManager: ObservableObject {
                     return
                 }
                 await transaction.finish()
-                SupporterRegistry.shared.markSelfSupporter()
+                SupporterRegistry.shared.recordTip(transaction: transaction, product: product)
                 didTip = true
             case .pending, .userCancelled:
                 break

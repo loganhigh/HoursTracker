@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import FirebaseAuth
 import FirebaseFirestore
+import StoreKit
 
 /// Who has left a tip. Supporters get the shimmer on their username wherever
 /// it shows.
@@ -42,12 +43,25 @@ final class SupporterRegistry: ObservableObject {
         }
     }
 
-    /// A tip just went through on this device.
-    func markSelfSupporter() {
+    /// A tip just went through on this device: flip the supporter flag and
+    /// log the tip so the admin can see who gave what. Apple never says who
+    /// paid, so this record (keyed by the App Store transaction id, so a
+    /// retry can't double-count) is the only per-person ledger there is.
+    func recordTip(transaction: StoreKit.Transaction, product: Product) {
         setSelf(true)
         guard let uid = Auth.auth().currentUser?.uid else { return }
-        Firestore.firestore().collection("users").document(uid)
-            .setData(["isSupporter": true], merge: true)
+        let db = Firestore.firestore()
+        db.collection("users").document(uid).setData(["isSupporter": true], merge: true)
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        db.collection("tips").document(String(transaction.id)).setData([
+            "uid": uid,
+            "productID": product.id,
+            "productName": product.displayName,
+            "amount": NSDecimalNumber(decimal: product.price).doubleValue,
+            "currency": product.priceFormatStyle.currencyCode,
+            "appVersion": version,
+            "createdAt": FieldValue.serverTimestamp()
+        ])
     }
 
     /// Our own published profile says we are a supporter (a new device, or a

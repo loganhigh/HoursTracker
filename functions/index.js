@@ -635,6 +635,46 @@ exports.notifyAdminOnSuggestion = onDocumentCreated(
   }
 );
 
+/**
+ * A tip landed in the ledger: roll it up onto the user's doc (count, total,
+ * supporter flag — server-owned so the admin list can trust it) and tell the
+ * developer who tipped.
+ */
+exports.notifyAdminOnTip = onDocumentCreated(
+  {
+    document: "tips/{transactionId}",
+    region: "us-central1",
+  },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data || typeof data.uid !== "string" || !data.uid) return;
+    const amount = Number(data.amount) || 0;
+    const currency = String(data.currency || "").toUpperCase();
+
+    const userRef = db.collection("users").doc(data.uid);
+    await userRef.set(
+      {
+        isSupporter: true,
+        tipCount: FieldValue.increment(1),
+        tipTotal: FieldValue.increment(amount),
+        tipCurrency: currency,
+        lastTipAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const userSnap = await userRef.get();
+    const username = userSnap.data()?.username;
+    const who = username ? `@${username}` : (await resolveDisplayName(data.uid)) || "Someone";
+    const adminSnap = await db.collection("users").doc(ADMIN_UID).get();
+    await sendPushToUser(ADMIN_UID, adminSnap.data(), {
+      title: `💜 ${who} left a tip`,
+      body: `${amount.toFixed(2)} ${currency} · ${String(data.productName || data.productID || "")}`,
+      dataPayload: { type: "admin_tip", transactionId: event.params.transactionId },
+    });
+  }
+);
+
 exports.notifyOnFriendRequest = onDocumentCreated(
   {
     document: "users/{targetUid}/friendRequests/{fromUid}",
@@ -976,6 +1016,11 @@ function buildAdminUserRow(uid, userData, profileData, authData, presenceData) {
     // that writes it yet.
     appVersion: String(u.appVersion || ""),
     appBuild: String(u.appBuild || ""),
+    // Tip ledger roll-up (written by notifyAdminOnTip).
+    tipCount: Number(u.tipCount) || 0,
+    tipTotal: Math.round((Number(u.tipTotal) || 0) * 100) / 100,
+    tipCurrency: String(u.tipCurrency || ""),
+    lastTipMs: u.lastTipAt?.toMillis?.() ?? null,
     // Engagement fields, straight off the server-computed profile — the
     // admin list and analytics sort/score on these without extra reads.
     weeklyHours: Number(p.weeklyHours) || 0,
@@ -2003,6 +2048,37 @@ exports.adminListUsers = onCall(
  * buckets, and whatever daily history the adminDaily snapshots have
  * accumulated. One callable, one payload — the client never scans anything.
  */
+/** Admin-only: the tip ledger, newest first, with each tipper's handle. */
+exports.adminListTips = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE] },
+  async (request) => {
+    assertAdmin(request);
+    const snap = await db.collection("tips").orderBy("createdAt", "desc").limit(300).get();
+    const uids = [...new Set(snap.docs.map((d) => d.data().uid).filter(Boolean))];
+    const names = {};
+    await Promise.all(uids.map(async (uid) => {
+      const u = await db.collection("users").doc(uid).get();
+      const d = u.data() || {};
+      names[uid] = d.username ? `@${d.username}` : sanitizeDisplayName(d.displayName, "");
+    }));
+    const tips = snap.docs.map((d) => {
+      const t = d.data();
+      return {
+        id: d.id,
+        uid: t.uid || "",
+        name: names[t.uid] || "",
+        productID: t.productID || "",
+        productName: t.productName || "",
+        amount: Number(t.amount) || 0,
+        currency: String(t.currency || "").toUpperCase(),
+        appVersion: t.appVersion || "",
+        createdAt: t.createdAt?.toMillis?.() ?? null,
+      };
+    });
+    return { ok: true, tips };
+  }
+);
+
 exports.adminAnalytics = onCall(
   { region: "us-central1", secrets: [ADMIN_PASSCODE], memory: "512MiB", timeoutSeconds: 120 },
   async (request) => {
