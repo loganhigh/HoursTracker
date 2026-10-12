@@ -9,7 +9,7 @@
       "localizations": [
         {
           "description": "A small tip to help keep Hour Tracker free and ad-free.",
-          "displayName": "Tip $0.99",
+          "displayName": "Small Tip",
           "locale": "en_US"
         }
       ],
@@ -24,7 +24,7 @@
       "localizations": [
         {
           "description": "A small tip to help keep Hour Tracker free and ad-free.",
-          "displayName": "Tip $1.99",
+          "displayName": "Nice Tip",
           "locale": "en_US"
         }
       ],
@@ -39,7 +39,7 @@
       "localizations": [
         {
           "description": "A small tip to help keep Hour Tracker free and ad-free.",
-          "displayName": "Tip $4.99",
+          "displayName": "Great Tip",
           "locale": "en_US"
         }
       ],
@@ -54,7 +54,7 @@
       "localizations": [
         {
           "description": "A small tip to help keep Hour Tracker free and ad-free.",
-          "displayName": "Tip $9.99",
+          "displayName": "Big Tip",
           "locale": "en_US"
         }
       ],
@@ -69,7 +69,7 @@
       "localizations": [
         {
           "description": "A small tip to help keep Hour Tracker free and ad-free.",
-          "displayName": "Tip $19.99",
+          "displayName": "Huge Tip",
           "locale": "en_US"
         }
       ],
@@ -84,7 +84,7 @@
       "localizations": [
         {
           "description": "A small tip to help keep Hour Tracker free and ad-free.",
-          "displayName": "Tip $49.99",
+          "displayName": "Legendary Tip",
           "locale": "en_US"
         }
       ],
