@@ -392,7 +392,6 @@ struct OnboardingView: View {
 
             VStack(spacing: AppSpacing.lg) {
                 VStack(spacing: AppSpacing.sm) {
-                    OwlView(pose: .idle, size: .form)
                     Button {
                         Haptics.lightTap()
                         showingPhotoPicker = true

@@ -110,9 +110,7 @@ struct GlobalLeaderboardView: View {
             ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: AppSpacing.sm) {
-                    let owl = OwlLines.globalRank(myTracker?.rank)
                     GlobalRankHeroCard(rank: myTracker?.rank)
-                        .owlStanding(owl.pose)
                         .cardAppear(index: 0, group: "globalBoard")
 
                     VerifiedReviewNote(isVerified: verified.isVerified) {

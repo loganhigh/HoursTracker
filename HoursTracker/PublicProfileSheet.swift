@@ -97,7 +97,9 @@ struct PublicProfileSheet: View {
                     // their tier colour.
                     prestigeCard
                         .owlPeek(.peek, size: .header, alignment: .center, scarfTint: accent)
-                        .padding(.top, OwlPerchMetrics.headerClearance - AppSpacing.md)
+                        // Clearance plus a gap so the owl's head sits clear of
+                        // the name and flag above.
+                        .padding(.top, OwlPerchMetrics.headerClearance + AppSpacing.xs)
                     statsStrip
                     if let glimpse, glimpse.shareBadges, !glimpse.topBadges.isEmpty {
                         badgesCard(glimpse.topBadges)

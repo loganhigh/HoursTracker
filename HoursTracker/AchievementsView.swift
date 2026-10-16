@@ -99,15 +99,7 @@ struct AchievementsView: View {
         let hasNoBadges = earnedBadges.isEmpty && ceoBadge == nil && developerBadge == nil
 
         return VStack(spacing: AppSpacing.xl) {
-            // One owl: the empty state's when there are no badges yet,
-            // otherwise perched on the summary card.
-            if hasNoBadges {
-                AchievementsSummaryCard(earned: earnedCount, total: totalCount)
-            } else {
-                let owl = OwlLines.badges(earned: earnedCount, total: totalCount)
-                AchievementsSummaryCard(earned: earnedCount, total: totalCount)
-                    .owlStanding(owl.pose)
-            }
+            AchievementsSummaryCard(earned: earnedCount, total: totalCount)
 
             if let nextUp {
                 NextUpBadgeCard(badge: nextUp)

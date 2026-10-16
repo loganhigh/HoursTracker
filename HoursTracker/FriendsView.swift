@@ -254,16 +254,8 @@ struct FriendsView: View {
                     .cardAppear(index: 0, group: "friends")
 
                 if !entries.isEmpty {
-                    if friendsService.friends.isEmpty {
-                        // The "No friends yet" empty state carries the owl.
-                        PayPeriodPodiumCard(entries: entries)
-                            .cardAppear(index: 1, group: "friends")
-                    } else {
-                        let owl = OwlLines.friends(myRank: entries.first(where: \.isMe)?.rank ?? 0, total: entries.count)
-                        PayPeriodPodiumCard(entries: entries)
-                            .owlStanding(owl.pose)
-                            .cardAppear(index: 1, group: "friends")
-                    }
+                    PayPeriodPodiumCard(entries: entries)
+                        .cardAppear(index: 1, group: "friends")
                 }
 
                 if let actionMessage {

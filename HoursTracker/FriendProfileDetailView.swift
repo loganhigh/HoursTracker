@@ -131,7 +131,9 @@ struct FriendProfileDetailView: View {
                     personalBestsCard(friend: friend, accent: accent)
                 }
                 .owlPeek(.peek, size: .header, alignment: .center, scarfTint: accent)
-                .padding(.top, OwlPerchMetrics.headerClearance - AppSpacing.lg)
+                // Clearance plus a gap so the owl's head sits clear of the
+                // prestige pill above.
+                .padding(.top, OwlPerchMetrics.headerClearance + AppSpacing.xs)
 
                 if friend.privacy.shareHours {
                     careerStatsCard(friend: friend, accent: accent)

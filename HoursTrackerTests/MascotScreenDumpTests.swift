@@ -43,20 +43,18 @@ final class MascotScreenDumpTests: XCTestCase {
         }
         entries.sort { $0.payPeriodHours > $1.payPeriodHours }
         for index in entries.indices { entries[index].rank = index + 1 }
-        let owl = OwlLines.friends(myRank: entries.first(where: \.isMe)?.rank ?? 0, total: entries.count)
 
         let trackers = [
             TopTracker(uid: "t1", name: "Ava", hours: 2140, countryCode: "CA", rank: 1, level: 30, prestige: 4),
             TopTracker(uid: "t2", name: "Mateo", hours: 1985, countryCode: "US", rank: 2, level: 27, prestige: 3),
             TopTracker(uid: "t3", name: "Sofia", hours: 1870, countryCode: "GB", rank: 3, level: 25, prestige: 2),
         ]
-        let global = OwlLines.globalRank(7)
 
         let screens: [(String, AnyView)] = [
             ("friends-hub", AnyView(ScrollView {
                 VStack(spacing: AppSpacing.md) {
                     FriendsHeroHeader(onAddFriend: {})
-                    PayPeriodPodiumCard(entries: entries).owlStanding(owl.pose)
+                    PayPeriodPodiumCard(entries: entries)
                     ForEach(entries) { LeaderboardRankRow(entry: $0, onOpen: {}, onNudge: nil) }
                 }
                 .padding(AppSpacing.md)
@@ -78,7 +76,7 @@ final class MascotScreenDumpTests: XCTestCase {
             ("global-board", AnyView(ScrollView {
                 VStack(spacing: AppSpacing.sm) {
                     GlobalLeaderboardHeader(onBack: {})
-                    GlobalRankHeroCard(rank: 7).owlStanding(global.pose)
+                    GlobalRankHeroCard(rank: 7)
                     VerifiedReviewNote(isVerified: false, onTap: {})
                     GlobalStatsStrip(trackerCount: 154, totalHours: 48_210, activeNow: 9)
                     GlobalPodiumRow(entries: trackers, currentUid: nil).padding(.top, AppSpacing.xs)
@@ -93,7 +91,6 @@ final class MascotScreenDumpTests: XCTestCase {
             // Stand-in for onboarding's photo page (a private page of OnboardingView).
             ("onboarding-photo", AnyView(VStack(spacing: AppSpacing.lg) {
                 VStack(spacing: AppSpacing.sm) {
-                    OwlView(pose: .idle, size: .form)
                     Circle().fill(AppColors.accent.opacity(0.18)).frame(width: 132, height: 132)
                         .overlay(Text("L").font(.system(size: 52, weight: .bold, design: .rounded))
                             .foregroundStyle(AppColors.accent))
