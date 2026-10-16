@@ -202,6 +202,22 @@ final class MascotScreenDumpTests: XCTestCase {
         }
     }
 
+    /// The tip jar and the Pro paywall (no StoreKit products in tests, so
+    /// both show their no-products state).
+    func testDumpSupportScreens() throws {
+        guard let dir = ProcessInfo.processInfo.environment["MASCOT_DUMP_DIR"] else {
+            throw XCTSkip("Set MASCOT_DUMP_DIR to dump support screen renders")
+        }
+        let screens: [(String, AnyView)] = [
+            ("tip-jar", AnyView(TipJarView())),
+            ("paywall", AnyView(PremiumUpgradeView())),
+        ]
+        for (name, view) in screens {
+            let data = Self.windowSnapshot(view.environmentObject(AuthService.shared), settle: 2.5)
+            try data?.write(to: URL(fileURLWithPath: "\(dir)/support-\(name).png"))
+        }
+    }
+
     private static func sampleFriend(uid: String, name: String, hours: Double, prestige: Int, streak: Int) -> FriendProfile {
         FriendProfile(
             uid: uid, displayName: name, level: 14, prestige: prestige, currentStreak: streak, bestStreak: 12,

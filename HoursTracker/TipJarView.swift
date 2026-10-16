@@ -72,10 +72,8 @@ struct TipJarView: View {
             VStack(spacing: AppSpacing.xl) {
                 Spacer(minLength: AppSpacing.lg)
 
-                Image(systemName: manager.didTip ? "heart.fill" : "heart")
-                    .font(.system(size: 52, weight: .semibold))
-                    .foregroundStyle(AppColors.accent)
-                    .symbolEffect(.bounce, value: manager.didTip)
+                // Heart while asking, cheering once the tip lands.
+                OwlView(pose: manager.didTip ? .cheer : .heart, size: .emptyState)
 
                 VStack(spacing: AppSpacing.sm) {
                     Text(manager.didTip ? "Thank you!" : "Support Hour Tracker")

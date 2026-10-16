@@ -86,10 +86,7 @@ struct PremiumUpgradeView: View {
 
     private var header: some View {
         VStack(spacing: 10) {
-            Image(systemName: "crown.fill")
-                .font(.system(size: 44, weight: .bold))
-                .foregroundStyle(AppColors.accentGradient)
-                .shadow(color: reduceMotion ? .clear : AppColors.glow, radius: 12)
+            OwlView(pose: .crown, size: .emptyState)
             Text("Hour Tracker Pro")
                 .appText(.title)
                 .foregroundStyle(AppColors.text)
@@ -165,7 +162,7 @@ struct PremiumUpgradeView: View {
     private var plansUnavailableNote: some View {
         VStack(spacing: AppSpacing.sm) {
             Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 26, weight: .medium))
+                .font(.title.weight(.medium))
                 .foregroundStyle(AppColors.subtext)
 
             Text("Plans aren't available right now")
@@ -232,7 +229,7 @@ struct PremiumUpgradeView: View {
             Button("Restore Purchases") {
                 Task { await runRestore() }
             }
-            .font(.system(size: 14, weight: .semibold))
+            .font(AppTypography.subheadline.weight(.semibold))
             .foregroundStyle(AppColors.subtext)
             .disabled(premium.isPurchasing || !premium.purchasesAvailable)
 
@@ -264,7 +261,7 @@ struct PremiumUpgradeView: View {
     private var activeState: some View {
         HStack(spacing: AppSpacing.sm) {
             Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 20, weight: .bold))
+                .font(.title3.weight(.bold))
                 .foregroundStyle(AppColors.positive)
             Text(premium.activeSubscription?.settingsStatusLine ?? "You're on Hour Tracker Pro")
                 .appText(.headline)
@@ -310,7 +307,7 @@ struct PremiumUpgradeView: View {
             Button(premium.isPremium ? "Debug: turn OFF Pro" : "Debug: turn ON Pro") {
                 premium.debugSetPremium(!premium.isPremium)
             }
-            .font(.system(size: 13, weight: .semibold))
+            .font(AppTypography.metricLabel.weight(.semibold))
             .foregroundStyle(AppColors.accent)
         }
     }
@@ -330,7 +327,7 @@ private struct PremiumPlanCard: View {
         Button(action: onSelect) {
             HStack(spacing: AppSpacing.sm) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(isSelected ? AppColors.accent : AppColors.faint)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -340,7 +337,7 @@ private struct PremiumPlanCard: View {
                             .foregroundStyle(AppColors.text)
                         if let savingsText {
                             Text(savingsText)
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .font(.caption2.weight(.bold))
                                 .foregroundStyle(AppColors.textOnAccent)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 3)
