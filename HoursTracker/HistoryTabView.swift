@@ -84,7 +84,7 @@ struct HistoryTabView: View {
                             .cardAppear(index: groupIndex, group: "history")
                         }
                     }
-                    .owlPeek(owl.pose, size: .header)
+                    .owlPeek(owl.pose, size: .header, alignment: .center)
                     .padding(.top, OwlView.Size.header.height - OwlPerchMetrics.feetOverlap / 2 - AppSpacing.md)
                 }
             }
