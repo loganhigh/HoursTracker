@@ -13,11 +13,12 @@ import SwiftUI
 struct OwlCompanionHeader: View {
     let pose: OwlPose
     let line: String
+    var size: OwlView.Size = .companion
     var scarfTint: Color? = nil
 
     var body: some View {
         HStack(alignment: .center, spacing: AppSpacing.xxs) {
-            OwlView(pose: pose, size: .companion, scarfTint: scarfTint)
+            OwlView(pose: pose, size: size, scarfTint: scarfTint)
             OwlSpeechBubble(text: line, tail: .leading)
                 .frame(maxWidth: 240, alignment: .leading)
                 .accessibilityLabel(line)
@@ -31,12 +32,13 @@ struct OwlCompanionHeader: View {
 struct OwlPerch<Content: View>: View {
     let pose: OwlPose
     let line: String
+    var size: OwlView.Size = .companion
     var scarfTint: Color? = nil
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         VStack(spacing: -OwlPerchMetrics.feetOverlap) {
-            OwlCompanionHeader(pose: pose, line: line, scarfTint: scarfTint)
+            OwlCompanionHeader(pose: pose, line: line, size: size, scarfTint: scarfTint)
                 .zIndex(1)
             content()
         }

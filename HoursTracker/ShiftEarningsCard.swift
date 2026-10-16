@@ -107,6 +107,8 @@ struct ShiftEarningsView: View {
     /// shared without showing pay. Remembered between shifts.
     @AppStorage("shift_card_hide_pay") private var hidePay = false
 
+    private static let owlSize = OwlView.Size(height: 110)
+
     /// Read live from the store: weather for a backdated shift lands a moment
     /// after the card opens, and the card (and share image) update with it.
     private var weather: WeatherSnapshot? {
@@ -131,7 +133,11 @@ struct ShiftEarningsView: View {
                             payToggle
                         }
                         Spacer(minLength: 0)
+                        // The owl cheers from the top of the card (on screen
+                        // only — the card itself stays owl-free).
                         ShiftEarningsCard(earnings: earnings, weather: weather, showPay: !hidePay)
+                            .owlPeek(.cheer, size: Self.owlSize, alignment: .center)
+                            .padding(.top, Self.owlSize.height - OwlPerchMetrics.feetOverlap / 2)
                         if !hidePay {
                             Text(footnote)
                                 .font(.system(size: 13, weight: .medium, design: .rounded))

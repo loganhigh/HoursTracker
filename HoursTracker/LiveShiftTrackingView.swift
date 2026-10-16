@@ -17,7 +17,8 @@ import SwiftUI
 // the Add Shift chooser, since `AddShiftEntryView` re-renders once
 // `LiveShiftManager.activeShift` goes nil.
 //
-// No new glow here — the hero card on Home owns this screen's one glow.
+// No new glow here — the hero card on Home owns this screen's one glow. The
+// owl perches on the timer card: coffee while working, asleep on break.
 
 struct LiveShiftTrackingView: View {
     @ObservedObject var store: HoursStore
@@ -56,8 +57,11 @@ struct LiveShiftTrackingView: View {
             Spacer(minLength: AppSpacing.md)
 
             if let shift = liveShift.activeShift {
-                activeCard(shift)
-                    .padding(.horizontal, AppSpacing.lg)
+                let owl = OwlLines.liveShift(isOnBreak: shift.isOnBreak, isStale: shift.isStale)
+                OwlPerch(pose: owl.pose, line: owl.line, size: OwlView.Size(height: 110)) {
+                    activeCard(shift)
+                }
+                .padding(.horizontal, AppSpacing.lg)
             }
 
             Spacer(minLength: AppSpacing.md)
@@ -78,30 +82,7 @@ struct LiveShiftTrackingView: View {
     }
 
     private var header: some View {
-        HStack(spacing: AppSpacing.sm) {
-            Button {
-                Haptics.lightTap()
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(AppColors.subtext)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        Circle()
-                            .fill(AppColors.card)
-                            .overlay(Circle().stroke(AppColors.stroke, lineWidth: 1))
-                    )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close")
-
-            Text("Live Shift")
-                .appText(.title)
-                .foregroundStyle(AppColors.text)
-
-            Spacer()
-        }
+        AddShiftSheetHeader(title: "Live Shift") { dismiss() }
     }
 
     // MARK: Active
@@ -177,7 +158,7 @@ struct LiveShiftTrackingView: View {
     private var staleRow: some View {
         HStack(spacing: AppSpacing.sm) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 13, weight: .bold))
+                .font(.caption.weight(.bold))
                 .foregroundStyle(AppColors.warning)
 
             Text("Still clocked in since yesterday?")
@@ -191,14 +172,14 @@ struct LiveShiftTrackingView: View {
             Button("Clock out now") {
                 performClockOut()
             }
-            .font(.system(size: 12, weight: .bold))
+            .font(AppTypography.caption.weight(.bold))
             .foregroundStyle(AppColors.accent)
 
             Button("Discard") {
                 Haptics.lightTap()
                 showingDiscardConfirm = true
             }
-            .font(.system(size: 12, weight: .bold))
+            .font(AppTypography.caption.weight(.bold))
             .foregroundStyle(AppColors.negative)
         }
         .padding(.horizontal, AppSpacing.sm)

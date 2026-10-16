@@ -85,6 +85,18 @@ final class MascotAssetTests: XCTestCase {
         XCTAssertLessThanOrEqual(line.count, OwlLines.maxLength)
     }
 
+    func testLiveShiftOwlFollowsTheTimer() {
+        let working = OwlLines.liveShift(isOnBreak: false, isStale: false)
+        let onBreak = OwlLines.liveShift(isOnBreak: true, isStale: false)
+        let stale = OwlLines.liveShift(isOnBreak: true, isStale: true)
+        XCTAssertEqual(working.pose, .coffee)
+        XCTAssertEqual(onBreak.pose, .sleep)
+        XCTAssertEqual(stale.pose, .oops)
+        for line in [working.line, onBreak.line, stale.line] {
+            XCTAssertLessThanOrEqual(line.count, OwlLines.maxLength, line)
+        }
+    }
+
     func testLineStaysTheSameAllDay() {
         let cal = Calendar(identifier: .gregorian)
         let morning = cal.date(from: DateComponents(year: 2026, month: 10, day: 15, hour: 6))!

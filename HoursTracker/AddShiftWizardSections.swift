@@ -7,6 +7,89 @@ import SwiftUI
 // the saved-locations picker sheet. Dark theme only — flat fills, hairline
 // strokes, `tint.opacity(0.14)` icon squares, no glows.
 
+// MARK: - Sheet header (close/back button, title, optional owl)
+
+/// The add-shift flow's custom header: a round close/back button, the title,
+/// and the owl on the right whose pose follows what's being logged. Shared by
+/// the wizard and the live-shift screen.
+struct AddShiftSheetHeader: View {
+    let title: String
+    var showsBack: Bool = false
+    var owlPose: OwlPose? = nil
+    let onTap: () -> Void
+
+    var body: some View {
+        HStack(spacing: AppSpacing.sm) {
+            Button {
+                Haptics.lightTap()
+                onTap()
+            } label: {
+                Image(systemName: showsBack ? "chevron.left" : "xmark")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppColors.subtext)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        Circle()
+                            .fill(AppColors.card)
+                            .overlay(Circle().stroke(AppColors.stroke, lineWidth: 1))
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(showsBack ? "Back" : "Close")
+
+            Text(title)
+                .appText(.title)
+                .foregroundStyle(AppColors.text)
+
+            Spacer()
+
+            if let owlPose {
+                OwlView(pose: owlPose, size: .header)
+            }
+        }
+        .frame(minHeight: owlPose == nil ? nil : OwlView.Size.header.height)
+    }
+}
+
+// MARK: - Night shift toggle
+
+/// Shown only for overnight work shifts. When on, saving creates two entries
+/// split at midnight so each day's pay rules (weekend premiums, per-day
+/// overtime) apply to the hours actually worked on that day.
+struct AddShiftNightShiftToggle: View {
+    @Binding var isOn: Bool
+    /// The shift's own weekday, for the "off" explanation.
+    let weekday: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: $isOn) {
+                HStack(spacing: AppSpacing.xs) {
+                    Image(systemName: "moon.haze.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppColors.accent)
+                    Text("Night shift")
+                        .appText(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(AppColors.text)
+                }
+            }
+            .tint(AppColors.accent)
+
+            Text(isOn
+                 ? "Saves as two shifts — hours after midnight count on the next day's rates."
+                 : "Off: the whole shift counts on \(weekday)'s rates.")
+                .appText(.caption)
+                .foregroundStyle(AppColors.subtext)
+        }
+        .padding(AppSpacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                .fill(AppColors.card)
+        )
+    }
+}
+
 // MARK: - Formatting
 
 enum AddShiftFormat {
@@ -157,7 +240,7 @@ struct AddShiftConfirmationPanel: View {
         AddShiftPanel(tint: isValid ? AppColors.positive : AppColors.warning) {
             VStack(spacing: AppSpacing.xs) {
                 Image(systemName: isValid ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(isValid ? AppColors.positive : AppColors.warning)
                 VStack(spacing: 2) {
                     Text(title)
@@ -212,7 +295,7 @@ struct AddShiftLocationRow: View {
                 Spacer(minLength: AppSpacing.xs)
 
                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                    .font(.system(size: 20, weight: .regular))
+                    .font(.title3)
                     .foregroundStyle(isSelected ? AppColors.accent : AppColors.faint)
             }
             .padding(.vertical, 10)

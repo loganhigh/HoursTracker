@@ -33,7 +33,7 @@ struct HolidayPayPicker: View {
         } label: {
             HStack(alignment: .top, spacing: AppSpacing.sm) {
                 Image(systemName: option.icon)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(isSelected ? AppColors.accent : AppColors.subtext)
                     .frame(width: 22)
                     .padding(.top, 1)
@@ -49,7 +49,7 @@ struct HolidayPayPicker: View {
                 }
                 Spacer(minLength: AppSpacing.xs)
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(isSelected ? AppColors.accent : AppColors.faint)
             }
             .padding(.vertical, 10)

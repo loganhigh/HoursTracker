@@ -188,8 +188,10 @@ struct EntryEditorView: View {
                             EntryDeleteRow { showDeleteConfirm = true }
                         }
                     }
+                    // A small owl peeks over the first card.
+                    .owlPeek(.peek)
                     .padding(.horizontal, AppSpacing.lg)
-                    .padding(.top, AppSpacing.xxs)
+                    .padding(.top, AppSpacing.xxs + OwlPerchMetrics.peekClearance)
                     .padding(.bottom, AppSpacing.xl)
                 }
                 .scrollDismissesKeyboard(.interactively)
@@ -219,39 +221,20 @@ struct EntryEditorView: View {
         .onChange(of: breakMinutes) { _, _ in invalidatePresetIfNeeded() }
     }
 
-    // MARK: - Header / footer
+    // MARK: - Header / footer (EntryEditorChrome.swift)
 
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                if isEditing {
-                    Text("Editing")
-                        .appText(.eyebrow)
-                        .foregroundStyle(AppColors.accent)
-                }
-                Text(isEditing ? "Edit Shift" : "Add Shift")
-                    .appText(.title)
-                    .foregroundStyle(AppColors.text)
-            }
-            Spacer()
-            Button("Cancel") {
-                Haptics.lightTap()
-                dismiss()
-            }
-            .appText(.subheadline)
-            .foregroundStyle(AppColors.subtext)
-            .padding(.vertical, AppSpacing.xxs)
-        }
+        EntryEditorHeader(isEditing: isEditing) { dismiss() }
     }
 
     private var footer: some View {
-        VStack(spacing: AppSpacing.sm) {
-            EntryValidationLine(isValid: canSave, message: validationMessage)
-            Button(isEditing ? "Save Changes" : "Save Shift") { save() }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(!canSave || showSaveSuccess)
-                .opacity(canSave ? 1 : 0.55)
-        }
+        EntryEditorFooter(
+            isEditing: isEditing,
+            canSave: canSave,
+            isSaving: showSaveSuccess,
+            validationMessage: validationMessage,
+            onSave: save
+        )
     }
 
     // MARK: - Presets (add mode only)

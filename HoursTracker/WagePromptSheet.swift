@@ -32,9 +32,7 @@ struct WagePromptSheet: View {
     var body: some View {
         VStack(spacing: AppSpacing.lg) {
             VStack(spacing: 6) {
-                Image(systemName: "dollarsign.circle.fill")
-                    .font(.system(size: 34, weight: .semibold))
-                    .foregroundStyle(AppColors.accent)
+                OwlView(pose: .point, size: .header)
                 Text("What's your hourly wage?")
                     .appText(.title)
                     .foregroundStyle(AppColors.text)
@@ -52,7 +50,7 @@ struct WagePromptSheet: View {
                     .foregroundStyle(AppColors.subtext)
                 TextField("0.00", text: $text)
                     .keyboardType(.decimalPad)
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .font(AppTypography.heroNumber)
                     .foregroundStyle(AppColors.text)
                     .focused($focused)
                     .tint(AppColors.accent)
@@ -89,7 +87,7 @@ struct WagePromptSheet: View {
         }
         .padding(.horizontal, AppSpacing.lg)
         .background(AppColors.bg.ignoresSafeArea())
-        .presentationDetents([.height(400)])
+        .presentationDetents([.height(424)])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(false)
         .onAppear { focused = true }

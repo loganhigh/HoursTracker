@@ -38,6 +38,13 @@ enum OwlLines {
         return pick(["Log today's shift when you're done.", "Ready when you are.", "Clock out, then log it here."], seed: daySeed)
     }
 
+    /// Live shift: what the owl does while the timer runs.
+    static func liveShift(isOnBreak: Bool, isStale: Bool) -> (pose: OwlPose, line: String) {
+        if isStale { return (.oops, "Still on the clock?") }
+        if isOnBreak { return (.sleep, "Enjoy your break.") }
+        return (.coffee, "Clocked in. I'll keep the time.")
+    }
+
     /// Stable index for "today" so a line doesn't change between renders.
     static func daySeed(for date: Date = Date(), calendar: Calendar = .current) -> Int {
         let origin = calendar.startOfDay(for: Date(timeIntervalSinceReferenceDate: 0))

@@ -196,29 +196,19 @@ struct AddShiftWizardView: View {
     // MARK: - Header / footer
 
     private var header: some View {
-        HStack(spacing: AppSpacing.sm) {
-            Button {
-                Haptics.lightTap()
-                if step == .when { dismiss() } else { goBack() }
-            } label: {
-                Image(systemName: step == .when ? "xmark" : "chevron.left")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(AppColors.subtext)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        Circle()
-                            .fill(AppColors.card)
-                            .overlay(Circle().stroke(AppColors.stroke, lineWidth: 1))
-                    )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(step == .when ? "Close" : "Back")
+        AddShiftSheetHeader(title: "Add Shift", showsBack: step == .review, owlPose: owlPose) {
+            if step == .when { dismiss() } else { goBack() }
+        }
+    }
 
-            Text("Add Shift")
-                .appText(.title)
-                .foregroundStyle(AppColors.text)
-
-            Spacer()
+    /// The header owl follows what's being logged, and on Review reacts to
+    /// whether the shift checks out.
+    private var owlPose: OwlPose {
+        if step == .review { return canSave ? .clipboard : .oops }
+        switch shiftKind {
+        case .work: return holidayRule == nil ? .coffee : .calendar
+        case .offDay: return .sleep
+        case .holiday: return .calendar
         }
     }
 
@@ -318,7 +308,10 @@ struct AddShiftWizardView: View {
         }
 
         if shiftKind == .work && isOvernight {
-            splitAtMidnightToggle
+            AddShiftNightShiftToggle(
+                isOn: $splitOvernightAtMidnight,
+                weekday: date.formatted(.dateTime.weekday(.wide))
+            )
         }
 
         // Sits in the content flow right under Total Time rather than in a
@@ -563,37 +556,6 @@ struct AddShiftWizardView: View {
 
     private var isOvernight: Bool {
         end.timeIntervalSince(start) < 0
-    }
-
-    /// Shown only for overnight work shifts. When on, saving creates two
-    /// entries split at midnight so each day's pay rules (weekend premiums,
-    /// per-day overtime) apply to the hours actually worked on that day.
-    private var splitAtMidnightToggle: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Toggle(isOn: $splitOvernightAtMidnight) {
-                HStack(spacing: 8) {
-                    Image(systemName: "moon.haze.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(AppColors.accent)
-                    Text("Night shift")
-                        .appText(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(AppColors.text)
-                }
-            }
-            .tint(AppColors.accent)
-
-            Text(splitOvernightAtMidnight
-                 ? "Saves as two shifts — hours after midnight count on the next day's rates."
-                 : "Off: the whole shift counts on \(date.formatted(.dateTime.weekday(.wide)))'s rates.")
-                .appText(.caption)
-                .foregroundStyle(AppColors.subtext)
-        }
-        .padding(AppSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                .fill(AppColors.card)
-        )
     }
 
     /// Whether this save will actually produce two entries.

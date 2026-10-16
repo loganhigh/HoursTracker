@@ -20,6 +20,8 @@ struct OwlView: View {
         static let form = Size(height: 88)
         /// Perched on a tab's hero card with a speech bubble.
         static let companion = Size(height: 76)
+        /// Beside the title in a custom sheet header (add shift, wage prompt).
+        static let header = Size(height: 56)
         /// Peeking over the first card on sheets and editors.
         static let peek = Size(height: 44)
     }
