@@ -8,10 +8,49 @@ struct EntryRowView: View {
 
     /// When set, shows **PayDay** / **Cutoff** under the hours when the entry falls on those cheque dates.
     var paySettings: PaySettings? = nil
+    /// Inside a grouped card (Home's Recent Shifts): no card of its own, a
+    /// leading weekday circle, hairlines supplied by the parent. History
+    /// still uses the stand-alone card.
+    var grouped: Bool = false
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
+        if grouped {
+            row
+                .padding(.vertical, AppSpacing.sm)
+                .padding(.horizontal, AppSpacing.md)
+                .contentShape(Rectangle())
+        } else {
+            row
+                .padding(.vertical, AppSpacing.sm + 2)
+                .padding(.horizontal, AppSpacing.md)
+                .appCard(radius: AppRadius.md)
+        }
+    }
+
+    /// Mon/Tue/… in a small tinted circle; off days and holidays take their
+    /// status colour so the list scans by colour before you read it.
+    private var dayCircle: some View {
+        let tint: Color = isHoliday ? AppColors.positive : (entry.isOffDay ? AppColors.negative : AppColors.accent)
+        return Text(Self.weekdayFormatter.string(from: entry.date))
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(tint)
+            .frame(width: 36, height: 36)
+            .background(Circle().fill(tint.opacity(0.14)))
+    }
+
+    private static let weekdayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEE"
+        return f
+    }()
+
+    private var row: some View {
         HStack(alignment: .center, spacing: AppSpacing.sm) {
+            // At AX sizes the circle's 3 letters no longer fit and the date
+            // line names the day anyway, so it steps aside for the text.
+            if grouped && !typeSize.isAccessibilitySize { dayCircle }
+
             // LEFT: Date + time range
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
@@ -68,9 +107,6 @@ struct EntryRowView: View {
                     .foregroundStyle(AppColors.faint)
             }
         }
-        .padding(.vertical, AppSpacing.sm + 2)
-        .padding(.horizontal, AppSpacing.md)
-        .appCard(radius: AppRadius.md)
     }
 
     // MARK: - Pay period markers

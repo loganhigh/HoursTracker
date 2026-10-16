@@ -39,8 +39,13 @@ struct RecentShiftsSection: View {
                 )
                 .padding(.vertical, AppSpacing.xs)
             } else {
-                VStack(spacing: AppSpacing.xs + 2) {
-                    ForEach(recentEntries) { entry in
+                // One grouped card: hairline rows, then View all as its
+                // footer row — a ledger, not a stack of five cards.
+                VStack(spacing: 0) {
+                    ForEach(Array(recentEntries.enumerated()), id: \.element.id) { index, entry in
+                        if index > 0 {
+                            Divider().overlay(AppColors.stroke).padding(.leading, AppSpacing.md + 36 + AppSpacing.sm)
+                        }
                         Button {
                             Haptics.lightTap()
                             onSelect(entry)
@@ -50,14 +55,18 @@ struct RecentShiftsSection: View {
                                 breakdown: store.payBreakdown(for: entry),
                                 currencyCode: store.paySettings.currencyCode,
                                 showPay: store.paySettings.showPayCalculations,
-                                paySettings: store.paySettings
+                                paySettings: store.paySettings,
+                                grouped: true
                             )
                         }
                         .buttonStyle(PremiumPressStyle())
                     }
 
+                    Divider().overlay(AppColors.stroke)
                     AppLinkButton(title: "View all", action: onViewAll)
+                        .padding(AppSpacing.sm)
                 }
+                .appCard()
             }
         }
         .frame(maxWidth: .infinity)
@@ -96,12 +105,20 @@ struct YearlyOverviewSection: View {
             SectionEyebrow("Yearly Overview")
 
             VStack(spacing: AppSpacing.md) {
-                Text(verbatim: "\(Calendar.current.component(.year, from: Date()))")
-                    .appText(.title)
-                    .foregroundStyle(AppColors.text)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                // Year as the eyebrow, the year's hours as the number: the
+                // chart then explains where they came from.
+                let data = monthlyHoursByMonth
+                VStack(spacing: 2) {
+                    Text(verbatim: "\(Calendar.current.component(.year, from: Date()))")
+                        .appText(.eyebrow)
+                        .foregroundStyle(AppColors.subtext)
+                    Text(AppTheme.Format.hours(data.reduce(0) { $0 + $1.hours }))
+                        .font(AppTypography.metricValue)
+                        .foregroundStyle(AppColors.text)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
 
-                MonthlyOverviewChart(data: monthlyHoursByMonth)
+                MonthlyOverviewChart(data: data)
             }
             .frame(maxWidth: .infinity)
             .padding(AppSpacing.md)
@@ -155,14 +172,10 @@ struct MonthlyOverviewChart: View {
                                 .frame(maxWidth: .infinity)
                                 .opacity(item.hours > 0 ? 1 : 0)
 
+                            // Flat accent bars; the gridlines behind them do
+                            // the depth work.
                             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [AppColors.accent, AppColors.accent2],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
+                                .fill(AppColors.accent)
                                 .frame(
                                     width: barWidth,
                                     height: appeared && item.hours > 0
@@ -185,6 +198,20 @@ struct MonthlyOverviewChart: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                // Faint dotted gridlines at quarter heights of the plot area.
+                .background(alignment: .bottom) {
+                    VStack(spacing: 0) {
+                        ForEach(0..<4, id: \.self) { _ in
+                            Rectangle()
+                                .stroke(style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
+                                .foregroundStyle(AppColors.stroke)
+                                .frame(height: 1)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    .frame(height: chartHeight - labelReserve - 8)
+                    .allowsHitTesting(false)
+                }
             }
             .frame(height: chartHeight)
 

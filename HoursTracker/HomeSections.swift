@@ -15,6 +15,7 @@ import SwiftUI
 struct TodayHeroCard: View {
     @ObservedObject var store: HoursStore
     @ObservedObject private var weather = WeatherService.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
 
     private static let todayFormatter: DateFormatter = {
@@ -23,19 +24,52 @@ struct TodayHeroCard: View {
         return f
     }()
 
+    // MARK: Today's hours (read-only views of existing data)
+
+    private var todayEntries: [WorkEntry] {
+        let cal = Calendar.current
+        return store.entries.filter { cal.isDateInToday($0.date) }
+    }
+
+    private var todayHours: Double {
+        todayEntries.filter { !$0.isOffDay }.reduce(0) { $0 + $1.paidHours }
+    }
+
+    private var isDayOff: Bool {
+        !todayEntries.isEmpty && todayEntries.allSatisfy(\.isOffDay)
+    }
+
+    /// The card leads with what today amounts to: the hours logged, "Day off",
+    /// or an invitation when nothing is logged yet.
+    private var leadText: String {
+        if isDayOff { return "Day off" }
+        return todayHours > 0 ? AppTheme.Format.hours(todayHours) : "No shift yet"
+    }
+
     var body: some View {
-        VStack(spacing: AppSpacing.sm) {
+        VStack(spacing: AppSpacing.xs) {
             Text("Today")
                 .appText(.eyebrow)
                 .foregroundStyle(AppColors.accent)
 
-            Text(Self.todayFormatter.string(from: Date()))
-                .font(AppTypography.title.weight(.heavy))
+            Text(leadText)
+                .font(.system(.largeTitle, design: .rounded, weight: .heavy))
+                .monospacedDigit()
                 .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                // Counts up when a shift lands; static under Reduce Motion.
+                .contentTransition(reduceMotion ? .identity : .numericText())
+                .animation(reduceMotion ? nil : AppMotion.Spring.smooth, value: leadText)
+
+            Text(Self.todayFormatter.string(from: Date()))
+                .appText(.headline)
+                .foregroundStyle(AppColors.subtext)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 
             weatherRow
+                .padding(.top, AppSpacing.xxs)
         }
         .padding(AppSpacing.lg)
         .frame(maxWidth: .infinity)
@@ -312,28 +346,42 @@ struct HomeStatTriplet: View {
 
     private var monthHours: Double { store.monthTotalHours(monthDate: Date()) }
 
+    /// How far through the live cheque we are, by calendar days. The tile's
+    /// bar shows the cheque filling up as payday approaches.
+    private var chequeProgress: Double {
+        let cycle = store.currentPayCycle()
+        let total = cycle.end.timeIntervalSince(cycle.start)
+        guard total > 0 else { return 0 }
+        return min(max(Date().timeIntervalSince(cycle.start) / total, 0), 1)
+    }
+
     var body: some View {
         HStack(spacing: AppSpacing.xs + 2) {
             HomeStatTile(label: "This Week", value: AppTheme.Format.hours(weekHours))
-            HomeStatTile(label: "This Cheque", value: AppTheme.Format.hours(chequeHours))
+            // The cheque is the one tile in the tier colour: it's the number
+            // that turns into money, so it gets the accent and the progress.
+            HomeStatTile(label: "This Cheque", value: AppTheme.Format.hours(chequeHours), progress: chequeProgress)
             HomeStatTile(label: "This Month", value: AppTheme.Format.hours(monthHours))
         }
     }
 }
 
-/// One quiet stat tile: eyebrow label, monospaced numeral. Two text lines
-/// max — nothing else.
+/// One stat tile: eyebrow label, monospaced numeral. With `progress` it
+/// becomes the row's accent tile — tier-tinted fill and a thin bar.
 struct HomeStatTile: View {
     let label: String
     /// Pre-formatted display value — "72.63h" or a bare day count.
     let value: String
+    var progress: Double? = nil
     @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var isAccent: Bool { progress != nil }
 
     var body: some View {
         VStack(spacing: AppSpacing.xxs) {
             Text(label)
                 .appText(.eyebrow)
-                .foregroundStyle(AppColors.subtext)
+                .foregroundStyle(isAccent ? AppColors.accent : AppColors.subtext)
                 // Three tiles abreast: one line normally, two at AX sizes
                 // where "THIS CHEQUE" no longer fits even scaled down.
                 .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
@@ -345,10 +393,20 @@ struct HomeStatTile: View {
                 .foregroundStyle(AppColors.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+
+            if let progress {
+                AppProgressBar(progress: progress, track: AppColors.accent.opacity(0.18))
+                    .padding(.horizontal, AppSpacing.sm)
+                    .padding(.top, AppSpacing.xxs)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, AppSpacing.md)
         .padding(.horizontal, AppSpacing.xxs)
-        .appCard(radius: AppRadius.md)
+        .appCard(radius: AppRadius.md, fill: isAccent ? AppColors.accent.opacity(0.14) : nil)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                .stroke(AppColors.accent.opacity(isAccent ? 0.35 : 0), lineWidth: 1)
+        )
     }
 }
