@@ -129,9 +129,6 @@ struct EarningsGoalEditorSheet: View {
                                     .stroke(AppColors.stroke, lineWidth: 1)
                             )
                     )
-                    // An editor, so the owl peeks over the form card.
-                    .owlPeek()
-                    .padding(.top, OwlPerchMetrics.peekClearance)
 
                     Button(existing == nil ? "Add goal" : "Save changes", action: save)
                         .buttonStyle(PrimaryButtonStyle())

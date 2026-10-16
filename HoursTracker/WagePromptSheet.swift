@@ -32,7 +32,9 @@ struct WagePromptSheet: View {
     var body: some View {
         VStack(spacing: AppSpacing.lg) {
             VStack(spacing: 6) {
-                OwlView(pose: .point, size: .header)
+                Image(systemName: "dollarsign.circle.fill")
+                    .font(.largeTitle.weight(.semibold))
+                    .foregroundStyle(AppColors.accent)
                 Text("What's your hourly wage?")
                     .appText(.title)
                     .foregroundStyle(AppColors.text)
@@ -87,7 +89,7 @@ struct WagePromptSheet: View {
         }
         .padding(.horizontal, AppSpacing.lg)
         .background(AppColors.bg.ignoresSafeArea())
-        .presentationDetents([.height(424)])
+        .presentationDetents([.height(400)])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(false)
         .onAppear { focused = true }

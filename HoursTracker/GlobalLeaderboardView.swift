@@ -314,36 +314,30 @@ struct CountryFlagPickerView: View {
 
     var body: some View {
         List {
-            Section {
-                ForEach(filteredRegions, id: \.code) { region in
-                    Button {
-                        guard region.code != CountryFlag.storedCode else { return }
-                        Haptics.lightTap()
-                        CountryFlag.storedCode = region.code
-                        store.syncProfileSnapshotToCloud()
-                        onSelected?()
-                        dismiss()
-                    } label: {
-                        HStack(spacing: 12) {
-                            if let flag = CountryFlag.emoji(for: region.code) {
-                                Text(flag)
-                                    .font(.title2)
-                            }
-                            Text(region.name)
-                                .foregroundStyle(AppColors.text)
-                            Spacer()
-                            if region.code == selectedCode {
-                                Image(systemName: "checkmark")
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(AppColors.accent)
-                            }
+            ForEach(filteredRegions, id: \.code) { region in
+                Button {
+                    guard region.code != CountryFlag.storedCode else { return }
+                    Haptics.lightTap()
+                    CountryFlag.storedCode = region.code
+                    store.syncProfileSnapshotToCloud()
+                    onSelected?()
+                    dismiss()
+                } label: {
+                    HStack(spacing: 12) {
+                        if let flag = CountryFlag.emoji(for: region.code) {
+                            Text(flag)
+                                .font(.title2)
+                        }
+                        Text(region.name)
+                            .foregroundStyle(AppColors.text)
+                        Spacer()
+                        if region.code == selectedCode {
+                            Image(systemName: "checkmark")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(AppColors.accent)
                         }
                     }
                 }
-            } header: {
-                OwlCompanionHeader(pose: .pin, line: "Where in the world are you?")
-                    .textCase(nil)
-                    .padding(.bottom, AppSpacing.xs)
             }
         }
         .searchable(text: $searchText, prompt: "Search countries")

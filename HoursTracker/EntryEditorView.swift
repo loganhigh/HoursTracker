@@ -188,10 +188,8 @@ struct EntryEditorView: View {
                             EntryDeleteRow { showDeleteConfirm = true }
                         }
                     }
-                    // A small owl peeks over the first card.
-                    .owlPeek(.peek)
                     .padding(.horizontal, AppSpacing.lg)
-                    .padding(.top, AppSpacing.xxs + OwlPerchMetrics.peekClearance)
+                    .padding(.top, AppSpacing.xxs)
                     .padding(.bottom, AppSpacing.xl)
                 }
                 .scrollDismissesKeyboard(.interactively)

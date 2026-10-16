@@ -44,17 +44,12 @@ struct AddShiftLocationPickerSheet: View {
                 AppColors.bg.ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: AppSpacing.md) {
-                        // The pin owl stands on whichever panel comes first.
                         if !ordered.isEmpty {
                             searchField
-                                .owlPeek(.pin)
-                                .padding(.top, OwlPerchMetrics.peekClearance)
                         }
 
                         if ordered.isEmpty {
                             emptyStateNote
-                                .owlPeek(.pin)
-                                .padding(.top, OwlPerchMetrics.peekClearance)
                         } else if filtered.isEmpty {
                             noMatchesNote
                         } else {

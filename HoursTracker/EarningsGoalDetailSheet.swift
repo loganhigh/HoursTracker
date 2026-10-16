@@ -66,11 +66,6 @@ struct EarningsGoalDetailSheet: View {
             Section {
                 summary(row)
                     .listRowBackground(AppColors.card)
-            } header: {
-                let owl = OwlLines.goal(fraction: row.fraction, isComplete: row.isComplete)
-                OwlCompanionHeader(pose: owl.pose, line: owl.line)
-                    .textCase(nil)
-                    .padding(.bottom, AppSpacing.xs)
             }
 
             Section {

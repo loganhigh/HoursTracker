@@ -69,9 +69,6 @@ struct CompanyProfileView: View {
                 }
                 .padding(16)
                 .background(cardBackground)
-                // An editor, so the owl peeks over the form card.
-                .owlPeek()
-                .padding(.top, OwlPerchMetrics.peekClearance)
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)

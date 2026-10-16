@@ -32,13 +32,9 @@ struct UsernameSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: AppSpacing.lg) {
-                // The keyboard is up from the start, so the owl stays at
-                // header size rather than the onboarding form size.
-                OnboardingHeader(
-                    pose: mode == .firstTime ? .wave : .idle,
+                OnboardingTitle(
                     title: mode == .firstTime ? "Pick your username" : "Change your username",
-                    subline: "It's how friends find you and your name everywhere in Hour Tracker.",
-                    owlSize: .header
+                    subline: "It's how friends find you and your name everywhere in Hour Tracker."
                 )
                 .padding(.horizontal, AppSpacing.xl)
 
@@ -79,7 +75,7 @@ struct UsernameSheet: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(.top, AppSpacing.md)
+            .padding(.top, AppSpacing.xl)
             .background(AppColors.bg.ignoresSafeArea())
             .navigationTitle(mode == .firstTime ? "" : "Username")
             .navigationBarTitleDisplayMode(.inline)

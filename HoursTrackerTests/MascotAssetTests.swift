@@ -143,16 +143,10 @@ final class MascotAssetTests: XCTestCase {
         }
     }
 
-    func testBadgeAndGoalOwls() {
+    func testBadgeOwl() {
         XCTAssertEqual(OwlLines.badges(earned: 30, total: 30).pose, .crown)
         XCTAssertEqual(OwlLines.badges(earned: 4, total: 30).line, "4 of 30 badges. Keep going.")
         XCTAssertEqual(OwlLines.badges(earned: 16, total: 30).line, "Over halfway there. Keep going!")
-        XCTAssertEqual(OwlLines.goal(fraction: 1, isComplete: true).pose, .cheer)
-        XCTAssertEqual(OwlLines.goal(fraction: 0, isComplete: false).pose, .point)
-        XCTAssertEqual(OwlLines.goal(fraction: 0.237, isComplete: false).line, "23% saved. Every bit counts.")
-        for fraction in stride(from: 0.0, through: 1.0, by: 0.05) {
-            XCTAssertLessThanOrEqual(OwlLines.goal(fraction: fraction, isComplete: false).line.count, OwlLines.maxLength)
-        }
         for earned in [0, 1, 99, 120] {
             XCTAssertLessThanOrEqual(OwlLines.badges(earned: earned, total: 130).line.count, OwlLines.maxLength)
         }

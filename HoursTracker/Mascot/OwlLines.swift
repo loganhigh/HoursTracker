@@ -74,15 +74,6 @@ enum OwlLines {
         return (.trophy, "\(earned) of \(total) badges. Keep going.")
     }
 
-    /// A savings goal's detail sheet.
-    static func goal(fraction: Double, isComplete: Bool) -> (pose: OwlPose, line: String) {
-        if isComplete { return (.cheer, "Goal reached. Treat yourself!") }
-        if fraction <= 0 { return (.point, "Add your first savings below.") }
-        if fraction >= 0.75 { return (.cheer, "Almost there. So close!") }
-        if fraction >= 0.5 { return (.idle, "Over halfway. Keep going!") }
-        return (.idle, "\(Int((fraction * 100).rounded(.down)))% saved. Every bit counts.")
-    }
-
     /// Where a cheque stands, for its detail screen.
     enum ChequeState {
         case inProgress, pending, awaitingTotal, recorded
