@@ -26,9 +26,10 @@ struct RecentShiftsSection: View {
             SectionEyebrow("Recent Shifts")
 
             if recentEntries.isEmpty {
+                // No owl here: the Today card's owl directly above already
+                // points new users at this button (one owl per view).
                 AppEmptyState(
                     icon: "calendar.badge.plus",
-                    owl: .coffee,
                     title: "No shifts logged yet",
                     message: "Log a shift to see your latest entries here.",
                     actionTitle: hasAnyShifts ? "Add Shift" : "Add First Shift",

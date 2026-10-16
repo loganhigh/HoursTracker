@@ -72,6 +72,19 @@ final class MascotAssetTests: XCTestCase {
         XCTAssertTrue(OwlLines.home(todayHours: 0, isDayOff: false, streakDays: 4, daySeed: 0).hasPrefix("4-day streak"))
     }
 
+    func testHomePoseMatchesTheDay() {
+        XCTAssertEqual(OwlLines.homePose(todayHours: 0, isDayOff: true, streakDays: 9), .sleep)
+        XCTAssertEqual(OwlLines.homePose(todayHours: 7.5, isDayOff: false, streakDays: 9), .cheer)
+        XCTAssertEqual(OwlLines.homePose(todayHours: 0, isDayOff: false, streakDays: 3), .streak)
+        XCTAssertEqual(OwlLines.homePose(todayHours: 0, isDayOff: false, streakDays: 1), .coffee)
+    }
+
+    func testHomeLineForBrandNewUser() {
+        let line = OwlLines.home(todayHours: 0, isDayOff: false, streakDays: 0, hasAnyShifts: false, daySeed: 4)
+        XCTAssertEqual(line, "Log your first shift below.")
+        XCTAssertLessThanOrEqual(line.count, OwlLines.maxLength)
+    }
+
     func testLineStaysTheSameAllDay() {
         let cal = Calendar(identifier: .gregorian)
         let morning = cal.date(from: DateComponents(year: 2026, month: 10, day: 15, hour: 6))!
@@ -153,8 +166,21 @@ final class MascotAssetTests: XCTestCase {
         guard let dir = ProcessInfo.processInfo.environment["MASCOT_DUMP_DIR"] else {
             throw XCTSkip("Set MASCOT_DUMP_DIR to dump launch screen renders")
         }
+        let announcement = Announcement(
+            id: "dump", title: "New in 3.5", message: "Shifts now sync faster across your devices.",
+            kind: "news", buttonTitle: "Got it"
+        )
         let screens: [(String, AnyView)] = [
             ("splash", AnyView(SplashView())),
+            ("payday", AnyView(PaydayConfettiOverlay(onDismiss: {}))),
+            ("streak", AnyView(StreakBurstView(streakCount: 14))),
+            ("announcement", AnyView(AnnouncementPromptOverlay(announcement: announcement, onFinish: { _ in }))),
+            ("country", AnyView(CountryFlagPromptOverlay(onChoose: {}))),
+            ("prestige-info", AnyView(PrestigeInfoSheet(currentPrestige: 3))),
+            ("best-and-xp", AnyView(VStack(spacing: 40) {
+                PersonalBestBanner()
+                FloatingXPGainView(text: "+120 XP")
+            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(AppColors.bg))),
             ("startup-error", AnyView(StartupErrorView(
                 message: "We couldn't load your saved hours.",
                 onRetry: {},

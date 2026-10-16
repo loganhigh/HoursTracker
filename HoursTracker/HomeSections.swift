@@ -8,9 +8,10 @@ import SwiftUI
 
 // MARK: - Today Hero (the ONE hero card on Home)
 
-/// Today's date with the local weather beneath it. Cheque hours moved into
-/// the stat triplet below, the pay projection lives in History, and prestige
-/// lives on the You tab — so this card is purely "what's today like".
+/// Today's date with the local weather beneath it, with the owl perched on
+/// top saying one line about today (Home's one owl). Cheque hours live in the
+/// stat triplet below, the pay projection in History, and prestige on the You
+/// tab — so this card is purely "what's today like".
 struct TodayHeroCard: View {
     @ObservedObject var store: HoursStore
     @ObservedObject private var weather = WeatherService.shared
@@ -22,12 +23,47 @@ struct TodayHeroCard: View {
         return f
     }()
 
+    // MARK: Owl inputs (read-only views of existing data)
+
+    private var todayEntries: [WorkEntry] {
+        let cal = Calendar.current
+        return store.entries.filter { cal.isDateInToday($0.date) }
+    }
+
+    private var todayHours: Double {
+        todayEntries.filter { !$0.isOffDay }.reduce(0) { $0 + $1.paidHours }
+    }
+
+    private var isDayOff: Bool {
+        !todayEntries.isEmpty && todayEntries.allSatisfy(\.isOffDay)
+    }
+
+    private var streakDays: Int { store.displayedGamificationProfile().currentStreak }
+
     var body: some View {
+        let hours = todayHours
+        let dayOff = isDayOff
+        let streak = streakDays
+        OwlPerch(
+            pose: OwlLines.homePose(todayHours: hours, isDayOff: dayOff, streakDays: streak),
+            line: OwlLines.home(
+                todayHours: hours,
+                isDayOff: dayOff,
+                streakDays: streak,
+                hasAnyShifts: !store.entries.isEmpty,
+                daySeed: OwlLines.daySeed()
+            )
+        ) {
+            card
+        }
+    }
+
+    private var card: some View {
         VStack(spacing: AppSpacing.sm) {
             SectionEyebrow("Today")
 
             Text(Self.todayFormatter.string(from: Date()))
-                .font(.system(size: 22, weight: .heavy, design: .rounded))
+                .font(AppTypography.title.weight(.heavy))
                 .foregroundStyle(AppColors.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -35,6 +71,7 @@ struct TodayHeroCard: View {
             weatherRow
         }
         .padding(AppSpacing.lg)
+        .padding(.top, AppSpacing.xs)
         .frame(maxWidth: .infinity)
         .background(heroBackground)
         .overlay(heroStroke)
@@ -50,15 +87,15 @@ struct TodayHeroCard: View {
             HStack(spacing: 6) {
                 Image(systemName: snapshot.symbolName)
                     .symbolRenderingMode(.multicolor)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppTypography.subheadline.weight(.semibold))
                 Text(snapshot.temperatureText)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(AppTypography.headline)
                     .monospacedDigit()
                     .foregroundStyle(AppColors.text)
                 Text(snapshot.locality.isEmpty
                      ? snapshot.conditionText
                      : "\(snapshot.conditionText) · \(snapshot.locality)")
-                    .font(.system(size: 14, weight: .medium))
+                    .appText(.subheadline)
                     .foregroundStyle(AppColors.subtext)
             }
             .lineLimit(1)
@@ -67,9 +104,9 @@ struct TodayHeroCard: View {
 
         case .loading, .loaded:
             HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
+                LoadingDots()
                 Text("Checking the weather…")
-                    .font(.system(size: 14, weight: .medium))
+                    .appText(.subheadline)
                     .foregroundStyle(AppColors.subtext)
             }
 
@@ -78,7 +115,7 @@ struct TodayHeroCard: View {
             // opens an hours app expecting a location prompt.
             Button { weather.requestPermission() } label: {
                 Label("Tap to show local weather", systemImage: "location.fill")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(AppTypography.subheadline.weight(.semibold))
                     .foregroundStyle(AppColors.accent)
             }
             .buttonStyle(.plain)
@@ -88,7 +125,7 @@ struct TodayHeroCard: View {
                 if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
             } label: {
                 Label("Allow location in Settings for weather", systemImage: "location.slash")
-                    .font(.system(size: 13, weight: .medium))
+                    .appText(.caption)
                     .foregroundStyle(AppColors.subtext)
             }
             .buttonStyle(.plain)
@@ -98,7 +135,7 @@ struct TodayHeroCard: View {
         case .failed:
             Button { weather.refreshIfNeeded(force: true) } label: {
                 Label("Weather unavailable — tap to retry", systemImage: "arrow.clockwise")
-                    .font(.system(size: 13, weight: .medium))
+                    .appText(.caption)
                     .foregroundStyle(AppColors.subtext)
             }
             .buttonStyle(.plain)

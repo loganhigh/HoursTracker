@@ -172,45 +172,34 @@ struct TipJarHomeCard: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            VStack(spacing: 2) {
-                Text("SUPPORT HOUR TRACKER")
-                    .font(.system(.caption, design: .rounded, weight: .bold))
-                    .tracking(1.6)
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                Text("Help keep it free and ad-free")
-                    .font(.system(.caption, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.faint)
-            }
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity)
+            SectionEyebrow("Support Hour Tracker", subtitle: "Help keep it free and ad-free")
 
             Button {
                 Haptics.lightTap()
                 showingTipJar = true
             } label: {
-                VStack(spacing: 10) {
-                    Image(systemName: "heart.fill")
-                        .font(.system(size: 26, weight: .semibold))
-                        .foregroundStyle(AppColors.accent)
+                VStack(spacing: AppSpacing.sm) {
+                    OwlView(pose: .heart, size: .companion)
                     Text("Hour Tracker is free to use. If you find it useful, you can leave a small tip to help cover the cost of keeping it running.")
-                        .font(.system(size: 15))
+                        .appText(.subheadline)
                         .foregroundStyle(AppColors.subtext)
                         .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text("Leave a tip")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(AppTypography.subheadline.weight(.semibold))
                         .foregroundStyle(AppColors.textOnAccent)
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, AppSpacing.lg)
                         .padding(.vertical, 9)
-                        .background(Capsule().fill(AppTheme.Colors.accent))
+                        .background(Capsule().fill(AppColors.accent))
                 }
                 .frame(maxWidth: .infinity)
-                .padding(16)
+                .padding(AppSpacing.md)
                 .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(AppTheme.Colors.card.opacity(0.55))
+                    RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                        .fill(AppColors.card.opacity(0.55))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
+                            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                                .stroke(AppColors.stroke, lineWidth: 0.5)
                         )
                 )
             }

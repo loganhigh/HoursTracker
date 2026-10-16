@@ -10,8 +10,19 @@ import Foundation
 enum OwlLines {
     static let maxLength = 40
 
+    /// Home companion pose, matching `home(…)`'s line.
+    static func homePose(todayHours: Double, isDayOff: Bool, streakDays: Int) -> OwlPose {
+        if isDayOff { return .sleep }
+        if todayHours > 0 { return .cheer }
+        if streakDays >= 3 { return .streak }
+        return .coffee
+    }
+
     /// Home companion line, keyed off today's shift.
-    static func home(todayHours: Double, isDayOff: Bool, streakDays: Int, daySeed: Int) -> String {
+    static func home(todayHours: Double, isDayOff: Bool, streakDays: Int, hasAnyShifts: Bool = true, daySeed: Int) -> String {
+        if !hasAnyShifts {
+            return "Log your first shift below."
+        }
         if isDayOff {
             return pick(["Day off. Rest up.", "No shift today. Enjoy it.", "Recharge day. You earned it."], seed: daySeed)
         }
