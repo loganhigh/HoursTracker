@@ -74,7 +74,12 @@ struct CareerSections: View {
 
     var body: some View {
         VStack(spacing: AppSpacing.xl) {
+                // The You tab's one owl peeks over the company card, as on a
+                // friend's profile. The extra top room assumes AccountView's
+                // xl spacing above this section.
                 companyCard
+                    .owlPeek()
+                    .padding(.top, OwlPerchMetrics.peekClearance - AppSpacing.xl)
 
                 SectionCard(
                     title: "Personal bests",

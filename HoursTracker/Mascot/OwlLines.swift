@@ -66,30 +66,6 @@ enum OwlLines {
         }
     }
 
-    /// You tab, over the lifetime grid: a finished run first, then a big
-    /// lifetime, then a day-stable pick of hours, days or the next level.
-    static func you(
-        allTimeHours: Double,
-        daysWorked: Int,
-        level: Int,
-        xpToNextLevel: Int,
-        canPrestige: Bool,
-        daySeed: Int
-    ) -> (pose: OwlPose, line: String) {
-        if allTimeHours <= 0 { return (.wave, "Your story starts with one shift.") }
-        if canPrestige { return (.crown, "Max level. Prestige when you're ready.") }
-        let lifetime = allTimeHours >= 1000 ? "\(Int(allTimeHours.rounded()))h" : hours(allTimeHours)
-        if allTimeHours >= 1000 { return (.trophy, "\(lifetime) all time. Legendary.") }
-        var options = [
-            "\(lifetime) logged all time.",
-            daysWorked == 1 ? "First day logged. Proud of you." : "\(daysWorked) days worked. Proud of you.",
-        ]
-        if xpToNextLevel > 0 {
-            options.append("\(xpToNextLevel.formatted()) XP to Level \(level + 1).")
-        }
-        return (.idle, pick(options, seed: daySeed))
-    }
-
     /// Badges screen, over the "N of M" card. No badges at all is the empty
     /// state's job.
     static func badges(earned: Int, total: Int) -> (pose: OwlPose, line: String) {

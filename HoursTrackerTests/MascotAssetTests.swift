@@ -143,27 +143,6 @@ final class MascotAssetTests: XCTestCase {
         }
     }
 
-    func testYouOwlPutsTheBigNewsFirst() {
-        XCTAssertEqual(OwlLines.you(allTimeHours: 0, daysWorked: 0, level: 1, xpToNextLevel: 100,
-                                    canPrestige: false, daySeed: 0).pose, .wave)
-        XCTAssertEqual(OwlLines.you(allTimeHours: 1500, daysWorked: 180, level: 25, xpToNextLevel: 0,
-                                    canPrestige: true, daySeed: 0).pose, .crown)
-        XCTAssertEqual(OwlLines.you(allTimeHours: 1240.5, daysWorked: 150, level: 14, xpToNextLevel: 340,
-                                    canPrestige: false, daySeed: 0).line, "1241h all time. Legendary.")
-        let picks = Set((0..<3).map {
-            OwlLines.you(allTimeHours: 86.5, daysWorked: 11, level: 4, xpToNextLevel: 1_250,
-                         canPrestige: false, daySeed: $0).line
-        })
-        XCTAssertEqual(picks, ["86.5h logged all time.", "11 days worked. Proud of you.", "1,250 XP to Level 5."])
-        for hours in [0, 0.25, 8, 999.75, 1000, 123_456.5] {
-            for seed in 0..<3 {
-                let line = OwlLines.you(allTimeHours: hours, daysWorked: 9_999, level: 24, xpToNextLevel: 99_999,
-                                        canPrestige: false, daySeed: seed).line
-                XCTAssertLessThanOrEqual(line.count, OwlLines.maxLength, line)
-            }
-        }
-    }
-
     func testBadgeAndGoalOwls() {
         XCTAssertEqual(OwlLines.badges(earned: 30, total: 30).pose, .crown)
         XCTAssertEqual(OwlLines.badges(earned: 4, total: 30).line, "4 of 30 badges. Keep going.")

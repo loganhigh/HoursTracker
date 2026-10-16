@@ -81,33 +81,29 @@ struct ProfileXPCapsule: View {
 
 // MARK: - Lifetime grid
 
-/// The You tab's four lifetime metrics, with the screen's one owl perched on
-/// the grid. The avatar above is round, so the owl never sits on it.
+/// The You tab's four lifetime metrics.
 struct LifetimeStatsSection: View {
     let allTimeHours: Double
     let daysWorked: Int
     let averageShiftHours: Double
     let bestStreak: Int
-    let owl: (pose: OwlPose, line: String)
 
     var body: some View {
         VStack(spacing: AppSpacing.sm) {
             SectionEyebrow("Lifetime")
-            OwlPerch(pose: owl.pose, line: owl.line) {
-                LazyVGrid(columns: [
-                    GridItem(.flexible(), spacing: AppSpacing.sm),
-                    GridItem(.flexible(), spacing: AppSpacing.sm)
-                ], spacing: AppSpacing.sm) {
-                    MetricDisplay(icon: "clock.fill", label: "All-Time Hours", value: hoursDisplay(allTimeHours))
-                    MetricDisplay(icon: "calendar", label: "Days Worked", value: "\(daysWorked)")
-                    MetricDisplay(icon: "chart.bar.fill", label: "Avg Shift", value: AppTheme.Format.hours(averageShiftHours))
-                    MetricDisplay(
-                        icon: "flame.fill",
-                        label: "Best Streak",
-                        value: bestStreak == 1 ? "1 day" : "\(bestStreak) days",
-                        tint: AppColors.streak
-                    )
-                }
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: AppSpacing.sm),
+                GridItem(.flexible(), spacing: AppSpacing.sm)
+            ], spacing: AppSpacing.sm) {
+                MetricDisplay(icon: "clock.fill", label: "All-Time Hours", value: hoursDisplay(allTimeHours))
+                MetricDisplay(icon: "calendar", label: "Days Worked", value: "\(daysWorked)")
+                MetricDisplay(icon: "chart.bar.fill", label: "Avg Shift", value: AppTheme.Format.hours(averageShiftHours))
+                MetricDisplay(
+                    icon: "flame.fill",
+                    label: "Best Streak",
+                    value: bestStreak == 1 ? "1 day" : "\(bestStreak) days",
+                    tint: AppColors.streak
+                )
             }
         }
     }

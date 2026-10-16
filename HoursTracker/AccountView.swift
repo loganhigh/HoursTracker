@@ -431,20 +431,11 @@ struct AccountView: View {
     // MARK: - Lifetime stats
 
     private var lifetimeStatsSection: some View {
-        let profile = store.displayedGamificationProfile()
-        return LifetimeStatsSection(
+        LifetimeStatsSection(
             allTimeHours: allTimeHours,
             daysWorked: daysWorked,
             averageShiftHours: averageShiftHours,
-            bestStreak: store.gamificationProfile.bestStreak,
-            owl: OwlLines.you(
-                allTimeHours: allTimeHours,
-                daysWorked: daysWorked,
-                level: profile.level,
-                xpToNextLevel: max(profile.xpForNextLevel - profile.xpIntoCurrentLevel, 0),
-                canPrestige: store.gamificationProfile.canPrestige || profile.canPrestige,
-                daySeed: OwlLines.daySeed()
-            )
+            bestStreak: store.gamificationProfile.bestStreak
         )
     }
 
