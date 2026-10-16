@@ -106,6 +106,7 @@ struct AchievementsView: View {
             if earnedBadges.isEmpty && ceoBadge == nil && developerBadge == nil {
                 AppEmptyState(
                     icon: "rosette",
+                    owl: .trophy,
                     title: "No badges yet — keep going!",
                     message: "Log shifts to unlock your first badge."
                 )

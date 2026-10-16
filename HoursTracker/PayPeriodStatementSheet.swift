@@ -29,6 +29,7 @@ struct PayPeriodStatementSheet: View {
                 } else if failed {
                     EmptyStateView(
                         icon: "exclamationmark.triangle",
+                        owl: .oops,
                         title: "Couldn't create the PDF",
                         subtitle: "Please try again."
                     )

@@ -32,6 +32,7 @@
 		7A0001D12F30000100000010 /* OvertimeDoubleTimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001D02F30000100000010 /* OvertimeDoubleTimeTests.swift */; };
 		7A0001D12F31000100000020 /* AnnouncementPersonalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001D02F31000100000020 /* AnnouncementPersonalizationTests.swift */; };
 		7A0001D32F31000100000021 /* TakeHomeEstimatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001D22F31000100000021 /* TakeHomeEstimatorTests.swift */; };
+		7A0001D52F31000100000022 /* MascotAssetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001D42F31000100000022 /* MascotAssetTests.swift */; };
 		FB004MSG2F90000100000004B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = FB004MSG2F90000100000004 /* FirebaseMessaging */; };
 		FB005STG2F90000100000005B /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = FB005STG2F90000100000005 /* FirebaseStorage */; };
 		FB006FUN2F90000100000006B /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = FB006FUN2F90000100000006 /* FirebaseFunctions */; };
@@ -96,6 +97,7 @@
 		7A0001D02F30000100000010 /* OvertimeDoubleTimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvertimeDoubleTimeTests.swift; sourceTree = "<group>"; };
 		7A0001D02F31000100000020 /* AnnouncementPersonalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnouncementPersonalizationTests.swift; sourceTree = "<group>"; };
 		7A0001D22F31000100000021 /* TakeHomeEstimatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TakeHomeEstimatorTests.swift; sourceTree = "<group>"; };
+		7A0001D42F31000100000022 /* MascotAssetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotAssetTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -227,6 +229,7 @@
 				7A0001C82F31000100000013 /* WeekStartCycleTests.swift */,
 				7A0001D02F31000100000020 /* AnnouncementPersonalizationTests.swift */,
 				7A0001D22F31000100000021 /* TakeHomeEstimatorTests.swift */,
+				7A0001D42F31000100000022 /* MascotAssetTests.swift */,
 				7A0001C22F30000100000010 /* WrappedEntryDump.swift */,
 			);
 			path = HoursTrackerTests;
@@ -417,6 +420,7 @@
 				7A0001C92F31000100000013 /* WeekStartCycleTests.swift in Sources */,
 				7A0001D12F31000100000020 /* AnnouncementPersonalizationTests.swift in Sources */,
 				7A0001D32F31000100000021 /* TakeHomeEstimatorTests.swift in Sources */,
+				7A0001D52F31000100000022 /* MascotAssetTests.swift in Sources */,
 				7A0001C32F30000100000010 /* WrappedEntryDump.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

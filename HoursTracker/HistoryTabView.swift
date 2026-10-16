@@ -58,6 +58,7 @@ struct HistoryTabView: View {
                 if store.entries.isEmpty {
                     AppEmptyState(
                         icon: "calendar",
+                        owl: .clipboard,
                         title: "No cheques yet",
                         message: "Log a shift and your pay periods will show up here."
                     )

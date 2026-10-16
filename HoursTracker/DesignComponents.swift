@@ -76,11 +76,14 @@ struct AppProgressRing: View {
 
 // MARK: - AppEmptyState
 //
-// The ONE empty-state design (quiet recipe: 36pt light icon, headline title,
-// footnote message). Optional primary / secondary actions.
+// The ONE empty-state design (quiet recipe: Otto — or a 36pt light icon when
+// no pose is given — headline title, footnote message). Optional primary /
+// secondary actions.
 
 struct AppEmptyState: View {
     var icon: String = "tray"
+    /// Otto replaces the icon when set.
+    var owl: OwlPose? = nil
     let title: String
     var message: String? = nil
     var actionTitle: String? = nil
@@ -90,9 +93,13 @@ struct AppEmptyState: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 36, weight: .light))
-                .foregroundStyle(AppColors.faint)
+            if let owl {
+                OwlView(pose: owl, size: .emptyState)
+            } else {
+                Image(systemName: icon)
+                    .font(.system(size: 36, weight: .light))
+                    .foregroundStyle(AppColors.faint)
+            }
             Text(title)
                 .appText(.headline)
                 .foregroundStyle(AppColors.text)
@@ -102,6 +109,7 @@ struct AppEmptyState: View {
                     .appText(.metricLabel)
                     .foregroundStyle(AppColors.subtext)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, AppSpacing.sm)
             }
             if let actionTitle, let action {

@@ -28,6 +28,7 @@ struct RecentShiftsSection: View {
             if recentEntries.isEmpty {
                 AppEmptyState(
                     icon: "calendar.badge.plus",
+                    owl: .coffee,
                     title: "No shifts logged yet",
                     message: "Log a shift to see your latest entries here.",
                     actionTitle: hasAnyShifts ? "Add Shift" : "Add First Shift",

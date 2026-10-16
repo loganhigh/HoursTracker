@@ -329,6 +329,7 @@ struct StatTile: View {
 // MARK: - EmptyStateView (thin wrapper over AppEmptyState — legacy call sites)
 struct EmptyStateView: View {
     var icon: String = "tray"
+    var owl: OwlPose? = nil
     var title: String
     var subtitle: String? = nil
     var primaryTitle: String? = nil
@@ -344,10 +345,11 @@ struct EmptyStateView: View {
         self.primaryAction = action
     }
 
-    init(icon: String = "tray", title: String, subtitle: String? = nil,
+    init(icon: String = "tray", owl: OwlPose? = nil, title: String, subtitle: String? = nil,
          primaryTitle: String? = nil, primaryAction: (() -> Void)? = nil,
          secondaryTitle: String? = nil, secondaryAction: (() -> Void)? = nil) {
         self.icon = icon
+        self.owl = owl
         self.title = title
         self.subtitle = subtitle
         self.primaryTitle = primaryTitle
@@ -359,6 +361,7 @@ struct EmptyStateView: View {
     var body: some View {
         AppEmptyState(
             icon: icon,
+            owl: owl,
             title: title,
             message: subtitle,
             actionTitle: primaryTitle,

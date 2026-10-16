@@ -208,6 +208,7 @@ struct PayCycleDetailView: View {
                     if cycleEntries.isEmpty {
                         EmptyStateView(
                             icon: "calendar",
+                            owl: .clipboard,
                             title: "No entries this period",
                             subtitle: "Log a shift from the home screen to fill this pay period.",
                             primaryTitle: "Add First Shift",

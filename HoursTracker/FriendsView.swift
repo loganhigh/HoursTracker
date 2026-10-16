@@ -233,6 +233,7 @@ struct FriendsView: View {
     private var signedOutPlaceholder: some View {
         AppEmptyState(
             icon: "person.2",
+            owl: .shield,
             title: "Sign in to use Friends",
             message: "Sign in with Apple from Account to add friends and see their stats."
         )
@@ -343,6 +344,7 @@ struct FriendsView: View {
             } else {
                 AppEmptyState(
                     icon: "person.2",
+                    owl: .buddies,
                     title: "No friends yet",
                     message: "Share your code or add someone else's to compare weeks."
                 )

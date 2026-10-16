@@ -306,6 +306,7 @@ private struct MissingShiftListSheet: View {
                     if suggestions.isEmpty {
                         AppEmptyState(
                             icon: "checkmark.circle",
+                            owl: .cheer,
                             title: "All caught up",
                             message: "Every usual workday in the last 3 weeks is accounted for."
                         )

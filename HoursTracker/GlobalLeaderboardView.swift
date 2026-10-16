@@ -102,6 +102,7 @@ struct GlobalLeaderboardView: View {
         } else if topTrackers.allTrackers.isEmpty {
             AppEmptyState(
                 icon: "chart.bar.xaxis",
+                owl: .search,
                 title: "No rankings yet"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)

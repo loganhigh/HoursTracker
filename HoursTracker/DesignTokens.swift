@@ -21,6 +21,8 @@ enum AppColors {
     static var surface: Color { AppTheme.Colors.surface }
     static var card: Color { AppTheme.Colors.card }
     static var card2: Color { AppTheme.Colors.card2 }
+    /// Otto's speech bubble — one step up from the card it sits beside.
+    static var bubble: Color { AppTheme.Colors.card2 }
     static var stroke: Color { AppTheme.Colors.stroke }
     static var strokeStrong: Color { AppTheme.Colors.strokeStrong }
 
