@@ -13,8 +13,6 @@ struct PayCycleDetailView: View {
     @State private var didCopyAll = false
     @State private var copyAllBurst = 0
     @State private var showingPrestigeInfo = false
-    @State private var showingPayoutEntry = false
-    @State private var payoutDraft = ""
     @Environment(\.dismiss) private var dismiss
 
     init(
@@ -105,90 +103,15 @@ struct PayCycleDetailView: View {
         store.actualPayout(for: selectedCycle)
     }
 
-    /// Records what the cheque really paid. This is the training data for the
-    /// projection on History's In Progress row: each recorded total teaches
-    /// the predictor the real net rate — taxes, tips, and bonuses included —
-    /// that the in-app estimate can't see.
-    @ViewBuilder
-    private var chequeTotalSection: some View {
+    /// What the owl on the hero says about this cheque.
+    private var chequeOwl: (pose: OwlPose, line: String) {
+        let state: OwlLines.ChequeState
         if isPaidPeriod {
-            Button {
-                Haptics.lightTap()
-                payoutDraft = recordedPayout.map { String(format: "%.2f", $0) } ?? ""
-                showingPayoutEntry = true
-            } label: {
-                HStack(spacing: AppTheme.Spacing.sm) {
-                    Image(systemName: "banknote")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(AppTheme.Colors.accent)
-                        .frame(width: 30, height: 30)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(AppTheme.Colors.accent.opacity(0.14))
-                        )
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(recordedPayout == nil ? "Add cheque total" : "Cheque total")
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(AppTheme.Colors.text)
-                        Text(recordedPayout == nil
-                             ? "Enter what this cheque actually paid — it teaches your pay projection."
-                             : "Tap to edit. Powers the projection on your live cheque.")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppTheme.Colors.subtext)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    if let recordedPayout {
-                        Text(formattedCurrency(recordedPayout))
-                            .font(.system(size: 16, weight: .heavy, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(AppTheme.Colors.success)
-                    } else {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(AppTheme.Colors.accent)
-                    }
-                }
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(AppTheme.Colors.card.opacity(0.55))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
-                        )
-                )
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .alert("Cheque total", isPresented: $showingPayoutEntry) {
-                TextField("Amount", text: $payoutDraft)
-                    .keyboardType(.decimalPad)
-                Button("Save") {
-                    // Locale-aware: "1,540.25", "$1540" and fr_CA "1540,25" all
-                    // parse to what the paystub says. Unparseable input keeps
-                    // whatever was recorded — passing nil here used to silently
-                    // DELETE the existing total on a typo.
-                    if let amount = ChequeAmountParser.parse(payoutDraft) {
-                        store.setActualPayout(amount, for: selectedCycle)
-                        Haptics.success()
-                    } else {
-                        Haptics.error()
-                    }
-                }
-                if recordedPayout != nil {
-                    Button("Remove", role: .destructive) {
-                        store.setActualPayout(nil, for: selectedCycle)
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("What this cheque actually paid, after tax and including tips or bonuses.")
-            }
+            state = recordedPayout == nil ? .awaitingTotal : .recorded
+        } else {
+            state = Date() < selectedCycle.end ? .inProgress : .pending
         }
+        return OwlLines.cheque(state, hours: periodHours)
     }
 
     var body: some View {
@@ -196,13 +119,20 @@ struct PayCycleDetailView: View {
             AppTheme.Colors.bg.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: AppTheme.Spacing.xl) {
-                    heroBlock
-                        .cardAppear(index: 0, group: "cheque")
+                    // An empty cheque's empty state below carries the owl.
+                    if cycleEntries.isEmpty {
+                        heroBlock
+                            .cardAppear(index: 0, group: "cheque")
+                    } else {
+                        let owl = chequeOwl
+                        OwlPerch(pose: owl.pose, line: owl.line) { heroBlock }
+                            .cardAppear(index: 0, group: "cheque")
+                    }
 
                     payBreakdownSection
                         .cardAppear(index: 1, group: "cheque")
 
-                    chequeTotalSection
+                    ChequeTotalSection(store: store, cycle: selectedCycle)
                         .cardAppear(index: 2, group: "cheque")
 
                     if cycleEntries.isEmpty {
@@ -217,11 +147,7 @@ struct PayCycleDetailView: View {
                         .padding(.vertical, 8)
                     } else {
                         VStack(spacing: 10) {
-                            Text("SHIFTS")
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
-                                .tracking(1.6)
-                                .foregroundStyle(AppTheme.Colors.subtext)
-                                .frame(maxWidth: .infinity, alignment: .center)
+                            SectionEyebrow("Shifts")
                                 .padding(.top, 2)
 
                             ForEach(sortedCycleEntries) { entry in
@@ -253,17 +179,17 @@ struct PayCycleDetailView: View {
                                 HStack(spacing: 6) {
                                     Spacer()
                                     Image(systemName: didCopyAll ? "checkmark.circle.fill" : "doc.on.doc")
-                                        .font(.system(size: 14, weight: .bold))
+                                        .font(.subheadline.weight(.bold))
                                     Text(didCopyAll ? "Copied!" : "Copy All")
-                                        .font(.system(size: 15, weight: .semibold))
+                                        .font(AppTypography.subheadline.weight(.semibold))
                                     Spacer()
                                 }
-                                .foregroundStyle(didCopyAll ? Color.green : AppTheme.Colors.accent)
+                                .foregroundStyle(didCopyAll ? AppColors.positive : AppColors.accent)
                                 .padding(.vertical, 8)
                                 .contentTransition(.opacity)
                             }
                             .buttonStyle(.plain)
-                            .tapBurst(trigger: copyAllBurst, cornerRadius: 12, color: didCopyAll ? .green : AppTheme.Colors.accent)
+                            .tapBurst(trigger: copyAllBurst, cornerRadius: 12, color: didCopyAll ? AppColors.positive : AppColors.accent)
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
                     }
@@ -334,12 +260,11 @@ struct PayCycleDetailView: View {
     private var heroBlock: some View {
         VStack(spacing: 16) {
             VStack(spacing: 2) {
-                Text(navigationTitle.uppercased())
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .tracking(1.6)
-                    .foregroundStyle(AppTheme.Colors.subtext)
+                Text(navigationTitle)
+                    .appText(.eyebrow)
+                    .foregroundStyle(AppColors.subtext)
                 Text(subtitleLine)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(AppTypography.caption.weight(.semibold))
                     .foregroundStyle(AppTheme.Colors.faint)
             }
             .multilineTextAlignment(.center)
@@ -349,15 +274,15 @@ struct PayCycleDetailView: View {
                 VStack(spacing: 4) {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         AnimatedMetricText(value: periodHours) { AppTheme.Format.hours($0, suffix: "") }
-                            .font(AppDesignSystem.Typography.heroNumerals(size: 34, weight: .heavy))
-                            .foregroundStyle(AppTheme.Colors.text)
+                            .font(AppTypography.heroNumber)
+                            .foregroundStyle(AppColors.text)
                         Text("hrs")
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .font(AppTypography.headline)
                             .foregroundStyle(AppTheme.Colors.subtext)
                     }
                     if store.paySettings.showPayCalculations {
                         AnimatedMetricText(currency: periodPay, code: store.paySettings.currencyCode)
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .font(AppTypography.caption.weight(.bold))
                             .foregroundStyle(AppTheme.Colors.accent)
                     }
                 }
@@ -369,10 +294,10 @@ struct PayCycleDetailView: View {
 
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("\(daysWorked)")
-                        .font(AppDesignSystem.Typography.heroNumerals(size: 34, weight: .heavy))
-                        .foregroundStyle(AppTheme.Colors.text)
+                        .font(AppTypography.heroNumber)
+                        .foregroundStyle(AppColors.text)
                     Text(daysWorked == 1 ? "day" : "days")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .font(AppTypography.headline)
                         .foregroundStyle(AppTheme.Colors.subtext)
                 }
                 .frame(maxWidth: .infinity)
@@ -387,7 +312,7 @@ struct PayCycleDetailView: View {
                     _profile.prestige == 0 ? "Unranked" : "Prestige \(_profile.prestige) (\(_tier.name))",
                     systemImage: _tier.icon
                 )
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(AppTypography.caption.weight(.semibold))
                 .foregroundStyle(_profile.prestige == 0 ? AppTheme.Colors.subtext : _tier.primary)
                 .frame(maxWidth: .infinity)
             }
@@ -464,11 +389,11 @@ struct PayCycleDetailView: View {
     private func breakdownRow(title: String, value: String, valueColor: Color = AppTheme.Colors.text) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.subtext)
+                .appText(.subheadline)
+                .foregroundStyle(AppColors.subtext)
             Spacer()
             Text(value)
-                .font(AppDesignSystem.Typography.heroNumerals(size: 17, weight: .bold))
+                .font(AppTypography.headline.monospacedDigit())
                 .foregroundStyle(valueColor)
         }
     }

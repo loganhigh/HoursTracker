@@ -17,6 +17,8 @@ struct HistoryTabView: View {
     /// Data Completion card presentations (see DataCompletionCard).
     @State private var missingShiftAddFor: MissingShiftDetector.Suggestion?
     @State private var showingAllMissingShifts = false
+    /// Observed so the owl's line updates when a missing day is dismissed.
+    @ObservedObject private var dismissals = MissingShiftDismissals.shared
 
     /// Hard stop on the backward walk. The loop normally ends at the earliest
     /// entry; this only bounds the worst case, so it scales with the period —
@@ -50,12 +52,9 @@ struct HistoryTabView: View {
             // down through later years.
             LazyVStack(spacing: AppSpacing.md) {
                 header
-                DataCompletionCard(
-                    store: store,
-                    addShiftFor: $missingShiftAddFor,
-                    showingAll: $showingAllMissingShifts
-                )
                 if store.entries.isEmpty {
+                    // The empty state carries this screen's owl.
+                    dataCompletionCard
                     AppEmptyState(
                         icon: "calendar",
                         owl: .clipboard,
@@ -64,19 +63,27 @@ struct HistoryTabView: View {
                     )
                     .padding(.top, AppSpacing.xxl)
                 } else {
-                    // Each year is its own card titled with the year, so the
-                    // year label travels with its cheques instead of pinning
-                    // to the top and trailing the user into later years.
-                    ForEach(Array(yearGroups.enumerated()), id: \.element.id) { groupIndex, group in
-                        ChequeYearCard(year: group.year) {
-                            ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
-                                if index > 0 {
-                                    Divider().overlay(AppColors.stroke)
+                    let owl = OwlLines.history(currentChequeHours: currentChequeHours, missingDays: missingDayCount)
+                    // The owl perches on whichever card comes first: the
+                    // missing-shifts card when it shows, else this year's cheques.
+                    OwlPerch(pose: owl.pose, line: owl.line) {
+                        VStack(spacing: AppSpacing.md) {
+                            dataCompletionCard
+                            // Each year is its own card titled with the year, so the
+                            // year label travels with its cheques instead of pinning
+                            // to the top and trailing the user into later years.
+                            ForEach(Array(yearGroups.enumerated()), id: \.element.id) { groupIndex, group in
+                                ChequeYearCard(year: group.year) {
+                                    ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
+                                        if index > 0 {
+                                            Divider().overlay(AppColors.stroke)
+                                        }
+                                        tableRow(for: row, index: index)
+                                    }
                                 }
-                                tableRow(for: row, index: index)
+                                .cardAppear(index: groupIndex, group: "history")
                             }
                         }
-                        .cardAppear(index: groupIndex, group: "history")
                     }
                 }
             }
@@ -93,6 +100,26 @@ struct HistoryTabView: View {
             addShiftFor: $missingShiftAddFor,
             showingAll: $showingAllMissingShifts
         )
+    }
+
+    private var dataCompletionCard: some View {
+        DataCompletionCard(
+            store: store,
+            addShiftFor: $missingShiftAddFor,
+            showingAll: $showingAllMissingShifts
+        )
+    }
+
+    // MARK: - Owl inputs
+
+    private var currentChequeHours: Double { cycleHours(store.currentPayCycle()) }
+
+    private var missingDayCount: Int {
+        MissingShiftDetector.analyze(
+            entries: store.allEntriesIncludingArchive(),
+            dismissedDayKeys: dismissals.dayKeys,
+            weekStartWeekday: store.paySettings.weekStartWeekday
+        )?.suggestions.count ?? 0
     }
 
     // MARK: - Header

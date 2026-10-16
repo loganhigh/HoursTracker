@@ -311,6 +311,9 @@ private struct MissingShiftListSheet: View {
                             message: "Every usual workday in the last 3 weeks is accounted for."
                         )
                         .padding(.top, AppSpacing.xxl)
+                    } else {
+                        OwlCompanionHeader(pose: .search, line: "These usual workdays have no shift.")
+                            .padding(.bottom, AppSpacing.xs)
                     }
                     ForEach(suggestions) { suggestion in
                         MissingShiftRow(

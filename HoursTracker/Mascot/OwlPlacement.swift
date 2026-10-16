@@ -20,7 +20,7 @@ struct OwlCompanionHeader: View {
         HStack(alignment: .center, spacing: AppSpacing.xxs) {
             OwlView(pose: pose, size: size, scarfTint: scarfTint)
             OwlSpeechBubble(text: line, tail: .leading)
-                .frame(maxWidth: 240, alignment: .leading)
+                .frame(maxWidth: 260, alignment: .leading)
                 .accessibilityLabel(line)
         }
         .frame(maxWidth: .infinity)

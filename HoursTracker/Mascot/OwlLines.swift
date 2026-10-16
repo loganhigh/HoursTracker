@@ -38,6 +38,31 @@ enum OwlLines {
         return pick(["Log today's shift when you're done.", "Ready when you are.", "Clock out, then log it here."], seed: daySeed)
     }
 
+    /// History tab: unlogged workdays come first, then the live cheque.
+    static func history(currentChequeHours: Double, missingDays: Int) -> (pose: OwlPose, line: String) {
+        if missingDays == 1 { return (.search, "One workday looks unlogged.") }
+        if missingDays > 1 { return (.search, "\(missingDays) workdays look unlogged.") }
+        if currentChequeHours > 0 { return (.clipboard, "\(hours(currentChequeHours)) on this cheque so far.") }
+        return (.clipboard, "Fresh cheque. Let's fill it up.")
+    }
+
+    /// Where a cheque stands, for its detail screen.
+    enum ChequeState {
+        case inProgress, pending, awaitingTotal, recorded
+    }
+
+    static func cheque(_ state: ChequeState, hours worked: Double) -> (pose: OwlPose, line: String) {
+        switch state {
+        case .inProgress:
+            return worked > 0
+                ? (.clipboard, "\(hours(worked)) logged so far.")
+                : (.clipboard, "Fresh cheque. Let's fill it up.")
+        case .pending: return (.calendar, "Payday's on the way.")
+        case .awaitingTotal: return (.point, "Got paid? Add the total below.")
+        case .recorded: return (.cheer, "Paid and recorded. Nice work.")
+        }
+    }
+
     /// Live shift: what the owl does while the timer runs.
     static func liveShift(isOnBreak: Bool, isStale: Bool) -> (pose: OwlPose, line: String) {
         if isStale { return (.oops, "Still on the clock?") }

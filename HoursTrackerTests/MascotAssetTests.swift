@@ -97,6 +97,32 @@ final class MascotAssetTests: XCTestCase {
         }
     }
 
+    func testHistoryOwlPrefersMissingDays() {
+        XCTAssertEqual(OwlLines.history(currentChequeHours: 30, missingDays: 2).pose, .search)
+        XCTAssertEqual(OwlLines.history(currentChequeHours: 30, missingDays: 1).line, "One workday looks unlogged.")
+        XCTAssertEqual(OwlLines.history(currentChequeHours: 30, missingDays: 0).line, "30h on this cheque so far.")
+        XCTAssertEqual(OwlLines.history(currentChequeHours: 0, missingDays: 0).pose, .clipboard)
+        for missing in [0, 1, 2, 21] {
+            for hours in [0.0, 7.5, 88.25, 168] {
+                let line = OwlLines.history(currentChequeHours: hours, missingDays: missing).line
+                XCTAssertLessThanOrEqual(line.count, OwlLines.maxLength, line)
+            }
+        }
+    }
+
+    func testChequeOwlFollowsTheChequeState() {
+        XCTAssertEqual(OwlLines.cheque(.inProgress, hours: 12).line, "12h logged so far.")
+        XCTAssertEqual(OwlLines.cheque(.pending, hours: 80).pose, .calendar)
+        XCTAssertEqual(OwlLines.cheque(.awaitingTotal, hours: 80).pose, .point)
+        XCTAssertEqual(OwlLines.cheque(.recorded, hours: 80).pose, .cheer)
+        for state in [OwlLines.ChequeState.inProgress, .pending, .awaitingTotal, .recorded] {
+            for hours in [0.0, 9.75, 120.5] {
+                let line = OwlLines.cheque(state, hours: hours).line
+                XCTAssertLessThanOrEqual(line.count, OwlLines.maxLength, line)
+            }
+        }
+    }
+
     func testLineStaysTheSameAllDay() {
         let cal = Calendar(identifier: .gregorian)
         let morning = cal.date(from: DateComponents(year: 2026, month: 10, day: 15, hour: 6))!

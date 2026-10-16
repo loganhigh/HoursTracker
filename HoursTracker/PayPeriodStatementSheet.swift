@@ -19,12 +19,25 @@ struct PayPeriodStatementSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AppTheme.Colors.bg.ignoresSafeArea()
+                AppColors.bg.ignoresSafeArea()
                 if let pdfURL {
+                    // The statement sits on a quiet card; the owl peeks over
+                    // the card's edge (PDFKit's own inset above the page would
+                    // leave him floating if he stood on the paper itself).
                     PDFPreview(url: pdfURL)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .padding(.horizontal, AppTheme.Spacing.md)
-                        .padding(.top, 8)
+                        .clipShape(RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous))
+                        .padding(AppSpacing.xs)
+                        .background(
+                            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                                .fill(AppColors.card)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                                        .stroke(AppColors.stroke, lineWidth: 1)
+                                )
+                        )
+                        .owlPeek(.clipboard)
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.top, AppSpacing.xs + OwlPerchMetrics.peekClearance)
                         .padding(.bottom, 96)
                 } else if failed {
                     EmptyStateView(
@@ -34,7 +47,13 @@ struct PayPeriodStatementSheet: View {
                         subtitle: "Please try again."
                     )
                 } else {
-                    ProgressView().tint(AppTheme.Colors.accent)
+                    VStack(spacing: AppSpacing.md) {
+                        OwlView(pose: .clipboard, size: .emptyState)
+                        LoadingDots()
+                        Text("Drawing up your statement…")
+                            .appText(.subheadline)
+                            .foregroundStyle(AppColors.subtext)
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -42,16 +61,8 @@ struct PayPeriodStatementSheet: View {
                     if let pdfURL { shareItem = SettingsExportShareItem(url: pdfURL) }
                 } label: {
                     Label("Share PDF", systemImage: "square.and.arrow.up")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(AppColors.textOnAccent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(AppTheme.Colors.accent)
-                        )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PrimaryButtonStyle())
                 .disabled(pdfURL == nil)
                 .opacity(pdfURL == nil ? 0.5 : 1)
                 .padding(.horizontal, 20)
