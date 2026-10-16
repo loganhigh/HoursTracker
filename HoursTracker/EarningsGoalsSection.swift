@@ -70,7 +70,7 @@ struct EarningsGoalsCard: View {
                     .fill(AppColors.accent.opacity(0.15))
                     .frame(width: 48, height: 48)
                 Image(systemName: "target")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.title3.weight(.bold))
                     .foregroundStyle(AppColors.accent)
             }
             Text("Save toward something")
@@ -107,17 +107,17 @@ private struct EarningsGoalRow: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(row.goal.name)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(AppTypography.headline.weight(.semibold))
                     .foregroundStyle(AppColors.text)
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 if row.isComplete {
                     Label("Goal reached", systemImage: "checkmark.seal.fill")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .font(AppTypography.metricLabel.weight(.bold))
                         .foregroundStyle(AppColors.positive)
                 } else {
                     Text("\(EarningsGoalFormat.money(row.remaining, code: currencyCode)) remaining")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .font(AppTypography.subheadline.weight(.bold))
                         .monospacedDigit()
                         .foregroundStyle(AppColors.text)
                 }
@@ -134,11 +134,11 @@ private struct EarningsGoalRow: View {
                 Text("\(Int((row.fraction * 100).rounded(.down)))%")
                     .foregroundStyle(tint)
             }
-            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .font(AppTypography.caption.weight(.semibold))
             .monospacedDigit()
 
             Text(footnote)
-                .font(.system(size: 13, weight: .medium))
+                .font(AppTypography.metricLabel.weight(.medium))
                 .foregroundStyle(row.isComplete ? AppColors.positive : AppColors.subtext)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)

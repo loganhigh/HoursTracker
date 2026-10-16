@@ -117,7 +117,7 @@ struct EarningsGoalEditorSheet: View {
                             error: monthlyError
                         )
                         Text("Add a monthly amount and the goal shows about how many months are left. Tap the goal any time to add what you've put aside.")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(AppTypography.caption.weight(.medium))
                             .foregroundStyle(AppColors.faint)
                     }
                     .padding(16)
@@ -129,6 +129,9 @@ struct EarningsGoalEditorSheet: View {
                                     .stroke(AppColors.stroke, lineWidth: 1)
                             )
                     )
+                    // An editor, so the owl peeks over the form card.
+                    .owlPeek()
+                    .padding(.top, OwlPerchMetrics.peekClearance)
 
                     Button(existing == nil ? "Add goal" : "Save changes", action: save)
                         .buttonStyle(PrimaryButtonStyle())
@@ -257,7 +260,7 @@ struct EarningsGoalEditorSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 13.5, weight: .semibold))
+                .font(AppTypography.subheadline.weight(.semibold))
                 .foregroundStyle(AppColors.subtext)
             content()
                 .foregroundStyle(AppColors.text)
@@ -272,7 +275,7 @@ struct EarningsGoalEditorSheet: View {
                 )
             if let error {
                 Text(error)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(AppTypography.caption.weight(.medium))
                     .foregroundStyle(AppColors.negative)
             }
         }

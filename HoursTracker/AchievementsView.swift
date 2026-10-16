@@ -96,14 +96,25 @@ struct AchievementsView: View {
             .sorted { $0.progress != $1.progress ? $0.progress > $1.progress : $0.order < $1.order }
             .first
 
+        let hasNoBadges = earnedBadges.isEmpty && ceoBadge == nil && developerBadge == nil
+
         return VStack(spacing: AppSpacing.xl) {
-            AchievementsSummaryCard(earned: earnedCount, total: totalCount)
+            // One owl: the empty state's when there are no badges yet,
+            // otherwise perched on the summary card.
+            if hasNoBadges {
+                AchievementsSummaryCard(earned: earnedCount, total: totalCount)
+            } else {
+                let owl = OwlLines.badges(earned: earnedCount, total: totalCount)
+                OwlPerch(pose: owl.pose, line: owl.line) {
+                    AchievementsSummaryCard(earned: earnedCount, total: totalCount)
+                }
+            }
 
             if let nextUp {
                 NextUpBadgeCard(badge: nextUp)
             }
 
-            if earnedBadges.isEmpty && ceoBadge == nil && developerBadge == nil {
+            if hasNoBadges {
                 AppEmptyState(
                     icon: "rosette",
                     owl: .trophy,

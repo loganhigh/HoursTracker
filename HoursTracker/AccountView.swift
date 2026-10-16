@@ -226,7 +226,7 @@ struct AccountView: View {
                 // the avatar just below it. The icon alone still gets a full
                 // 40x40 tap target.
                 Image(systemName: "gearshape.fill")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(AppColors.subtext)
                     .frame(width: 40, height: 40)
                     .contentShape(Rectangle())
@@ -332,7 +332,7 @@ struct AccountView: View {
                     // The pencil is what makes the name discoverable as
                     // editable — a bare tappable name looks like a label.
                     Image(systemName: "pencil")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(AppTypography.metricLabel.weight(.semibold))
                         .foregroundStyle(AppColors.faint)
                 }
                 .contentShape(Rectangle())
@@ -358,7 +358,7 @@ struct AccountView: View {
                         .fontWeight(.semibold)
                         .monospacedDigit()
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.caption2.weight(.bold))
                         .opacity(0.6)
                 }
                 .foregroundStyle(ringColor)
@@ -385,7 +385,7 @@ struct AccountView: View {
                             .appText(.subheadline)
                             .fontWeight(.semibold)
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.caption2.weight(.bold))
                             .opacity(0.6)
                     }
                     .foregroundStyle(WrappedPalette.accent)
@@ -431,35 +431,21 @@ struct AccountView: View {
     // MARK: - Lifetime stats
 
     private var lifetimeStatsSection: some View {
-        VStack(spacing: AppSpacing.sm) {
-            SectionEyebrow("Lifetime")
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: AppSpacing.sm),
-                GridItem(.flexible(), spacing: AppSpacing.sm)
-            ], spacing: AppSpacing.sm) {
-                MetricDisplay(
-                    icon: "clock.fill",
-                    label: "All-Time Hours",
-                    value: hoursDisplay(allTimeHours)
-                )
-                MetricDisplay(
-                    icon: "calendar",
-                    label: "Days Worked",
-                    value: "\(daysWorked)"
-                )
-                MetricDisplay(
-                    icon: "chart.bar.fill",
-                    label: "Avg Shift",
-                    value: AppTheme.Format.hours(averageShiftHours)
-                )
-                MetricDisplay(
-                    icon: "flame.fill",
-                    label: "Best Streak",
-                    value: streakDisplay(store.gamificationProfile.bestStreak),
-                    tint: AppColors.streak
-                )
-            }
-        }
+        let profile = store.displayedGamificationProfile()
+        return LifetimeStatsSection(
+            allTimeHours: allTimeHours,
+            daysWorked: daysWorked,
+            averageShiftHours: averageShiftHours,
+            bestStreak: store.gamificationProfile.bestStreak,
+            owl: OwlLines.you(
+                allTimeHours: allTimeHours,
+                daysWorked: daysWorked,
+                level: profile.level,
+                xpToNextLevel: max(profile.xpForNextLevel - profile.xpIntoCurrentLevel, 0),
+                canPrestige: store.gamificationProfile.canPrestige || profile.canPrestige,
+                daySeed: OwlLines.daySeed()
+            )
+        )
     }
 
     // MARK: - Navigation card
@@ -630,17 +616,6 @@ struct AccountView: View {
 
     // MARK: - Formatting
 
-    private func hoursDisplay(_ value: Double) -> String {
-        if value >= 1000 {
-            return String(format: "%.0f", value) + "h"
-        }
-        return AppTheme.Format.hours(value)
-    }
-
-    private func streakDisplay(_ days: Int) -> String {
-        days == 1 ? "1 day" : "\(days) days"
-    }
-
     // MARK: - Actions (unchanged flows)
 
     private func performAccountDeletion() async {
@@ -731,7 +706,7 @@ struct AccountView: View {
                 }
             )) {
                 Text("Pretend it's Wrapped season")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(AppTypography.metricLabel.weight(.semibold))
                     .foregroundStyle(AppColors.subtext)
             }
             .tint(AppColors.accent)
@@ -744,7 +719,7 @@ struct AccountView: View {
                         yearArchives: store.yearArchives
                     )
                 }
-                .font(.system(size: 13, weight: .semibold))
+                .font(AppTypography.metricLabel.weight(.semibold))
                 .foregroundStyle(AppColors.accent)
             }
         }

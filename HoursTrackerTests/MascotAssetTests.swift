@@ -143,6 +143,42 @@ final class MascotAssetTests: XCTestCase {
         }
     }
 
+    func testYouOwlPutsTheBigNewsFirst() {
+        XCTAssertEqual(OwlLines.you(allTimeHours: 0, daysWorked: 0, level: 1, xpToNextLevel: 100,
+                                    canPrestige: false, daySeed: 0).pose, .wave)
+        XCTAssertEqual(OwlLines.you(allTimeHours: 1500, daysWorked: 180, level: 25, xpToNextLevel: 0,
+                                    canPrestige: true, daySeed: 0).pose, .crown)
+        XCTAssertEqual(OwlLines.you(allTimeHours: 1240.5, daysWorked: 150, level: 14, xpToNextLevel: 340,
+                                    canPrestige: false, daySeed: 0).line, "1241h all time. Legendary.")
+        let picks = Set((0..<3).map {
+            OwlLines.you(allTimeHours: 86.5, daysWorked: 11, level: 4, xpToNextLevel: 1_250,
+                         canPrestige: false, daySeed: $0).line
+        })
+        XCTAssertEqual(picks, ["86.5h logged all time.", "11 days worked. Proud of you.", "1,250 XP to Level 5."])
+        for hours in [0, 0.25, 8, 999.75, 1000, 123_456.5] {
+            for seed in 0..<3 {
+                let line = OwlLines.you(allTimeHours: hours, daysWorked: 9_999, level: 24, xpToNextLevel: 99_999,
+                                        canPrestige: false, daySeed: seed).line
+                XCTAssertLessThanOrEqual(line.count, OwlLines.maxLength, line)
+            }
+        }
+    }
+
+    func testBadgeAndGoalOwls() {
+        XCTAssertEqual(OwlLines.badges(earned: 30, total: 30).pose, .crown)
+        XCTAssertEqual(OwlLines.badges(earned: 4, total: 30).line, "4 of 30 badges. Keep going.")
+        XCTAssertEqual(OwlLines.badges(earned: 16, total: 30).line, "Over halfway there. Keep going!")
+        XCTAssertEqual(OwlLines.goal(fraction: 1, isComplete: true).pose, .cheer)
+        XCTAssertEqual(OwlLines.goal(fraction: 0, isComplete: false).pose, .point)
+        XCTAssertEqual(OwlLines.goal(fraction: 0.237, isComplete: false).line, "23% saved. Every bit counts.")
+        for fraction in stride(from: 0.0, through: 1.0, by: 0.05) {
+            XCTAssertLessThanOrEqual(OwlLines.goal(fraction: fraction, isComplete: false).line.count, OwlLines.maxLength)
+        }
+        for earned in [0, 1, 99, 120] {
+            XCTAssertLessThanOrEqual(OwlLines.badges(earned: earned, total: 130).line.count, OwlLines.maxLength)
+        }
+    }
+
     func testLineStaysTheSameAllDay() {
         let cal = Calendar(identifier: .gregorian)
         let morning = cal.date(from: DateComponents(year: 2026, month: 10, day: 15, hour: 6))!
@@ -254,130 +290,5 @@ final class MascotAssetTests: XCTestCase {
                 try data.write(to: URL(fileURLWithPath: "\(dir)/screen-\(name).png"))
             }
         }
-    }
-
-    /// Friends screens with sample friends. They need a signed-in account in
-    /// the Simulator, and most sit in a NavigationStack that ImageRenderer
-    /// can't draw, so each is hosted in a real window and snapshotted.
-    func testDumpFriendsScreens() throws {
-        guard let dir = ProcessInfo.processInfo.environment["MASCOT_DUMP_DIR"] else {
-            throw XCTSkip("Set MASCOT_DUMP_DIR to dump Friends screen renders")
-        }
-        let friends = [
-            Self.sampleFriend(uid: "dana", name: "Dana", hours: 41.5, prestige: 2, streak: 6),
-            Self.sampleFriend(uid: "marcus", name: "Marcus", hours: 36, prestige: 0, streak: 0),
-            Self.sampleFriend(uid: "priya", name: "Priya", hours: 22.5, prestige: 1, streak: 3),
-        ]
-        let saved = FriendsService.shared.friends
-        FriendsService.shared.friends = friends
-        defer { FriendsService.shared.friends = saved }
-
-        var entries = [LeaderboardEntry(id: "me", name: "Logan", isMe: true, level: 12, prestige: 0, streak: 4,
-                                        payPeriodHours: 38, photoURL: nil, hoursHidden: false)]
-        entries += friends.map {
-            LeaderboardEntry(id: $0.uid, name: $0.displayName, isMe: false, level: $0.level, prestige: $0.prestige,
-                             streak: $0.currentStreak, payPeriodHours: $0.chequeHours, photoURL: nil, hoursHidden: false)
-        }
-        entries.sort { $0.payPeriodHours > $1.payPeriodHours }
-        for index in entries.indices { entries[index].rank = index + 1 }
-        let owl = OwlLines.friends(myRank: entries.first(where: \.isMe)?.rank ?? 0, total: entries.count)
-
-        let trackers = [
-            TopTracker(uid: "t1", name: "Ava", hours: 2140, countryCode: "CA", rank: 1, level: 30, prestige: 4),
-            TopTracker(uid: "t2", name: "Mateo", hours: 1985, countryCode: "US", rank: 2, level: 27, prestige: 3),
-            TopTracker(uid: "t3", name: "Sofia", hours: 1870, countryCode: "GB", rank: 3, level: 25, prestige: 2),
-        ]
-        let global = OwlLines.globalRank(7)
-
-        let screens: [(String, AnyView)] = [
-            ("friends-hub", AnyView(ScrollView {
-                VStack(spacing: AppSpacing.md) {
-                    FriendsHeroHeader(onAddFriend: {})
-                    OwlPerch(pose: owl.pose, line: owl.line) { PayPeriodPodiumCard(entries: entries) }
-                    ForEach(entries) { LeaderboardRankRow(entry: $0, onOpen: {}, onNudge: nil) }
-                }
-                .padding(AppSpacing.md)
-            }.background(AppColors.bg))),
-            ("add-friend", AnyView(NavigationStack {
-                ScrollView {
-                    UsernameCard(username: "logan", usernameInput: .constant(""), isSending: false,
-                                 copyConfirmation: false, onCopy: {}, onAdd: {}, onSetUsername: {})
-                        .owlPeek(.buddies, size: .header)
-                        .padding(.top, OwlView.Size.header.height - OwlPerchMetrics.feetOverlap / 2)
-                        .padding(AppSpacing.md)
-                }
-                .background(AppColors.bg)
-                .navigationTitle("Add a friend")
-                .navigationBarTitleDisplayMode(.inline)
-            })),
-            ("friend-profile", AnyView(NavigationStack {
-                FriendProfileDetailView(friendUid: "dana", friendsService: .shared)
-            })),
-            ("global-board", AnyView(ScrollView {
-                VStack(spacing: AppSpacing.sm) {
-                    GlobalLeaderboardHeader(onBack: {})
-                    OwlPerch(pose: global.pose, line: global.line) { GlobalRankHeroCard(rank: 7) }
-                    VerifiedReviewNote(isVerified: false, onTap: {})
-                    GlobalStatsStrip(trackerCount: 154, totalHours: 48_210, activeNow: 9)
-                    GlobalPodiumRow(entries: trackers, currentUid: nil).padding(.top, AppSpacing.xs)
-                }
-                .padding(.horizontal, AppSpacing.md)
-            }.background(AppColors.bg))),
-            ("public-profile", AnyView(PublicProfileSheet(tracker: trackers[0], currentUid: nil))),
-            ("country-picker", AnyView(NavigationStack { CountryFlagPickerView(store: HoursStore()) })),
-            ("verified-proof", AnyView(VerifiedReviewProofSheet(isVerified: false, accountName: "Logan", accountUid: nil))),
-            ("username", AnyView(UsernameSheet(mode: .firstTime, currentUsername: nil, suggestedFrom: "Logan",
-                                               friendsService: .shared))),
-            // Stand-in for onboarding's photo page (a private page of OnboardingView).
-            ("onboarding-photo", AnyView(VStack(spacing: AppSpacing.lg) {
-                OwlPointingAt(size: .form) {
-                    Circle().fill(AppColors.accent.opacity(0.18)).frame(width: 132, height: 132)
-                        .overlay(Text("L").font(.system(size: 52, weight: .bold, design: .rounded))
-                            .foregroundStyle(AppColors.accent))
-                }
-                OnboardingTitle(title: "Add a photo",
-                                subline: "Friends and the leaderboard see it next to your name. You can change it any time.")
-            }
-            .padding(.horizontal, AppSpacing.xl)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(AppColors.bg))),
-        ]
-        for (name, view) in screens {
-            // The signed-out host app's listeners empty the list between renders.
-            FriendsService.shared.friends = friends
-            let data = Self.windowSnapshot(view.environmentObject(AuthService.shared))
-            try data?.write(to: URL(fileURLWithPath: "\(dir)/friends-\(name).png"))
-        }
-    }
-
-    private static func sampleFriend(uid: String, name: String, hours: Double, prestige: Int, streak: Int) -> FriendProfile {
-        FriendProfile(
-            uid: uid, displayName: name, level: 14, prestige: prestige, currentStreak: streak, bestStreak: 12,
-            totalHours: 1240, chequeHours: hours, weeklyHours: hours / 2, weeklyShiftsLogged: 4, weeklyDaysLogged: 4,
-            badgeCount: 9, unlockedBadgeSummaries: [], equippedTitle: "", profilePhotoURL: nil,
-            companyName: "Northline Electric", companyOccupation: "Electrician", companyStartDate: nil,
-            companyHoursLogged: 1240, companyDaysWorked: 150, updatedAt: nil, friendsSince: nil,
-            chequeDailySummary: [], chequeWindowStart: "", chequeWindowCutoff: "", privacy: .default
-        )
-    }
-
-    /// Hosts `view` in a window on the test host's scene and draws it, so
-    /// NavigationStack, List and toolbars render as they do on device.
-    private static func windowSnapshot<V: View>(_ view: V, size: CGSize = CGSize(width: 390, height: 844)) -> Data? {
-        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else {
-            return nil
-        }
-        let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(origin: .zero, size: size)
-        window.overrideUserInterfaceStyle = .dark
-        window.rootViewController = UIHostingController(rootView: view.preferredColorScheme(.dark))
-        window.makeKeyAndVisible()
-        RunLoop.current.run(until: Date().addingTimeInterval(1.2))
-        defer { window.isHidden = true }
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 2
-        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
-            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-        }.pngData()
     }
 }

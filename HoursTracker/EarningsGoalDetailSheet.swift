@@ -66,6 +66,11 @@ struct EarningsGoalDetailSheet: View {
             Section {
                 summary(row)
                     .listRowBackground(AppColors.card)
+            } header: {
+                let owl = OwlLines.goal(fraction: row.fraction, isComplete: row.isComplete)
+                OwlCompanionHeader(pose: owl.pose, line: owl.line)
+                    .textCase(nil)
+                    .padding(.bottom, AppSpacing.xs)
             }
 
             Section {
@@ -122,11 +127,11 @@ struct EarningsGoalDetailSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(EarningsGoalFormat.money(row.progress, code: currencyCode))
-                    .font(.system(size: 30, weight: .heavy, design: .rounded))
+                    .font(.system(.title, design: .rounded, weight: .heavy))
                     .monospacedDigit()
                     .foregroundStyle(AppColors.text)
                 Text("of \(EarningsGoalFormat.money(row.goal.targetAmount, code: currencyCode))")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .font(AppTypography.subheadline.weight(.semibold))
                     .foregroundStyle(AppColors.subtext)
                 Spacer(minLength: 0)
             }
@@ -135,11 +140,11 @@ struct EarningsGoalDetailSheet: View {
             Text(row.isComplete
                  ? "Goal reached — nicely done."
                  : "\(EarningsGoalFormat.money(row.remaining, code: currencyCode)) remaining")
-                .font(.system(size: 14, weight: .semibold))
+                .font(AppTypography.subheadline.weight(.semibold))
                 .foregroundStyle(row.isComplete ? AppColors.positive : AppColors.subtext)
             if let months = row.monthsToGo {
                 Text("\(EarningsGoalCalculator.timelineText(months: months)) at \(EarningsGoalFormat.money(row.goal.monthlyContribution, code: currencyCode)) a month")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(AppTypography.metricLabel.weight(.medium))
                     .foregroundStyle(AppColors.subtext)
             }
         }
@@ -155,7 +160,7 @@ struct EarningsGoalDetailSheet: View {
                 .monospacedDigit()
                 .foregroundStyle(AppColors.positive)
         }
-        .font(.system(size: 15, weight: .medium))
+        .font(AppTypography.subheadline.weight(.medium))
     }
 
     private func addDeposit(_ row: EarningsGoalProgress) {

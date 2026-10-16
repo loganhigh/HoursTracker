@@ -16,7 +16,7 @@ struct CompanyProfileView: View {
             VStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Company Details")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .font(AppTypography.headline.weight(.bold))
                         .foregroundStyle(AppColors.text)
 
                     field(title: "Company Name", text: $companyName, placeholder: "Your Company Name")
@@ -26,10 +26,10 @@ struct CompanyProfileView: View {
                     if !companyName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, companyStartDateTS > 0 {
                         HStack(spacing: 8) {
                             Image(systemName: "clock.badge.checkmark.fill")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(AppTypography.metricLabel.weight(.bold))
                                 .foregroundStyle(AppTheme.Colors.accent)
                             Text("\(tenureString) at \(companyName.trimmingCharacters(in: .whitespacesAndNewlines))")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .font(AppTypography.metricLabel.weight(.semibold))
                                 .foregroundStyle(AppTheme.Colors.subtext)
                         }
                         .padding(.horizontal, 14)
@@ -46,7 +46,7 @@ struct CompanyProfileView: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Hourly Rate (optional)")
-                            .font(.system(size: 13.5, weight: .semibold))
+                            .font(AppTypography.subheadline.weight(.semibold))
                             .foregroundStyle(AppTheme.Colors.subtext)
 
                         HStack {
@@ -69,6 +69,9 @@ struct CompanyProfileView: View {
                 }
                 .padding(16)
                 .background(cardBackground)
+                // An editor, so the owl peeks over the form card.
+                .owlPeek()
+                .padding(.top, OwlPerchMetrics.peekClearance)
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)
@@ -101,7 +104,7 @@ struct CompanyProfileView: View {
     private var startDateField: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Start Date")
-                .font(.system(size: 13.5, weight: .semibold))
+                .font(AppTypography.subheadline.weight(.semibold))
                 .foregroundStyle(AppTheme.Colors.subtext)
 
             HStack {
@@ -128,7 +131,7 @@ struct CompanyProfileView: View {
             )
 
             Text("Used for work anniversaries and your Career company card.")
-                .font(.system(size: 12, weight: .medium))
+                .font(AppTypography.caption.weight(.medium))
                 .foregroundStyle(AppTheme.Colors.faint)
         }
     }
@@ -171,7 +174,7 @@ struct CompanyProfileView: View {
     private func field(title: String, text: Binding<String>, placeholder: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 13.5, weight: .semibold))
+                .font(AppTypography.subheadline.weight(.semibold))
                 .foregroundStyle(AppTheme.Colors.subtext)
 
             TextField(placeholder, text: text)

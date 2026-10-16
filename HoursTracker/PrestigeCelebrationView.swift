@@ -116,6 +116,10 @@ struct PrestigeCelebrationView: View {
                 .padding(.horizontal, 24)
                 .padding(.vertical, 32)
                 .background(celebrationCardBackground)
+                // The crown owl stands on the card's flat top edge (never on
+                // the round emblem), scarf in the new tier's colour.
+                .owlPeek(.crown, size: .companion, alignment: .center, scarfTint: tier.primary)
+                .padding(.top, OwlView.Size.companion.height - OwlPerchMetrics.feetOverlap / 2)
                 .padding(.horizontal, 20)
                 .scaleEffect(dismissing ? 0.92 : 1)
                 // Hidden while the portal runs — its chrome glows even with

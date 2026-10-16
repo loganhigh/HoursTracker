@@ -178,7 +178,7 @@ struct EarnedBadgesRow: View {
                     VStack(spacing: 6) {
                         AchievementBadgeCircle(badge: badge, size: 56)
                         Text(badge.name)
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .font(.caption2.weight(.semibold))
                             .foregroundStyle(AppColors.text)
                             .lineLimit(2)
                             .multilineTextAlignment(.center)
@@ -280,7 +280,7 @@ struct BadgeCollectionRow: View {
 
             if badge.isUnlocked {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(badge.isLegend ? AppColors.gold : AppColors.accent)
                     .opacity(0.9)
             } else {

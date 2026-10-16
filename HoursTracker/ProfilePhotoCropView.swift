@@ -72,9 +72,9 @@ struct ProfilePhotoCropView: View {
 
             Spacer(minLength: 0)
 
-            Text("Drag to reposition · Pinch to zoom")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.6))
+            // The owl explains the gestures, well clear of the round viewport.
+            OwlCompanionHeader(pose: .point, line: "Drag to move. Pinch to zoom.", size: .header)
+                .padding(.horizontal, AppSpacing.md)
                 .padding(.bottom, AppSpacing.xl)
         }
     }
@@ -86,7 +86,7 @@ struct ProfilePhotoCropView: View {
                 onCancel()
             } label: {
                 Text("Cancel")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppTypography.headline.weight(.semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
             }
@@ -95,7 +95,7 @@ struct ProfilePhotoCropView: View {
             Spacer(minLength: 0)
 
             Text("Move and Scale")
-                .font(.system(size: 16, weight: .semibold))
+                .font(AppTypography.headline.weight(.semibold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
 
@@ -108,7 +108,7 @@ struct ProfilePhotoCropView: View {
                 // Filled pill: the confirm action shouldn't read as a passive
                 // label on a black screen.
                 Text("Choose")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(AppTypography.subheadline.weight(.bold))
                     .foregroundStyle(AppColors.textOnAccent)
                     .lineLimit(1)
                     .padding(.horizontal, 16)
