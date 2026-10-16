@@ -16,6 +16,8 @@ struct OwlView: View {
         static let hero = Size(height: 150)
         /// Inside AppEmptyState.
         static let emptyState = Size(height: 120)
+        /// Above a short form (onboarding setup pages).
+        static let form = Size(height: 88)
         /// Perched on a tab's hero card with a speech bubble.
         static let companion = Size(height: 76)
         /// Peeking over the first card on sheets and editors.

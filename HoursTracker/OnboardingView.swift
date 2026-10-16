@@ -21,8 +21,9 @@ enum AppTutorialStorage {
 
 // MARK: - OnboardingView
 //
-// Six paged screens: Welcome → Leaderboard → Display name → Pay cycle →
-// Company → Sign in. Setup comes before the account, so the last thing a new
+// Seven paged screens: Welcome → Leaderboard → Display name → Photo → Pay
+// cycle → Company → Sign in, each with Otto (one pose per page). Setup comes
+// before the account, so the last thing a new
 // user does is authenticate; the moment Firebase confirms the session,
 // onboarding ends and they land on Home. (Company details remain editable in
 // Settings afterwards, and are optional here.)
@@ -191,7 +192,7 @@ struct OnboardingView: View {
                 headline: "Welcome to Hour Tracker",
                 subline: "Every shift you work, tracked and organized in one place."
             ) {
-                OnboardingLogoHero()
+                OnboardingOttoHero()
             }
             .tag(0)
 
@@ -200,6 +201,8 @@ struct OnboardingView: View {
                 subline: "Every shift moves you up. See how you stack up against your friends."
             ) {
                 OnboardingLeaderboardHero()
+                    .owlPeek(.trophy, size: .onboardingTrophy)
+                    .padding(.top, OwlView.Size.onboardingTrophy.height)
             }
             .tag(1)
 
@@ -251,21 +254,15 @@ struct OnboardingView: View {
             VStack(spacing: AppSpacing.md) {
                 Spacer(minLength: 0)
 
-                // No logo here. The welcome page already opens on it, and at
-                // any size that read as a logo it pushed the form into the
-                // page indicator — the form is the whole point of this page.
-                VStack(spacing: AppSpacing.sm) {
-                    Text("Start tracking")
-                        .appText(.title)
-                        .foregroundStyle(AppColors.text)
-                        .multilineTextAlignment(.center)
-
-                    Text("Sign in to sync your hours and progress everywhere.")
-                        .appText(.subheadline)
-                        .foregroundStyle(AppColors.subtext)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                // Otto stays companion-sized here: anything logo-sized pushed
+                // the form into the page indicator, and the form is the whole
+                // point of this page.
+                OnboardingHeader(
+                    pose: .shield,
+                    title: "Start tracking",
+                    subline: "Sign in to sync your hours and progress everywhere.",
+                    owlSize: .companion
+                )
 
                 AuthSignInOptionsView()
 
@@ -280,13 +277,9 @@ struct OnboardingView: View {
                     }
                 }
 
-                HStack(spacing: 6) {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 11, weight: .medium))
-                    Text("Your hours stay private until you share them.")
-                        .appText(.caption)
-                }
-                .foregroundStyle(AppColors.faint)
+                Label("Your hours stay private until you share them.", systemImage: "lock.fill")
+                    .appText(.caption)
+                    .foregroundStyle(AppColors.faint)
 
                 Spacer(minLength: 0)
             }
@@ -310,22 +303,12 @@ struct OnboardingView: View {
             Spacer(minLength: 0)
 
             VStack(spacing: AppSpacing.lg) {
-                Image(systemName: "at.circle.fill")
-                    .font(.system(size: 40, weight: .medium))
-                    .foregroundStyle(AppColors.accent)
-
-                VStack(spacing: AppSpacing.sm) {
-                    Text("Pick your username")
-                        .appText(.title)
-                        .foregroundStyle(AppColors.text)
-                        .multilineTextAlignment(.center)
-
-                    Text("It's how friends find you and your name everywhere in Hour Tracker. You can change it any time.")
-                        .appText(.subheadline)
-                        .foregroundStyle(AppColors.subtext)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                OnboardingHeader(
+                    pose: .idle,
+                    title: "Pick your username",
+                    subline: "It's how friends find you and your name everywhere in Hour Tracker. You can change it any time.",
+                    owlSize: usernameFieldFocused ? .peek : .form
+                )
 
                 HStack(spacing: 2) {
                     Spacer(minLength: 0)
@@ -352,14 +335,7 @@ struct OnboardingView: View {
                 }
                 .padding(.horizontal, AppSpacing.lg)
                 .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                        .fill(AppColors.card2.opacity(0.6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                                .stroke(AppColors.stroke.opacity(0.5), lineWidth: 1)
-                        )
-                )
+                .onboardingFormCard()
                 // The centered field only spans its text; the whole box
                 // should focus it.
                 .contentShape(Rectangle())
@@ -415,50 +391,45 @@ struct OnboardingView: View {
             Spacer(minLength: 0)
 
             VStack(spacing: AppSpacing.lg) {
-                Button {
-                    Haptics.lightTap()
-                    showingPhotoPicker = true
-                } label: {
-                    ZStack(alignment: .bottomTrailing) {
-                        if let image = photoManager.localImage {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 132, height: 132)
-                                .clipShape(Circle())
-                        } else {
-                            Circle()
-                                .fill(AppColors.accent.opacity(0.18))
-                                .frame(width: 132, height: 132)
-                                .overlay(
-                                    Text(initial.isEmpty ? "?" : initial)
-                                        .font(.system(size: 52, weight: .bold, design: .rounded))
-                                        .foregroundStyle(AppColors.accent)
-                                )
+                OttoPeekingBehind {
+                    Button {
+                        Haptics.lightTap()
+                        showingPhotoPicker = true
+                    } label: {
+                        ZStack(alignment: .bottomTrailing) {
+                            if let image = photoManager.localImage {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 132, height: 132)
+                                    .clipShape(Circle())
+                            } else {
+                                Circle()
+                                    .fill(AppColors.accent.opacity(0.18))
+                                    .frame(width: 132, height: 132)
+                                    .overlay(
+                                        Text(initial.isEmpty ? "?" : initial)
+                                            .font(.system(size: 52, weight: .bold, design: .rounded))
+                                            .foregroundStyle(AppColors.accent)
+                                    )
+                            }
+                            Image(systemName: hasPhoto ? "pencil" : "plus")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(AppColors.textOnAccent)
+                                .frame(width: 36, height: 36)
+                                .background(Circle().fill(AppColors.accent))
+                                .overlay(Circle().stroke(AppColors.bg, lineWidth: 3))
                         }
-                        Image(systemName: hasPhoto ? "pencil" : "plus")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(AppColors.textOnAccent)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(AppColors.accent))
-                            .overlay(Circle().stroke(AppColors.bg, lineWidth: 3))
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(hasPhoto ? "Change photo" : "Add a photo")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(hasPhoto ? "Change photo" : "Add a photo")
+                .padding(.top, AppSpacing.xxl)
 
-                VStack(spacing: AppSpacing.sm) {
-                    Text(hasPhoto ? "Looking good" : "Add a photo")
-                        .appText(.title)
-                        .foregroundStyle(AppColors.text)
-                        .multilineTextAlignment(.center)
-
-                    Text("Friends and the leaderboard see it next to your name. You can change it any time.")
-                        .appText(.subheadline)
-                        .foregroundStyle(AppColors.subtext)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                OnboardingTitle(
+                    title: hasPhoto ? "Looking good" : "Add a photo",
+                    subline: "Friends and the leaderboard see it next to your name. You can change it any time."
+                )
 
                 VStack(spacing: AppSpacing.sm) {
                     Button(hasPhoto ? "Continue" : "Choose a photo") {
@@ -497,22 +468,11 @@ struct OnboardingView: View {
             Spacer(minLength: 0)
 
             VStack(spacing: AppSpacing.lg) {
-                Image(systemName: "calendar.badge.clock")
-                    .font(.system(size: 40, weight: .medium))
-                    .foregroundStyle(AppColors.accent)
-
-                VStack(spacing: AppSpacing.sm) {
-                    Text("When do you get paid?")
-                        .appText(.title)
-                        .foregroundStyle(AppColors.text)
-                        .multilineTextAlignment(.center)
-
-                    Text("This sets your pay period so your hours and cheque totals line up. You can change it any time in Settings.")
-                        .appText(.subheadline)
-                        .foregroundStyle(AppColors.subtext)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                OnboardingHeader(
+                    pose: .calendar,
+                    title: "When do you get paid?",
+                    subline: "This sets your pay period so your hours and cheque totals line up. You can change it any time in Settings."
+                )
 
                 Picker("Pay period", selection: $payPeriodDraft) {
                     ForEach(PayPeriodType.allCases, id: \.self) { type in
@@ -557,14 +517,7 @@ struct OnboardingView: View {
                     }
                 }
                 .tint(AppColors.accent)
-                .background(
-                    RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                        .fill(AppColors.card2.opacity(0.6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                                .stroke(AppColors.stroke.opacity(0.5), lineWidth: 1)
-                        )
-                )
+                .onboardingFormCard()
 
                 Text(usesCutoffDraft
                      ? "Hours are counted up to the cutoff, then paid on payday."
@@ -614,22 +567,12 @@ struct OnboardingView: View {
                 Spacer(minLength: 0)
 
                 VStack(spacing: AppSpacing.lg) {
-                    Image(systemName: "building.2")
-                        .font(.system(size: 40, weight: .medium))
-                        .foregroundStyle(AppColors.accent)
-
-                    VStack(spacing: AppSpacing.sm) {
-                        Text("Where do you work?")
-                            .appText(.title)
-                            .foregroundStyle(AppColors.text)
-                            .multilineTextAlignment(.center)
-
-                        Text("Company name is only displayed to you. Your job title is shown publicly.")
-                            .appText(.subheadline)
-                            .foregroundStyle(AppColors.subtext)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    OnboardingHeader(
+                        pose: .clipboard,
+                        title: "Where do you work?",
+                        subline: "Company name is only displayed to you. Your job title is shown publicly.",
+                        owlSize: companyFieldFocused == nil ? .form : .peek
+                    )
 
                     VStack(spacing: 0) {
                         TextField("Company name", text: $companyNameDraft)
@@ -680,14 +623,7 @@ struct OnboardingView: View {
                     }
                     .tint(AppColors.accent)
                     .foregroundStyle(AppColors.text)
-                    .background(
-                        RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                            .fill(AppColors.card2.opacity(0.6))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                                    .stroke(AppColors.stroke.opacity(0.5), lineWidth: 1)
-                            )
-                    )
+                    .onboardingFormCard()
 
                     Button("Continue") {
                         saveCompanyAndContinue()
@@ -792,43 +728,6 @@ struct OnboardingView: View {
         guard dismissesWhenComplete else { return }
         withAnimation(.easeOut(duration: 0.25)) {
             isPresented = false
-        }
-    }
-}
-
-// MARK: - Shared hero page layout (screens 1–2)
-//
-// Hero and copy sit together as one vertically-centered group — the copy
-// reads as a caption on the illustration rather than as a separate block
-// stranded above the button.
-
-private struct OnboardingHeroPage<Hero: View>: View {
-    let headline: String
-    let subline: String
-    @ViewBuilder let hero: () -> Hero
-
-    var body: some View {
-        VStack(spacing: AppSpacing.xl) {
-            Spacer(minLength: 0)
-
-            hero()
-                .padding(.horizontal, AppSpacing.xl)
-
-            VStack(spacing: AppSpacing.sm) {
-                Text(headline)
-                    .appText(.title)
-                    .foregroundStyle(AppColors.text)
-                    .multilineTextAlignment(.center)
-
-                Text(subline)
-                    .appText(.subheadline)
-                    .foregroundStyle(AppColors.subtext)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, AppSpacing.xxl)
-
-            Spacer(minLength: 0)
         }
     }
 }

@@ -53,12 +53,13 @@ enum OwlPerchMetrics {
 
 private struct OwlPeekModifier: ViewModifier {
     let pose: OwlPose
+    let size: OwlView.Size
     let alignment: HorizontalAlignment
     let scarfTint: Color?
 
     func body(content: Content) -> some View {
         content.overlay(alignment: Alignment(horizontal: alignment, vertical: .top)) {
-            OwlView(pose: pose, size: .peek, scarfTint: scarfTint, bobs: false)
+            OwlView(pose: pose, size: size, scarfTint: scarfTint, bobs: false)
                 .padding(.horizontal, AppSpacing.lg)
                 .alignmentGuide(.top) { d in d[.bottom] - OwlPerchMetrics.feetOverlap / 2 }
                 .allowsHitTesting(false)
@@ -67,10 +68,16 @@ private struct OwlPeekModifier: ViewModifier {
 }
 
 extension View {
-    /// A small Otto on this card's top edge. Leave `OwlPerchMetrics.peekClearance`
-    /// of space above the card.
-    func owlPeek(_ pose: OwlPose = .peek, alignment: HorizontalAlignment = .trailing, scarfTint: Color? = nil) -> some View {
-        modifier(OwlPeekModifier(pose: pose, alignment: alignment, scarfTint: scarfTint))
+    /// Otto standing on (or peeking over) this card's top edge. Leave the owl's
+    /// height (`OwlPerchMetrics.peekClearance` at the default size) of space
+    /// above the card.
+    func owlPeek(
+        _ pose: OwlPose = .peek,
+        size: OwlView.Size = .peek,
+        alignment: HorizontalAlignment = .trailing,
+        scarfTint: Color? = nil
+    ) -> some View {
+        modifier(OwlPeekModifier(pose: pose, size: size, alignment: alignment, scarfTint: scarfTint))
     }
 }
 

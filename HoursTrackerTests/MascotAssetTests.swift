@@ -129,4 +129,29 @@ final class MascotAssetTests: XCTestCase {
             }
         }
     }
+
+    /// Full-screen launch states that are hard to reach in the Simulator
+    /// (the splash is usually gone in a blink; the error needs a failed load).
+    func testDumpLaunchScreens() throws {
+        guard let dir = ProcessInfo.processInfo.environment["MASCOT_DUMP_DIR"] else {
+            throw XCTSkip("Set MASCOT_DUMP_DIR to dump launch screen renders")
+        }
+        let screens: [(String, AnyView)] = [
+            ("splash", AnyView(SplashView())),
+            ("startup-error", AnyView(StartupErrorView(
+                message: "We couldn't load your saved hours.",
+                onRetry: {},
+                onResetCache: {}
+            ))),
+        ]
+        for (name, view) in screens {
+            let renderer = ImageRenderer(content: view
+                .frame(width: 390, height: 844)
+                .environment(\.colorScheme, .dark))
+            renderer.scale = 2
+            if let data = renderer.uiImage?.pngData() {
+                try data.write(to: URL(fileURLWithPath: "\(dir)/screen-\(name).png"))
+            }
+        }
+    }
 }

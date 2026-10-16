@@ -1,32 +1,37 @@
 import SwiftUI
 
-/// Lightweight splash shown while store loads.
+/// Lightweight splash shown while store loads. Otto has his coffee while the
+/// data comes in (Welcome Back, right after, is where he waves).
 struct SplashView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var logoVisible = false
     @State private var contentVisible = false
 
     var body: some View {
-        VStack(spacing: 28) {
-            Image("SplashLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 220, maxHeight: 120)
-                .scaleEffect(logoVisible ? 1 : (reduceMotion ? 1 : 0.94))
-                .opacity(logoVisible ? 1 : 0)
+        VStack(spacing: AppSpacing.xl) {
+            VStack(spacing: AppSpacing.md) {
+                OwlView(pose: .coffee, size: .hero)
 
-            ProgressView()
-                .scaleEffect(1.2)
-                .tint(AppTheme.Colors.accent)
-                .opacity(contentVisible ? 1 : 0)
+                Image("SplashLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 150, maxHeight: 76)
+                    .accessibilityLabel("Hour Tracker")
+            }
+            .scaleEffect(logoVisible ? 1 : (reduceMotion ? 1 : 0.94))
+            .opacity(logoVisible ? 1 : 0)
 
-            Text("Loading your data…")
-                .font(.system(size: 17, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.subtext)
-                .opacity(contentVisible ? 1 : 0)
+            VStack(spacing: AppSpacing.sm) {
+                ProgressView()
+                    .tint(AppColors.accent)
+                Text("Loading your data…")
+                    .appText(.headline)
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .opacity(contentVisible ? 1 : 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppTheme.Colors.bg.ignoresSafeArea())
+        .background(AppColors.bg.ignoresSafeArea())
         .onAppear {
             if reduceMotion {
                 logoVisible = true
@@ -50,38 +55,38 @@ struct StartupErrorView: View {
     let onResetCache: () -> Void
 
     var body: some View {
-        VStack(spacing: 20) {
-            Image("SplashLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 180, maxHeight: 90)
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(AppTheme.Colors.warning)
-            Text("Something went wrong")
-                .font(AppTheme.Typography.title3)
-                .foregroundStyle(AppTheme.Colors.text)
-            Text(message)
-                .font(AppTheme.Typography.callout)
-                .foregroundStyle(AppTheme.Colors.subtext)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            VStack(spacing: 12) {
-                Button("Retry", action: onRetry)
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppTheme.Colors.accent)
-                Button("Reset cache", action: onResetCache)
-                    .foregroundStyle(AppTheme.Colors.danger)
+        VStack(spacing: AppSpacing.lg) {
+            OwlView(pose: .oops, size: .emptyState)
+
+            VStack(spacing: AppSpacing.sm) {
+                Text("Something went wrong")
+                    .appText(.title)
+                    .foregroundStyle(AppColors.text)
+                Text(message)
+                    .appText(.subheadline)
+                    .foregroundStyle(AppColors.subtext)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+
+            VStack(spacing: AppSpacing.sm) {
+                Button("Retry", action: onRetry)
+                    .buttonStyle(PrimaryButtonStyle())
+                Button("Reset cache", action: onResetCache)
+                    .font(AppTypography.button)
+                    .foregroundStyle(AppColors.negative)
+                    .padding(.vertical, AppSpacing.xs)
+            }
+
             Text("If this keeps happening, try updating the app or contact support.")
-                .font(.footnote)
-                .foregroundStyle(AppTheme.Colors.subtext)
+                .appText(.caption)
+                .foregroundStyle(AppColors.faint)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-                .padding(.top, 8)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .padding(.horizontal, AppSpacing.xl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppTheme.Colors.bg.ignoresSafeArea())
+        .background(AppColors.bg.ignoresSafeArea())
         .gentleFadeIn()
     }
 }

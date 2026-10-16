@@ -2,9 +2,9 @@ import SwiftUI
 
 // MARK: - Onboarding sections
 //
-// Hero illustrations for the three onboarding screens plus the shared page
-// indicator. Tokens + DesignComponents only — semantic colors, Reduce Motion
-// honored on every animation.
+// Hero illustrations, Otto's per-page header, the shared page layouts and the
+// page indicator. Tokens + DesignComponents only — semantic colors, Reduce
+// Motion honored on every animation. One Otto per page.
 
 // MARK: - Page indicator
 
@@ -27,27 +27,121 @@ struct OnboardingPageIndicator: View {
     }
 }
 
-// MARK: - Screen 1 hero — the app logo
+// MARK: - Shared hero page layout (screens 1–2)
+//
+// Hero and copy sit together as one vertically-centered group — the copy
+// reads as a caption on the illustration rather than as a separate block
+// stranded above the button.
 
-/// The Hour Tracker mark on its own, with a gentle idle float.
-struct OnboardingLogoHero: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var floating = false
+struct OnboardingHeroPage<Hero: View>: View {
+    let headline: String
+    let subline: String
+    @ViewBuilder let hero: () -> Hero
 
     var body: some View {
-        Image("AppLogo")
-            .resizable()
-            .scaledToFit()
-            .frame(width: 230, height: 230)
-            .offset(y: floating ? -5 : 5)
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(.easeInOut(duration: 3.5).repeatForever(autoreverses: true)) {
-                    floating = true
-                }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Hour Tracker")
+        VStack(spacing: AppSpacing.xl) {
+            Spacer(minLength: 0)
+
+            hero()
+                .padding(.horizontal, AppSpacing.xl)
+
+            OnboardingTitle(title: headline, subline: subline)
+                .padding(.horizontal, AppSpacing.xxl)
+
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+// MARK: - Page header (setup screens)
+
+/// Centered title + one explanatory line, shared by every page.
+struct OnboardingTitle: View {
+    let title: String
+    let subline: String
+
+    var body: some View {
+        VStack(spacing: AppSpacing.sm) {
+            Text(title)
+                .appText(.title)
+                .foregroundStyle(AppColors.text)
+                .multilineTextAlignment(.center)
+
+            Text(subline)
+                .appText(.subheadline)
+                .foregroundStyle(AppColors.subtext)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// Otto above the page title. Pass `.peek` while the keyboard is up so the
+/// field and button stay on screen.
+struct OnboardingHeader: View {
+    let pose: OwlPose
+    let title: String
+    let subline: String
+    var owlSize: OwlView.Size = .form
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(spacing: AppSpacing.lg) {
+            OwlView(pose: pose, size: owlSize)
+            OnboardingTitle(title: title, subline: subline)
+        }
+        .animation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion), value: owlSize)
+    }
+}
+
+extension View {
+    /// The quiet grouped-field card used by the setup forms.
+    func onboardingFormCard() -> some View {
+        background(
+            RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                .fill(AppColors.card2.opacity(0.6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                        .stroke(AppColors.stroke.opacity(0.5), lineWidth: 1)
+                )
+        )
+    }
+}
+
+extension OwlView.Size {
+    /// Otto on top of the onboarding leaderboard. Taller than companion size
+    /// because the raised trophy takes a third of the pose's height.
+    static let onboardingTrophy = OwlView.Size(height: 96)
+}
+
+// MARK: - Screen 1 hero — meet Otto
+
+/// The owl waving hello. (The mascot is never named in the UI.)
+struct OnboardingOttoHero: View {
+    var body: some View {
+        VStack(spacing: AppSpacing.xs) {
+            OwlSpeechBubble(text: "Hey there!", tail: .bottom)
+            OwlView(pose: .wave, size: OwlView.Size(height: 190))
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("An owl waving hello")
+    }
+}
+
+// MARK: - Screen 4 — Otto peeking over the avatar
+
+/// Otto peeking up from behind `content` (the avatar circle), his wing tips
+/// resting on its top edge.
+struct OttoPeekingBehind<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            OwlView(pose: .peek, size: OwlView.Size(height: 58), bobs: false)
+                .offset(y: -38)
+            content()
+        }
     }
 }
 

@@ -41,15 +41,15 @@ struct AuthSignInOptionsView: View {
 
             if let resetConfirmation {
                 Text(resetConfirmation)
-                    .font(.system(size: 13, weight: .medium))
+                    .appText(.caption)
                     .foregroundStyle(AppColors.positive)
                     .multilineTextAlignment(.center)
             }
 
             if let err = authService.lastError {
                 Text(err)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.danger)
+                    .appText(.caption)
+                    .foregroundStyle(AppColors.negative)
                     .multilineTextAlignment(.center)
             }
 
@@ -64,12 +64,12 @@ struct AuthSignInOptionsView: View {
     private var emailField: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Email")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(AppTypography.caption.weight(.semibold))
                 .foregroundStyle(AppColors.subtext)
 
             HStack(spacing: 10) {
                 Image(systemName: "envelope")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(AppTypography.subheadline)
                     .foregroundStyle(AppColors.faint)
                 TextField("Enter your email", text: $email)
                     .keyboardType(.emailAddress)
@@ -85,12 +85,12 @@ struct AuthSignInOptionsView: View {
     private var passwordField: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Password")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(AppTypography.caption.weight(.semibold))
                 .foregroundStyle(AppColors.subtext)
 
             HStack(spacing: 10) {
                 Image(systemName: "lock")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(AppTypography.subheadline)
                     .foregroundStyle(AppColors.faint)
                 SecureField("Enter your password", text: $password)
                     .textContentType(isCreatingAccount ? .newPassword : .password)
@@ -117,7 +117,7 @@ struct AuthSignInOptionsView: View {
                     }
                 }
             }
-            .font(.system(size: 13, weight: .semibold, design: .rounded))
+            .font(AppTypography.caption.weight(.semibold))
             .foregroundStyle(AppColors.accent)
             .disabled(email.isEmpty || authService.isSigningIn)
             .opacity(email.isEmpty ? 0.5 : 1)
@@ -146,22 +146,16 @@ struct AuthSignInOptionsView: View {
                         .tint(AppColors.textOnAccent)
                 }
                 Text(isCreatingAccount ? "Create account" : "Sign In")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(AppTypography.button)
             }
-            .foregroundStyle(AppColors.textOnAccent)
+            // Quiet primary: flat accent once the form is valid, a hairline
+            // gray until then — never the multi-hue accent gradient.
+            .foregroundStyle(canSubmitEmail ? AppColors.textOnAccent : AppColors.faint)
             .frame(maxWidth: .infinity)
             .frame(height: 50)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(
-                        canSubmitEmail
-                        ? AppTheme.Colors.accentGradient
-                        : LinearGradient(
-                            colors: [AppTheme.Colors.stroke, AppTheme.Colors.stroke],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                    .fill(canSubmitEmail ? AppColors.accent : AppColors.stroke)
             )
         }
         .buttonStyle(PremiumPressStyle())
@@ -179,7 +173,7 @@ struct AuthSignInOptionsView: View {
                     .scaledToFit()
                     .frame(width: 20, height: 20)
                 Text("Continue with Google")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(AppTypography.button)
             }
             // Fixed near-black on the white plate rather than a theme token —
             // the plate stays white in both schemes, so a scheme-following
@@ -188,7 +182,7 @@ struct AuthSignInOptionsView: View {
             .frame(maxWidth: .infinity)
             .frame(height: 50)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
                     .fill(.white)
             )
         }
@@ -200,7 +194,7 @@ struct AuthSignInOptionsView: View {
     private var accountSwitch: some View {
         HStack(spacing: 4) {
             Text(isCreatingAccount ? "Already have an account?" : "Don't have an account?")
-                .font(.system(size: 13))
+                .appText(.caption)
                 .foregroundStyle(AppColors.subtext)
             Button(isCreatingAccount ? "Sign In" : "Sign Up") {
                 Haptics.lightTap()
@@ -210,7 +204,7 @@ struct AuthSignInOptionsView: View {
                     isCreatingAccount.toggle()
                 }
             }
-            .font(.system(size: 13, weight: .bold, design: .rounded))
+            .font(AppTypography.caption.weight(.bold))
             .foregroundStyle(AppColors.accent)
         }
         .padding(.top, 2)
@@ -221,13 +215,13 @@ struct AuthSignInOptionsView: View {
     private var orDivider: some View {
         HStack(spacing: 12) {
             Rectangle()
-                .fill(AppTheme.Colors.stroke)
+                .fill(AppColors.stroke)
                 .frame(height: 1)
             Text("or continue with")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.subtext)
+                .appText(.caption)
+                .foregroundStyle(AppColors.subtext)
             Rectangle()
-                .fill(AppTheme.Colors.stroke)
+                .fill(AppColors.stroke)
                 .frame(height: 1)
         }
         .padding(.vertical, 2)
@@ -236,10 +230,10 @@ struct AuthSignInOptionsView: View {
     private var signedInBanner: some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(Color.green)
+                .foregroundStyle(AppColors.positive)
             Text("Signed in — you're all set!")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.text)
+                .appText(.headline)
+                .foregroundStyle(AppColors.text)
         }
         .padding(.top, 4)
     }
@@ -253,18 +247,18 @@ private extension View {
     /// Bordered field container with a focus ring, matching the reference's
     /// `focus-within:ring-2`.
     func authFieldChrome(focused: Bool) -> some View {
-        font(.system(size: 16, weight: .medium, design: .rounded))
-            .foregroundStyle(AppTheme.Colors.text)
-            .tint(AppTheme.Colors.accent)
+        font(AppTypography.body)
+            .foregroundStyle(AppColors.text)
+            .tint(AppColors.accent)
             .padding(.horizontal, 14)
             .frame(height: 50)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(AppTheme.Colors.card2)
+                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                    .fill(AppColors.card2)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
                             .stroke(
-                                focused ? AppTheme.Colors.accent : AppTheme.Colors.stroke,
+                                focused ? AppColors.accent : AppColors.stroke,
                                 lineWidth: focused ? 2 : 1
                             )
                     )
