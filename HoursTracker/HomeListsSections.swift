@@ -56,18 +56,7 @@ struct RecentShiftsSection: View {
                         .buttonStyle(PremiumPressStyle())
                     }
 
-                    Button(action: onViewAll) {
-                        Text("View all")
-                            .appText(.headline)
-                            .foregroundStyle(AppColors.accent)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, AppSpacing.sm)
-                            .background(
-                                RoundedRectangle(cornerRadius: AppRadius.sm + 2, style: .continuous)
-                                    .fill(AppColors.accent.opacity(0.1))
-                            )
-                    }
-                    .buttonStyle(PremiumPressStyle())
+                    AppLinkButton(title: "View all", action: onViewAll)
                 }
             }
         }
@@ -116,14 +105,7 @@ struct YearlyOverviewSection: View {
             }
             .frame(maxWidth: .infinity)
             .padding(AppSpacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                    .fill(AppColors.card.opacity(0.55))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                            .stroke(AppColors.stroke, lineWidth: 0.5)
-                    )
-            )
+            .appCard()
         }
         .frame(maxWidth: .infinity)
     }
@@ -260,14 +242,7 @@ struct HomeFriendsCard: View {
                 )
                 .frame(maxWidth: .infinity)
                 .padding(AppSpacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                        .fill(AppColors.card.opacity(0.55))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                                .stroke(AppColors.stroke, lineWidth: 0.5)
-                        )
-                )
+                .appCard()
             }
             .frame(maxWidth: .infinity)
         }
@@ -446,12 +421,7 @@ struct HomeFriendsCardContent: View {
                     }
 
                     if row.isMe {
-                        Text("YOU")
-                            .font(.system(size: 9, weight: .black))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(AppColors.accent.opacity(0.22)))
-                            .foregroundStyle(AppColors.accent)
+                        AppChip(text: "YOU")
                     }
                 }
 
@@ -464,11 +434,11 @@ struct HomeFriendsCardContent: View {
 
             if row.hoursHidden {
                 Text("Hours hidden")
-                    .font(.system(size: 11, weight: .semibold))
+                    .appText(.caption)
                     .foregroundStyle(AppColors.subtext)
             } else {
                 Text(AppTheme.Format.hours(row.hours))
-                    .font(AppTypography.metricValue)
+                    .font(AppTypography.rowValue)
                     .foregroundStyle(rank == 1 ? AppColors.accent : AppColors.text)
             }
         }
@@ -490,25 +460,18 @@ struct HomeAdminConsoleCard: View {
     var body: some View {
         Button(action: onOpen) {
             Text("Admin console")
-                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .appText(.headline)
                 .foregroundStyle(AppColors.text)
                 .frame(maxWidth: .infinity)
                 // Trailing overlay rather than an HStack sibling: a chevron in
                 // the flow would shift the label off true centre by its width.
                 .overlay(alignment: .trailing) {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.footnote.weight(.bold))
                         .foregroundStyle(AppColors.faint)
                 }
                 .padding(AppSpacing.sm)
-            .background(
-                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                    .fill(AppColors.card.opacity(0.55))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                            .stroke(AppColors.stroke, lineWidth: 0.5)
-                    )
-            )
+            .appCard()
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
