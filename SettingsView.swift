@@ -175,7 +175,7 @@ struct SettingsView: View {
                         .tint(AppColors.accent)
                     }
                 } header: {
-                    SectionEyebrow("Pay Cycle")
+                    OwlSectionHeader("Pay Cycle", pose: .wrench)
                 } footer: {
                     Text(payCycleFooter)
                         .appText(.caption)
@@ -343,7 +343,7 @@ struct SettingsView: View {
                                 )
                                 .frame(width: 40, height: 40)
                             Image(systemName: "lock.shield.fill")
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(.title3.weight(.semibold))
                                 .foregroundStyle(AppColors.accent)
                         }
                         VStack(alignment: .leading, spacing: 2) {

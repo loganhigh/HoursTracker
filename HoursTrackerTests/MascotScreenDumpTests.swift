@@ -171,6 +171,37 @@ final class MascotScreenDumpTests: XCTestCase {
         }
     }
 
+    /// Settings and its sub-screens, with two saved job sites (removed again).
+    func testDumpSettingsScreens() throws {
+        guard let dir = ProcessInfo.processInfo.environment["MASCOT_DUMP_DIR"] else {
+            throw XCTSkip("Set MASCOT_DUMP_DIR to dump Settings screen renders")
+        }
+        let store = Self.makeStore()
+        let sites = [
+            store.addJobSite(JobSite(name: "Northline Shop", detail: "1420 Industrial Ave")),
+            store.addJobSite(JobSite(name: "Riverside Tower", detail: "Level 12 fit-out")),
+        ]
+        defer { sites.forEach { store.deleteJobSite($0) } }
+
+        let phone = CGSize(width: 390, height: 844)
+        let screens: [(String, AnyView, CGSize)] = [
+            ("settings", AnyView(SettingsView(store: store, settings: .constant(store.paySettings))), phone),
+            ("friends-privacy", AnyView(NavigationStack { FriendsPrivacySettingsView(store: store) }), phone),
+            ("job-sites", AnyView(NavigationStack { JobSitesSettingsView(store: store) }), phone),
+            ("job-site-editor", AnyView(JobSiteEditorSheet(store: store, existing: nil)), phone),
+            ("notifications", AnyView(NotificationsSheet(store: store, onDismiss: {})), phone),
+            ("reminder", AnyView(ReminderTimePickerSheet(hour: .constant(17), onDismiss: {})), phone),
+            ("export", AnyView(DataExportSheet(store: store)), phone),
+            // Roughly the medium detent the pay-cycle pickers open at.
+            ("date-picker", AnyView(AutoDismissDatePickerSheet(date: .constant(Date()), title: "Next Payday",
+                                                               onDismiss: {})), CGSize(width: 390, height: 480)),
+        ]
+        for (name, view, size) in screens {
+            let data = Self.windowSnapshot(view.environmentObject(AuthService.shared), size: size)
+            try data?.write(to: URL(fileURLWithPath: "\(dir)/settings-\(name).png"))
+        }
+    }
+
     private static func sampleFriend(uid: String, name: String, hours: Double, prestige: Int, streak: Int) -> FriendProfile {
         FriendProfile(
             uid: uid, displayName: name, level: 14, prestige: prestige, currentStreak: streak, bestStreak: 12,

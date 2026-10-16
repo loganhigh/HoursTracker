@@ -34,6 +34,19 @@ struct AutoDismissDatePickerSheet: View {
                 .navigationTitle(title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
+                    // The calendar has no card edge to peek over and the
+                    // medium detent has no room to spare, so the owl sits
+                    // beside the title.
+                    ToolbarItem(placement: .principal) {
+                        HStack(spacing: AppSpacing.xxs) {
+                            OwlView(pose: .calendar, size: OwlView.Size(height: 32), bobs: false)
+                            Text(title)
+                                .appText(.headline)
+                                .foregroundStyle(AppColors.text)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityAddTraits(.isHeader)
+                    }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") {
                             date = selectedDate

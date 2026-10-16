@@ -65,9 +65,37 @@ struct OwlPointingAt<Content: View>: View {
     }
 }
 
+/// A Form section's header with the owl standing at its trailing end, feet on
+/// the top edge of the section's card: the Form version of `.owlPeek`, for a
+/// screen's first section. The title stays centred.
+struct OwlSectionHeader: View {
+    let title: String
+    let pose: OwlPose
+    var size: OwlView.Size = .header
+
+    init(_ title: String, pose: OwlPose, size: OwlView.Size = .header) {
+        self.title = title
+        self.pose = pose
+        self.size = size
+    }
+
+    var body: some View {
+        SectionEyebrow(title)
+            .frame(minHeight: size.height - OwlPerchMetrics.formHeaderDrop, alignment: .bottom)
+            .overlay(alignment: .bottomTrailing) {
+                OwlView(pose: pose, size: size, bobs: false)
+                    .offset(y: OwlPerchMetrics.formHeaderDrop)
+                    .allowsHitTesting(false)
+            }
+    }
+}
+
 enum OwlPerchMetrics {
     /// How far Otto's feet overlap the card under him.
     static let feetOverlap: CGFloat = 8
+    /// From a Form header's bottom down to where the owl's feet should land:
+    /// the header-to-card gap plus half the feet overlap.
+    static let formHeaderDrop: CGFloat = 19
     /// Room to leave above a card that has a peeking owl, so the owl doesn't
     /// collide with the header above it.
     static let peekClearance: CGFloat = OwlView.Size.peek.height - feetOverlap / 2

@@ -70,7 +70,7 @@ struct JobSitesSettingsView: View {
                         }
                     }
                 } header: {
-                    SectionEyebrow("Job Sites")
+                    OwlSectionHeader("Job Sites", pose: .pin)
                 } footer: {
                     Text(canAddMore
                          ? "Saved on this device. Picking one when you add a shift fills in its name — deleting a site never changes shifts you've already logged."
@@ -147,6 +147,8 @@ struct JobSiteEditorSheet: View {
                         AddShiftPanel {
                             JobSiteFormFields(draft: $draft, nameFocused: nil)
                         }
+                        .owlPeek(.pin, size: .header)
+                        .padding(.top, OwlView.Size.header.height - OwlPerchMetrics.feetOverlap / 2)
 
                         if existing != nil {
                             Button {
@@ -155,7 +157,7 @@ struct JobSiteEditorSheet: View {
                             } label: {
                                 HStack(spacing: AppSpacing.xs) {
                                     Image(systemName: "trash")
-                                        .font(.system(size: 14, weight: .semibold))
+                                        .font(AppTypography.subheadline.weight(.semibold))
                                     Text("Delete Location / Job")
                                         .font(.system(.subheadline, design: .rounded, weight: .semibold))
                                 }
