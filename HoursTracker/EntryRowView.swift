@@ -8,69 +8,71 @@ struct EntryRowView: View {
 
     /// When set, shows **PayDay** / **Cutoff** under the hours when the entry falls on those cheque dates.
     var paySettings: PaySettings? = nil
-    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        HStack(alignment: .center, spacing: AppSpacing.sm) {
+        HStack(alignment: .top, spacing: 12) {
             // LEFT: Date + time range
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(fullDate(entry.date))
-                        .appText(.headline)
-                        .foregroundStyle(AppColors.text)
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppTheme.Colors.text)
 
                     if let weather = entry.weather {
                         HStack(spacing: 3) {
                             Image(systemName: weather.symbolName)
-                                .font(.caption.weight(.semibold))
+                                .font(.system(size: 12, weight: .semibold))
                             Text(weather.temperatureText)
-                                .font(AppTypography.caption.monospacedDigit())
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
                         }
-                        .foregroundStyle(AppColors.subtext)
+                        .foregroundStyle(AppTheme.Colors.subtext)
                     }
                 }
 
                 // Off days have nothing to say; a stat-paid holiday shows its pay.
                 if !entry.isOffDay || entry.statPayHours > 0 {
                     Text(timeRangeText)
-                        .appText(.subheadline)
-                        .foregroundStyle(AppColors.subtext)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AppTheme.Colors.subtext)
                 }
             }
-            // One line each normally; at AX sizes the time range may wrap
-            // rather than lose its end time.
-            .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
-            .minimumScaleFactor(0.85)
 
-            Spacer(minLength: AppSpacing.xs)
+            Spacer(minLength: 10)
 
-            // RIGHT: Pay (if enabled) + Hours + period markers + Chevron
-            HStack(spacing: AppSpacing.xs) {
-                VStack(alignment: .trailing, spacing: 4) {
+            // RIGHT: Pay (if enabled) + Hours + Chevron
+            HStack(spacing: 10) {
+                VStack(alignment: .trailing, spacing: 6) {
                     if showPay, !entry.isOffDay {
                         Text(currency(payValue))
-                            .font(AppTypography.rowValue)
-                            .foregroundStyle(AppColors.accent)
+                            .font(AppDesignSystem.Typography.heroNumerals(size: 16, weight: .bold))
+                            .foregroundStyle(AppTheme.Colors.accent)
                     }
 
                     Text(statusLabel)
-                        .font(showPay ? AppTypography.caption.monospacedDigit() : AppTypography.rowValue)
+                        .font(AppDesignSystem.Typography.heroNumerals(size: showPay ? 15 : 17, weight: .bold))
                         .foregroundStyle(statusColor)
 
                     ForEach(periodDayMarkers, id: \.self) { marker in
-                        AppChip(text: marker, tint: markerColor(for: marker))
+                        Text(marker)
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(markerColor(for: marker))
                     }
                 }
-                .lineLimit(1)
-
+                
                 Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(AppColors.faint)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppTheme.Colors.subtext.opacity(0.5))
             }
         }
-        .padding(.vertical, AppSpacing.sm + 2)
-        .padding(.horizontal, AppSpacing.md)
-        .appCard(radius: AppRadius.md)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
+                .fill(AppTheme.Colors.card2)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
+                .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
+        )
     }
 
     // MARK: - Pay period markers

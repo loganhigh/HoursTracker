@@ -256,52 +256,6 @@ final class MascotScreenDumpTests: XCTestCase {
         }
     }
 
-    /// Home only, across prestige tiers (the accent retints every card) and at
-    /// an accessibility text size, so a restyle can be checked in every mode
-    /// the app supports. Same sample data as the tour.
-    func testDumpHomeVariants() throws {
-        guard let dir = ProcessInfo.processInfo.environment["MASCOT_DUMP_DIR"] else {
-            throw XCTSkip("Set MASCOT_DUMP_DIR to dump Home variants")
-        }
-        let store = Self.makeStore()
-        Self.removeSampleShifts(store)
-        Self.addSampleShifts(store, includingToday: true)
-        let savedPay = store.paySettings
-        store.paySettings.hourlyRate = 32.5
-        store.paySettings.hourlyRateSet = true
-        defer {
-            Self.removeSampleShifts(store)
-            store.paySettings = savedPay
-            store.persist()
-            ThemeProvider.current = SemanticColors.adaptive
-        }
-
-        let variants: [(String, Int, DynamicTypeSize, CGFloat)] = [
-            ("p0", 0, .large, 844),
-            ("p0-full", 0, .large, 2300),
-            ("p3-gold", 3, .large, 844),
-            ("p5-diamond", 5, .large, 844),
-            ("p15-legend", 15, .large, 844),
-            ("p0-ax2", 0, .accessibility2, 1100),
-        ]
-        for (name, prestige, size, height) in variants {
-            let hosted = Self.tabShell(.home)
-                .environmentObject(store)
-                .environmentObject(AuthService.shared)
-                .environmentObject(PremiumManager.shared)
-                .environmentObject(TabRouter())
-                .environmentObject(LevelUpCoordinator())
-                .environmentObject(LiveShiftManager.shared)
-                .environmentObject(NetworkMonitor.shared)
-                .environmentObject(CloudSyncManager.shared)
-                .environmentObject(LocalizationManager.shared)
-                .adaptiveTheme(prestige: prestige)
-                .dynamicTypeSize(size)
-            let data = Self.windowSnapshot(hosted, size: CGSize(width: 390, height: height), settle: 3)
-            try data?.write(to: URL(fileURLWithPath: "\(dir)/home-\(name).png"))
-        }
-    }
-
     /// The app's tab bar (same items as AppTabView) on a fixed tab.
     private static func tabShell(_ selected: AppTab) -> some View {
         TabView(selection: .constant(selected)) {

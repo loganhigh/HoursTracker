@@ -102,8 +102,6 @@ enum AppTypography {
     static let metricValue = Font.system(.title3, design: .rounded, weight: .bold).monospacedDigit()
     /// Stat tile label (13-ish, medium).
     static let metricLabel = Font.system(.footnote, design: .default, weight: .medium)
-    /// Trailing value on a list row (hours, money): body-size rounded numerals.
-    static let rowValue = Font.system(.body, design: .rounded, weight: .bold).monospacedDigit()
     /// Primary button label.
     static let button = Font.system(.body, design: .rounded, weight: .bold)
 }
