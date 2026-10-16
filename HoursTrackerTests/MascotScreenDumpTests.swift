@@ -122,15 +122,8 @@ final class MascotScreenDumpTests: XCTestCase {
         let store = Self.makeStore()
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
-        var added: [WorkEntry] = []
-        for back in 1...42 {
-            guard let day = cal.date(byAdding: .day, value: -back, to: today), !cal.isDateInWeekend(day),
-                  let start = cal.date(bySettingHour: 7, minute: 0, second: 0, of: day),
-                  let end = cal.date(bySettingHour: 16, minute: 0, second: 0, of: day) else { continue }
-            let entry = WorkEntry(date: day, start: start, end: end, breakMinutes: 30, notes: "")
-            store.add(entry)
-            added.append(entry)
-        }
+        Self.removeSampleShifts(store)
+        Self.addSampleShifts(store, includingToday: false)
         let defaults = UserDefaults.standard
         let companyKeys = ["company_name", "company_occupation", "company_start_date_ts"]
         let savedCompany = companyKeys.map { defaults.object(forKey: $0) }
@@ -141,7 +134,7 @@ final class MascotScreenDumpTests: XCTestCase {
         EarningsGoalStore.shared.add(goal)
         EarningsGoalStore.shared.addDeposit(1200, to: goal.id)
         defer {
-            added.forEach { store.delete($0) }
+            Self.removeSampleShifts(store)
             for (key, value) in zip(companyKeys, savedCompany) { defaults.set(value, forKey: key) }
             EarningsGoalStore.shared.delete(id: goal.id)
         }
@@ -216,6 +209,107 @@ final class MascotScreenDumpTests: XCTestCase {
             let data = Self.windowSnapshot(view.environmentObject(AuthService.shared), settle: 2.5)
             try data?.write(to: URL(fileURLWithPath: "\(dir)/support-\(name).png"))
         }
+    }
+
+    /// Home, History and the add-shift flow for the redesign tour: six weeks
+    /// of shifts plus today's, and a wage, all removed again afterwards.
+    func testDumpTourScreens() throws {
+        guard let dir = ProcessInfo.processInfo.environment["MASCOT_DUMP_DIR"] else {
+            throw XCTSkip("Set MASCOT_DUMP_DIR to dump tour renders")
+        }
+        let store = Self.makeStore()
+        Self.removeSampleShifts(store)
+        let added = Self.addSampleShifts(store, includingToday: true)
+        let savedPay = store.paySettings
+        store.paySettings.hourlyRate = 32.5
+        store.paySettings.hourlyRateSet = true
+        defer {
+            Self.removeSampleShifts(store)
+            store.paySettings = savedPay
+            store.persist()
+        }
+
+        let cycle = store.currentPayCycle()
+        let screens: [(String, AnyView)] = [
+            ("home", AnyView(Self.tabShell(.home))),
+            ("history", AnyView(Self.tabShell(.history))),
+            ("add-shift", AnyView(AddShiftEntryView(store: store))),
+            ("shift-saved", AnyView(store.shiftEarnings(for: [added[0]]).map {
+                ShiftEarningsView(store: store, earnings: $0, onDone: {})
+            })),
+            ("cheque", AnyView(NavigationStack { PayCycleDetailView(store: store, initialCycle: cycle) })),
+            ("statement", AnyView(PayPeriodStatementSheet(store: store, cycle: cycle))),
+        ]
+        for (name, view) in screens {
+            let hosted = view
+                .environmentObject(store)
+                .environmentObject(AuthService.shared)
+                .environmentObject(PremiumManager.shared)
+                .environmentObject(TabRouter())
+                .environmentObject(LevelUpCoordinator())
+                .environmentObject(LiveShiftManager.shared)
+                .environmentObject(NetworkMonitor.shared)
+                .environmentObject(CloudSyncManager.shared)
+                .environmentObject(LocalizationManager.shared)
+            let data = Self.windowSnapshot(hosted, size: CGSize(width: 390, height: 844), settle: 3)
+            try data?.write(to: URL(fileURLWithPath: "\(dir)/tour-\(name).png"))
+        }
+    }
+
+    /// The app's tab bar (same items as AppTabView) on a fixed tab.
+    private static func tabShell(_ selected: AppTab) -> some View {
+        TabView(selection: .constant(selected)) {
+            NavigationStack { HoursHomeView().background(AppColors.bg.ignoresSafeArea()) }
+                .tabItem { Label("Home", systemImage: "house.fill") }
+                .tag(AppTab.home)
+            NavigationStack { HistoryTabView() }
+                .tabItem { Label("History", systemImage: "calendar") }
+                .tag(AppTab.history)
+            AppColors.bg.ignoresSafeArea()
+                .tabItem { Label("Add", systemImage: "plus.circle.fill") }
+                .tag(AppTab.add)
+            AppColors.bg.ignoresSafeArea()
+                .tabItem { Label("Friends", systemImage: "person.2.fill") }
+                .tag(AppTab.friends)
+            AppColors.bg.ignoresSafeArea()
+                .tabItem { Label("You", systemImage: "person.crop.circle") }
+                .tag(AppTab.you)
+        }
+        .tint(AppColors.accent)
+    }
+
+    /// Six weeks of weekday shifts (7:00 to 3:30, 30-minute break, no notes),
+    /// plus a longer one today when asked. Newest first. Off days the host
+    /// app logged on those dates are deleted for good (test data only).
+    @discardableResult
+    private static func addSampleShifts(_ store: HoursStore, includingToday: Bool) -> [WorkEntry] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        var added: [WorkEntry] = []
+        for back in (includingToday ? 0 : 1)...42 {
+            guard let day = cal.date(byAdding: .day, value: -back, to: today),
+                  back == 0 || !cal.isDateInWeekend(day),
+                  let start = cal.date(bySettingHour: 7, minute: 0, second: 0, of: day),
+                  let end = cal.date(bySettingHour: back == 0 ? 16 : 15, minute: 30, second: 0, of: day) else { continue }
+            // The host app marks shiftless past days off; clear those first.
+            store.entries.filter { $0.isOffDay && cal.isDate($0.date, inSameDayAs: day) }.forEach { store.delete($0) }
+            let entry = WorkEntry(date: day, start: start, end: end, breakMinutes: 30, notes: "")
+            store.add(entry)
+            added.append(entry)
+        }
+        return added
+    }
+
+    /// Deletes sample shifts, including any an earlier run left behind (the
+    /// store lives in the app group, which survives uninstalling), then waits
+    /// for the store's background save to land before the process can exit.
+    private static func removeSampleShifts(_ store: HoursStore) {
+        let cal = Calendar.current
+        for entry in store.entries where !entry.isOffDay && entry.notes.isEmpty && entry.breakMinutes == 30 {
+            let start = cal.dateComponents([.hour, .minute], from: entry.start)
+            if start.hour == 7, start.minute == 0 { store.delete(entry) }
+        }
+        RunLoop.current.run(until: Date().addingTimeInterval(1.5))
     }
 
     private static func sampleFriend(uid: String, name: String, hours: Double, prestige: Int, streak: Int) -> FriendProfile {
