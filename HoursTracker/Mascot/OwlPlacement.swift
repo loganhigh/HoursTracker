@@ -65,9 +65,21 @@ struct OwlPointingAt<Content: View>: View {
     }
 }
 
+extension View {
+    /// The app's standard placement: the owl standing centred on this card's
+    /// top edge at header size, no speech bubble, with the room he needs
+    /// above the card already added.
+    func owlStanding(_ pose: OwlPose, scarfTint: Color? = nil) -> some View {
+        owlPeek(pose, size: .header, alignment: .center, scarfTint: scarfTint)
+            .padding(.top, OwlPerchMetrics.headerClearance)
+    }
+}
+
 enum OwlPerchMetrics {
     /// How far Otto's feet overlap the card under him.
     static let feetOverlap: CGFloat = 8
+    /// Room above a card for a header-size owl standing on it.
+    static let headerClearance: CGFloat = OwlView.Size.header.height - feetOverlap / 2
     /// Room to leave above a card that has a peeking owl, so the owl doesn't
     /// collide with the header above it.
     static let peekClearance: CGFloat = OwlView.Size.peek.height - feetOverlap / 2

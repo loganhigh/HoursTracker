@@ -312,7 +312,8 @@ private struct MissingShiftListSheet: View {
                         )
                         .padding(.top, AppSpacing.xxl)
                     } else {
-                        OwlCompanionHeader(pose: .search, line: "These usual workdays have no shift.")
+                        OwlView(pose: .search, size: .header)
+                            .frame(maxWidth: .infinity)
                             .padding(.bottom, AppSpacing.xs)
                     }
                     ForEach(suggestions) { suggestion in

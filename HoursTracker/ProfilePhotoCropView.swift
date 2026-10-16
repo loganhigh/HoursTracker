@@ -72,10 +72,15 @@ struct ProfilePhotoCropView: View {
 
             Spacer(minLength: 0)
 
-            // The owl explains the gestures, well clear of the round viewport.
-            OwlCompanionHeader(pose: .point, line: "Drag to move. Pinch to zoom.", size: .header)
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.bottom, AppSpacing.xl)
+            // The owl sits centred over the gesture hint, clear of the viewport.
+            VStack(spacing: AppSpacing.xs) {
+                OwlView(pose: .point, size: .header)
+                Text("Drag to reposition · Pinch to zoom")
+                    .font(AppTypography.metricLabel.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, AppSpacing.xl)
         }
     }
 

@@ -145,8 +145,7 @@ struct FriendsView: View {
                             onSetUsername: { showingUsernameSheet = true },
                             prestige: store.displayedPrestige
                         )
-                        .owlPeek(.buddies, size: .header)
-                        .padding(.top, OwlView.Size.header.height - OwlPerchMetrics.feetOverlap / 2)
+                        .owlStanding(.buddies)
                         notifyCaption
                         if let actionMessage {
                             Text(actionMessage)
@@ -261,7 +260,8 @@ struct FriendsView: View {
                             .cardAppear(index: 1, group: "friends")
                     } else {
                         let owl = OwlLines.friends(myRank: entries.first(where: \.isMe)?.rank ?? 0, total: entries.count)
-                        OwlPerch(pose: owl.pose, line: owl.line) { PayPeriodPodiumCard(entries: entries) }
+                        PayPeriodPodiumCard(entries: entries)
+                            .owlStanding(owl.pose)
                             .cardAppear(index: 1, group: "friends")
                     }
                 }

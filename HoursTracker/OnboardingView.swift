@@ -201,7 +201,7 @@ struct OnboardingView: View {
                 subline: "Every shift moves you up. See how you stack up against your friends."
             ) {
                 OnboardingLeaderboardHero()
-                    .owlPeek(.trophy, size: .onboardingTrophy)
+                    .owlPeek(.trophy, size: .onboardingTrophy, alignment: .center)
                     .padding(.top, OwlView.Size.onboardingTrophy.height)
             }
             .tag(1)
@@ -391,7 +391,8 @@ struct OnboardingView: View {
             Spacer(minLength: 0)
 
             VStack(spacing: AppSpacing.lg) {
-                OwlPointingAt(size: .form) {
+                VStack(spacing: AppSpacing.sm) {
+                    OwlView(pose: .idle, size: .form)
                     Button {
                         Haptics.lightTap()
                         showingPhotoPicker = true

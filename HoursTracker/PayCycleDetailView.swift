@@ -124,8 +124,8 @@ struct PayCycleDetailView: View {
                         heroBlock
                             .cardAppear(index: 0, group: "cheque")
                     } else {
-                        let owl = chequeOwl
-                        OwlPerch(pose: owl.pose, line: owl.line) { heroBlock }
+                        heroBlock
+                            .owlStanding(chequeOwl.pose)
                             .cardAppear(index: 0, group: "cheque")
                     }
 

@@ -56,7 +56,7 @@ final class MascotScreenDumpTests: XCTestCase {
             ("friends-hub", AnyView(ScrollView {
                 VStack(spacing: AppSpacing.md) {
                     FriendsHeroHeader(onAddFriend: {})
-                    OwlPerch(pose: owl.pose, line: owl.line) { PayPeriodPodiumCard(entries: entries) }
+                    PayPeriodPodiumCard(entries: entries).owlStanding(owl.pose)
                     ForEach(entries) { LeaderboardRankRow(entry: $0, onOpen: {}, onNudge: nil) }
                 }
                 .padding(AppSpacing.md)
@@ -65,8 +65,7 @@ final class MascotScreenDumpTests: XCTestCase {
                 ScrollView {
                     UsernameCard(username: "logan", usernameInput: .constant(""), isSending: false,
                                  copyConfirmation: false, onCopy: {}, onAdd: {}, onSetUsername: {})
-                        .owlPeek(.buddies, size: .header)
-                        .padding(.top, OwlView.Size.header.height - OwlPerchMetrics.feetOverlap / 2)
+                        .owlStanding(.buddies)
                         .padding(AppSpacing.md)
                 }
                 .background(AppColors.bg)
@@ -79,7 +78,7 @@ final class MascotScreenDumpTests: XCTestCase {
             ("global-board", AnyView(ScrollView {
                 VStack(spacing: AppSpacing.sm) {
                     GlobalLeaderboardHeader(onBack: {})
-                    OwlPerch(pose: global.pose, line: global.line) { GlobalRankHeroCard(rank: 7) }
+                    GlobalRankHeroCard(rank: 7).owlStanding(global.pose)
                     VerifiedReviewNote(isVerified: false, onTap: {})
                     GlobalStatsStrip(trackerCount: 154, totalHours: 48_210, activeNow: 9)
                     GlobalPodiumRow(entries: trackers, currentUid: nil).padding(.top, AppSpacing.xs)
@@ -93,7 +92,8 @@ final class MascotScreenDumpTests: XCTestCase {
                                                friendsService: .shared))),
             // Stand-in for onboarding's photo page (a private page of OnboardingView).
             ("onboarding-photo", AnyView(VStack(spacing: AppSpacing.lg) {
-                OwlPointingAt(size: .form) {
+                VStack(spacing: AppSpacing.sm) {
+                    OwlView(pose: .idle, size: .form)
                     Circle().fill(AppColors.accent.opacity(0.18)).frame(width: 132, height: 132)
                         .overlay(Text("L").font(.system(size: 52, weight: .bold, design: .rounded))
                             .foregroundStyle(AppColors.accent))

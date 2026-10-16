@@ -111,10 +111,9 @@ struct GlobalLeaderboardView: View {
             ScrollView {
                 LazyVStack(spacing: AppSpacing.sm) {
                     let owl = OwlLines.globalRank(myTracker?.rank)
-                    OwlPerch(pose: owl.pose, line: owl.line) {
-                        GlobalRankHeroCard(rank: myTracker?.rank)
-                    }
-                    .cardAppear(index: 0, group: "globalBoard")
+                    GlobalRankHeroCard(rank: myTracker?.rank)
+                        .owlStanding(owl.pose)
+                        .cardAppear(index: 0, group: "globalBoard")
 
                     VerifiedReviewNote(isVerified: verified.isVerified) {
                         showingProofSheet = true

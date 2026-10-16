@@ -35,9 +35,9 @@ struct PayPeriodStatementSheet: View {
                                         .stroke(AppColors.stroke, lineWidth: 1)
                                 )
                         )
-                        .owlPeek(.clipboard)
+                        .owlStanding(.clipboard)
                         .padding(.horizontal, AppSpacing.md)
-                        .padding(.top, AppSpacing.xs + OwlPerchMetrics.peekClearance)
+                        .padding(.top, AppSpacing.xs)
                         .padding(.bottom, 96)
                 } else if failed {
                     EmptyStateView(

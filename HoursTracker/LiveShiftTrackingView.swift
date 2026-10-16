@@ -58,10 +58,10 @@ struct LiveShiftTrackingView: View {
 
             if let shift = liveShift.activeShift {
                 let owl = OwlLines.liveShift(isOnBreak: shift.isOnBreak, isStale: shift.isStale)
-                OwlPerch(pose: owl.pose, line: owl.line, size: OwlView.Size(height: 110)) {
-                    activeCard(shift)
-                }
-                .padding(.horizontal, AppSpacing.lg)
+                activeCard(shift)
+                    .owlPeek(owl.pose, size: .companion, alignment: .center)
+                    .padding(.top, OwlView.Size.companion.height - OwlPerchMetrics.feetOverlap / 2)
+                    .padding(.horizontal, AppSpacing.lg)
             }
 
             Spacer(minLength: AppSpacing.md)

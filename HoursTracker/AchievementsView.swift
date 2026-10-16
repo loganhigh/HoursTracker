@@ -105,9 +105,8 @@ struct AchievementsView: View {
                 AchievementsSummaryCard(earned: earnedCount, total: totalCount)
             } else {
                 let owl = OwlLines.badges(earned: earnedCount, total: totalCount)
-                OwlPerch(pose: owl.pose, line: owl.line) {
-                    AchievementsSummaryCard(earned: earnedCount, total: totalCount)
-                }
+                AchievementsSummaryCard(earned: earnedCount, total: totalCount)
+                    .owlStanding(owl.pose)
             }
 
             if let nextUp {
