@@ -46,6 +46,26 @@ enum OwlLines {
         return (.clipboard, "Fresh cheque. Let's fill it up.")
     }
 
+    /// Friends hub: where you sit on this cheque's board.
+    static func friends(myRank: Int, total: Int) -> (pose: OwlPose, line: String) {
+        switch myRank {
+        case 1: return (.trophy, "You're #1 among your friends.")
+        case 2, 3: return (.trophy, "#\(myRank) this cheque. On the podium!")
+        case let rank where rank > 3: return (.buddies, "#\(rank) of \(total). Time to climb.")
+        default: return (.buddies, "Your friends' hours, this cheque.")
+        }
+    }
+
+    /// Global board: your worldwide rank, or how to get onto the board.
+    static func globalRank(_ rank: Int?) -> (pose: OwlPose, line: String) {
+        guard let rank else { return (.search, "Log a shift to join the board.") }
+        switch rank {
+        case 1: return (.crown, "#1 in the world. Wow.")
+        case 2...10: return (.trophy, "Top 10 worldwide. Huge.")
+        default: return (.trophy, "#\(rank) worldwide. Keep climbing.")
+        }
+    }
+
     /// Where a cheque stands, for its detail screen.
     enum ChequeState {
         case inProgress, pending, awaitingTotal, recorded

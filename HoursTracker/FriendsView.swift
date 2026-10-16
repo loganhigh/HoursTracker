@@ -145,6 +145,8 @@ struct FriendsView: View {
                             onSetUsername: { showingUsernameSheet = true },
                             prestige: store.displayedPrestige
                         )
+                        .owlPeek(.buddies, size: .header)
+                        .padding(.top, OwlView.Size.header.height - OwlPerchMetrics.feetOverlap / 2)
                         notifyCaption
                         if let actionMessage {
                             Text(actionMessage)
@@ -253,8 +255,15 @@ struct FriendsView: View {
                     .cardAppear(index: 0, group: "friends")
 
                 if !entries.isEmpty {
-                    PayPeriodPodiumCard(entries: entries)
-                        .cardAppear(index: 1, group: "friends")
+                    if friendsService.friends.isEmpty {
+                        // The "No friends yet" empty state carries the owl.
+                        PayPeriodPodiumCard(entries: entries)
+                            .cardAppear(index: 1, group: "friends")
+                    } else {
+                        let owl = OwlLines.friends(myRank: entries.first(where: \.isMe)?.rank ?? 0, total: entries.count)
+                        OwlPerch(pose: owl.pose, line: owl.line) { PayPeriodPodiumCard(entries: entries) }
+                            .cardAppear(index: 1, group: "friends")
+                    }
                 }
 
                 if let actionMessage {
@@ -355,10 +364,10 @@ struct FriendsView: View {
     private var notifyCaption: some View {
         HStack(spacing: AppSpacing.xs) {
             Image(systemName: "bell.fill")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(AppColors.accent)
             Text("They'll get a request to accept")
-                .font(.system(size: 13, weight: .semibold))
+                .font(AppTypography.metricLabel.weight(.semibold))
                 .foregroundStyle(AppColors.text)
         }
         .padding(.top, AppSpacing.xxs)

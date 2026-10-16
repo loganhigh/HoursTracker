@@ -32,17 +32,14 @@ struct UsernameSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: AppSpacing.lg) {
-                VStack(spacing: AppSpacing.sm) {
-                    Text(mode == .firstTime ? "Pick your username" : "Change your username")
-                        .appText(.title)
-                        .foregroundStyle(AppColors.text)
-                        .multilineTextAlignment(.center)
-                    Text("It's how friends find you and your name everywhere in Hour Tracker.")
-                        .appText(.subheadline)
-                        .foregroundStyle(AppColors.subtext)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                // The keyboard is up from the start, so the owl stays at
+                // header size rather than the onboarding form size.
+                OnboardingHeader(
+                    pose: mode == .firstTime ? .wave : .idle,
+                    title: mode == .firstTime ? "Pick your username" : "Change your username",
+                    subline: "It's how friends find you and your name everywhere in Hour Tracker.",
+                    owlSize: .header
+                )
                 .padding(.horizontal, AppSpacing.xl)
 
                 HStack(spacing: 2) {
@@ -70,14 +67,7 @@ struct UsernameSheet: View {
                 }
                 .padding(.horizontal, AppSpacing.lg)
                 .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                        .fill(AppColors.card2.opacity(0.6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                                .stroke(AppColors.stroke.opacity(0.5), lineWidth: 1)
-                        )
-                )
+                .onboardingFormCard()
                 // The centered field only spans its text; the whole box
                 // should focus it.
                 .contentShape(Rectangle())
@@ -89,7 +79,7 @@ struct UsernameSheet: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(.top, AppSpacing.xl)
+            .padding(.top, AppSpacing.md)
             .background(AppColors.bg.ignoresSafeArea())
             .navigationTitle(mode == .firstTime ? "" : "Username")
             .navigationBarTitleDisplayMode(.inline)

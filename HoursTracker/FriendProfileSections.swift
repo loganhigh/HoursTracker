@@ -320,3 +320,99 @@ enum FriendProfileFormat {
         return df.string(from: date)
     }
 }
+
+// MARK: - Identity header
+
+/// Avatar, name, rank and prestige, tinted by the friend's tier. The owl
+/// peeks from behind the avatar in the friend's tier colour (this screen's
+/// one owl).
+struct FriendIdentityHeader: View {
+    let friend: FriendProfile
+    let accent: Color
+
+    @State private var showFullPhoto = false
+
+    private static let owlSize = OwlView.Size(height: 40)
+    private static let owlRise: CGFloat = 26
+
+    var body: some View {
+        let tier = friend.prestigeTier
+        VStack(spacing: 10) {
+            OwlPeekingBehind(size: Self.owlSize, rise: Self.owlRise, scarfTint: accent) {
+                ProfileAvatarView(
+                    name: friend.displayName,
+                    size: 76,
+                    photoURL: friend.profilePhotoURL,
+                    uid: friend.uid,
+                    showsAccentRing: false
+                )
+                .overlay(
+                    Circle()
+                        .stroke(accent.opacity(tier.isLegend ? 0 : 0.75), lineWidth: 2)
+                        .padding(-4)
+                )
+                // Ascended (P11+) swap the plain accent ring for their tier ring.
+                .ascendedAvatarRing(prestige: friend.prestige, diameter: 76, inset: 4)
+                .onTapGesture {
+                    if friend.profilePhotoURL != nil {
+                        showFullPhoto = true
+                    }
+                }
+            }
+            .padding(.top, Self.owlRise - 6)
+            .fullScreenCover(isPresented: $showFullPhoto) {
+                ExpandedPhotoView(
+                    name: friend.displayName,
+                    photoURL: friend.profilePhotoURL,
+                    uid: friend.uid
+                )
+            }
+
+            HStack(spacing: 5) {
+                PrestigeNameText(
+                    name: friend.displayName,
+                    prestige: friend.prestige,
+                    font: AppTypography.title,
+                    uid: friend.uid
+                )
+                if VerifiedTracker.isVerified(reviewed: friend.hasReviewedApp) {
+                    // The profile is the badge's hero moment — one on screen,
+                    // so it can shimmer like the podium's.
+                    VerifiedBadgeView(variant: .shimmer, size: 17)
+                }
+            }
+
+            Text(friend.rankTitle)
+                .font(AppTypography.headline)
+                .foregroundStyle(accent)
+
+            Text(friend.levelDisplayLine)
+                .font(AppTypography.metricLabel.weight(.semibold))
+                .foregroundStyle(AppColors.subtext)
+
+            HStack(spacing: 6) {
+                Image(systemName: tier.icon)
+                    .font(.caption.weight(.bold))
+                    .legendShimmer(tier)
+                Text("Prestige \(friend.prestige) • \(tier.name)")
+                    .font(AppTypography.metricLabel.weight(.bold))
+            }
+            .foregroundStyle(accent)
+            .padding(.horizontal, AppSpacing.sm)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(accent.opacity(0.12))
+                    .overlay(Capsule().stroke(accent.opacity(0.35), lineWidth: 1))
+            )
+
+            if !friend.equippedTitle.isEmpty, friend.privacy.shareBadges {
+                Text(friend.equippedTitle.strippingWrappingQuotes)
+                    .font(AppTypography.metricLabel.weight(.semibold))
+                    .foregroundStyle(AppColors.subtext)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}

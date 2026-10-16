@@ -391,7 +391,7 @@ struct OnboardingView: View {
             Spacer(minLength: 0)
 
             VStack(spacing: AppSpacing.lg) {
-                OttoPeekingBehind {
+                OwlPeekingBehind {
                     Button {
                         Haptics.lightTap()
                         showingPhotoPicker = true

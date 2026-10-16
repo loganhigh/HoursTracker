@@ -78,7 +78,7 @@ struct VerifiedReviewProofSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .font(AppTypography.headline.weight(.semibold))
                 }
             }
         }
@@ -92,17 +92,21 @@ struct VerifiedReviewProofSheet: View {
 
     private var header: some View {
         VStack(spacing: AppSpacing.sm) {
-            VerifiedBadgeView(variant: .shimmer, size: 52)
-                .shadow(color: Color(red: 0.114, green: 0.631, blue: 0.949).opacity(0.35), radius: 14)
+            // The owl peeks from behind the mark this sheet is about.
+            OwlPeekingBehind(size: OwlView.Size(height: 40), rise: 26) {
+                VerifiedBadgeView(variant: .shimmer, size: 52)
+                    .shadow(color: Color(red: 0.114, green: 0.631, blue: 0.949).opacity(0.35), radius: 14)
+            }
+            .padding(.top, 20)
 
             Text(isVerified ? "You're verified" : "Get the verified mark")
-                .font(.system(size: 22, weight: .heavy, design: .rounded))
+                .font(AppTypography.title.weight(.heavy))
                 .foregroundStyle(AppColors.text)
 
             Text(isVerified
                  ? "Your mark shows beside your name everywhere other trackers can see you."
                  : "Leave a review, submit a screenshot of it, and we'll add the mark beside your name.")
-                .font(.system(size: 14, weight: .medium))
+                .font(AppTypography.subheadline.weight(.medium))
                 .foregroundStyle(AppColors.subtext)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -112,7 +116,7 @@ struct VerifiedReviewProofSheet: View {
 
     private var alreadyVerified: some View {
         Text("Nothing left to do — thanks for reviewing.")
-            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .font(AppTypography.subheadline.weight(.semibold))
             .foregroundStyle(AppColors.subtext)
             .padding(.top, AppSpacing.xs)
     }
@@ -132,7 +136,7 @@ struct VerifiedReviewProofSheet: View {
                     AppActions.openAppStoreWriteReview()
                 } label: {
                     Text("Open")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .font(AppTypography.metricLabel.weight(.bold))
                         .foregroundStyle(AppColors.textOnAccent)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 7)
@@ -171,21 +175,21 @@ struct VerifiedReviewProofSheet: View {
                     .frame(width: 28, height: 28)
                 if isDone {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(AppTypography.metricLabel.weight(.heavy))
                         .foregroundStyle(AppColors.textOnAccent)
                 } else {
                     Text("\(number)")
-                        .font(.system(size: 13, weight: .heavy, design: .rounded))
+                        .font(AppTypography.metricLabel.weight(.heavy))
                         .foregroundStyle(AppColors.accent)
                 }
             }
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(AppTypography.subheadline.weight(.bold))
                     .foregroundStyle(AppColors.text)
                 Text(detail)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(AppTypography.caption.weight(.medium))
                     .foregroundStyle(AppColors.faint)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -234,7 +238,7 @@ struct VerifiedReviewProofSheet: View {
         case let .failed(message):
             VStack(spacing: AppSpacing.sm) {
                 Text(message)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(AppTypography.metricLabel.weight(.semibold))
                     .foregroundStyle(AppColors.negative)
                     .multilineTextAlignment(.center)
                 if stage.image != nil { sendButton }
@@ -250,9 +254,9 @@ struct VerifiedReviewProofSheet: View {
         PhotosPicker(selection: $pickerItem, matching: .images) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(AppTypography.subheadline.weight(.bold))
                 Text(label)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(AppTypography.subheadline.weight(.bold))
             }
             .foregroundStyle(AppColors.accent)
             .frame(maxWidth: .infinity)
@@ -279,10 +283,10 @@ struct VerifiedReviewProofSheet: View {
                         .tint(AppColors.textOnAccent)
                 } else {
                     Image(systemName: "paperplane.fill")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(AppTypography.subheadline.weight(.bold))
                 }
                 Text(isSubmitting ? "Submitting…" : "Submit for review")
-                    .font(.system(size: 16, weight: .heavy, design: .rounded))
+                    .font(AppTypography.headline.weight(.heavy))
                     .contentTransition(.opacity)
             }
             .foregroundStyle(AppColors.textOnAccent)
@@ -363,144 +367,6 @@ struct VerifiedReviewProofSheet: View {
         Haptics.lightTap()
         withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
             stage = .ready(image)
-        }
-    }
-}
-
-// MARK: - Loading card
-
-/// A shimmering placeholder in the shape of the preview it's about to become,
-/// so the layout doesn't jump when the real screenshot lands.
-private struct LoadingScreenshotCard: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private let height: CGFloat = 190
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-            .fill(AppColors.card.opacity(0.55))
-            .frame(height: height)
-            .overlay { shimmer }
-            .overlay {
-                VStack(spacing: AppSpacing.xs) {
-                    ProgressView()
-                        .tint(AppColors.accent)
-                    Text("Preparing your screenshot…")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(AppColors.subtext)
-                }
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                    .stroke(AppColors.stroke, lineWidth: 0.5)
-            )
-            .accessibilityLabel("Loading screenshot")
-    }
-
-    @ViewBuilder
-    private var shimmer: some View {
-        if !reduceMotion {
-            TimelineView(.animation) { timeline in
-                let cycle = timeline.date.timeIntervalSinceReferenceDate
-                    .truncatingRemainder(dividingBy: 1.6) / 1.6
-                GeometryReader { geo in
-                    LinearGradient(
-                        colors: [.clear, AppColors.text.opacity(0.07), .clear],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: geo.size.width * 0.45)
-                    .offset(x: -geo.size.width * 0.45 + geo.size.width * 1.45 * cycle)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
-            .allowsHitTesting(false)
-        }
-    }
-}
-
-// MARK: - Preview of the picked shot
-
-private struct ScreenshotPreview: View {
-    let image: UIImage
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var appeared = false
-
-    var body: some View {
-        // Color.clear sets the size and the photo rides on top: an overlay
-        // never grows its parent, so a tall screenshot can't stretch the sheet.
-        Color.clear
-            .frame(height: 190)
-            .overlay {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-            }
-            .background(
-                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                    .fill(AppColors.card.opacity(0.55))
-            )
-            .clipShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                    .stroke(AppColors.stroke, lineWidth: 0.5)
-            )
-            .overlay(alignment: .topTrailing) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(AppColors.accent)
-                    .background(Circle().fill(AppColors.bg))
-                    .padding(8)
-                    .scaleEffect(appeared ? 1 : 0.2)
-                    .opacity(appeared ? 1 : 0)
-            }
-            .onAppear {
-                withAnimation(AppMotion.animation(AppMotion.Spring.celebratory, reduceMotion: reduceMotion).delay(0.08)) {
-                    appeared = true
-                }
-            }
-    }
-}
-
-// MARK: - Sent
-
-/// The badge pops in and pulses once. Deliberately does NOT claim the mark is
-/// live — it's granted by hand after the screenshot is read.
-private struct SentConfirmation: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var appeared = false
-
-    var body: some View {
-        VStack(spacing: AppSpacing.sm) {
-            VerifiedBadgeView(variant: .shimmer, size: 44)
-                .scaleEffect(appeared ? 1 : 0.3)
-                .opacity(appeared ? 1 : 0)
-
-            Text("Sent!")
-                .font(.system(size: 18, weight: .heavy, design: .rounded))
-                .foregroundStyle(AppColors.text)
-
-            Text("Your screenshot is in our review queue. Once it's approved the mark shows up on its own — no need to check back.")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(AppColors.subtext)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, AppSpacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                .fill(AppColors.accent.opacity(0.10))
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                        .stroke(AppColors.accent.opacity(0.3), lineWidth: 1)
-                )
-        )
-        .onAppear {
-            withAnimation(AppMotion.animation(AppMotion.Spring.celebratory, reduceMotion: reduceMotion)) {
-                appeared = true
-            }
         }
     }
 }

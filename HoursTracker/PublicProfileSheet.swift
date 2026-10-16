@@ -117,21 +117,25 @@ struct PublicProfileSheet: View {
 
     private var identityHeader: some View {
         VStack(spacing: 8) {
-            ProfileAvatarView(
-                name: tracker.name,
-                size: 76,
-                photoURL: tracker.photoURL,
-                uid: tracker.uid,
-                showsAccentRing: false
-            )
-            .overlay(Circle().stroke(accent.opacity(tier.isLegend ? 0 : 0.75), lineWidth: 2).padding(-4))
-            .ascendedAvatarRing(prestige: prestige, diameter: 76, inset: 4)
+            // The owl peeks from behind their avatar in their tier colour.
+            OwlPeekingBehind(size: OwlView.Size(height: 40), rise: 26, scarfTint: accent) {
+                ProfileAvatarView(
+                    name: tracker.name,
+                    size: 76,
+                    photoURL: tracker.photoURL,
+                    uid: tracker.uid,
+                    showsAccentRing: false
+                )
+                .overlay(Circle().stroke(accent.opacity(tier.isLegend ? 0 : 0.75), lineWidth: 2).padding(-4))
+                .ascendedAvatarRing(prestige: prestige, diameter: 76, inset: 4)
+            }
+            .padding(.top, 20)
 
             HStack(spacing: 5) {
                 PrestigeNameText(
                     name: handle,
                     prestige: prestige,
-                    font: .system(size: 20, weight: .bold, design: .rounded),
+                    font: AppTypography.title,
                     uid: tracker.uid
                 )
                     .lineLimit(1)
@@ -144,21 +148,21 @@ struct PublicProfileSheet: View {
                     serverCode: tracker.countryCode,
                     currentUid: currentUid
                 )) {
-                    Text(flag).font(.system(size: 17))
+                    Text(flag).font(.body)
                 }
                 if isMe { YouChip() }
             }
 
             if let title = glimpse.flatMap({ $0.shareBadges && !$0.equippedTitle.isEmpty ? $0.equippedTitle : nil }) {
                 Text(title)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .font(AppTypography.subheadline.weight(.bold))
                     .foregroundStyle(accent)
                     .multilineTextAlignment(.center)
             }
 
             if !tracker.occupation.isEmpty {
                 Label(tracker.occupation, systemImage: "briefcase.fill")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(AppTypography.metricLabel.weight(.semibold))
                     .foregroundStyle(AppColors.subtext)
                     .lineLimit(1)
             }
@@ -180,7 +184,7 @@ struct PublicProfileSheet: View {
                 Circle()
                     .fill(LinearGradient(colors: tier.gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
                 Image(systemName: tier.icon)
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.title3.weight(.bold))
                     .foregroundStyle(tier.onPrimary)
             }
             .frame(width: 48, height: 48)
@@ -191,18 +195,18 @@ struct PublicProfileSheet: View {
                     .appText(.eyebrow)
                     .foregroundStyle(accent)
                 Text(tier.name)
-                    .font(.system(size: 18, weight: .heavy, design: .rounded))
+                    .font(AppTypography.headline.weight(.heavy))
                     .foregroundStyle(AppColors.text)
             }
 
             Spacer(minLength: 0)
 
             VStack(alignment: .trailing, spacing: 2) {
-                Text("LEVEL")
-                    .font(.system(size: 10, weight: .bold))
+                Text("Level")
+                    .appText(.eyebrow)
                     .foregroundStyle(AppColors.faint)
                 Text("\(level)")
-                    .font(.system(size: 24, weight: .heavy, design: .rounded))
+                    .font(AppTypography.metricValue.weight(.heavy))
                     .monospacedDigit()
                     .foregroundStyle(accent)
             }
@@ -258,17 +262,17 @@ struct PublicProfileSheet: View {
     private func statTile(icon: String, value: String, label: String) -> some View {
         VStack(spacing: 3) {
             Image(systemName: icon)
-                .font(.system(size: 12, weight: .bold))
+                .font(.caption.weight(.bold))
                 .foregroundStyle(accent)
             Text(value)
-                .font(.system(size: 17, weight: .heavy, design: .rounded))
+                .font(AppTypography.headline.weight(.heavy))
                 .monospacedDigit()
                 .foregroundStyle(AppColors.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .contentTransition(.numericText())
             Text(label)
-                .font(.system(size: 10, weight: .medium))
+                .font(.caption2.weight(.medium))
                 .foregroundStyle(AppColors.faint)
                 .lineLimit(1)
         }
@@ -311,7 +315,7 @@ struct PublicProfileSheet: View {
 
     private func footerNote(icon: String, text: String) -> some View {
         Label(text, systemImage: icon)
-            .font(.system(size: 12, weight: .medium, design: .rounded))
+            .appText(.caption)
             .foregroundStyle(AppColors.faint)
             .frame(maxWidth: .infinity)
             .padding(.top, AppSpacing.xs)

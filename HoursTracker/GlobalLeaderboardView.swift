@@ -110,8 +110,11 @@ struct GlobalLeaderboardView: View {
             ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: AppSpacing.sm) {
-                    GlobalRankHeroCard(rank: myTracker?.rank)
-                        .cardAppear(index: 0, group: "globalBoard")
+                    let owl = OwlLines.globalRank(myTracker?.rank)
+                    OwlPerch(pose: owl.pose, line: owl.line) {
+                        GlobalRankHeroCard(rank: myTracker?.rank)
+                    }
+                    .cardAppear(index: 0, group: "globalBoard")
 
                     VerifiedReviewNote(isVerified: verified.isVerified) {
                         showingProofSheet = true
@@ -179,7 +182,7 @@ struct GlobalLeaderboardView: View {
                         withAnimation(.easeOut(duration: 0.3)) { self.movementBanner = nil }
                     } label: {
                         Text(movementBanner)
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .font(AppTypography.metricLabel.weight(.bold))
                             .foregroundStyle(AppColors.textOnAccent)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 9)
@@ -311,30 +314,36 @@ struct CountryFlagPickerView: View {
 
     var body: some View {
         List {
-            ForEach(filteredRegions, id: \.code) { region in
-                Button {
-                    guard region.code != CountryFlag.storedCode else { return }
-                    Haptics.lightTap()
-                    CountryFlag.storedCode = region.code
-                    store.syncProfileSnapshotToCloud()
-                    onSelected?()
-                    dismiss()
-                } label: {
-                    HStack(spacing: 12) {
-                        if let flag = CountryFlag.emoji(for: region.code) {
-                            Text(flag)
-                                .font(.system(size: 22))
-                        }
-                        Text(region.name)
-                            .foregroundStyle(AppColors.text)
-                        Spacer()
-                        if region.code == selectedCode {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(AppColors.accent)
+            Section {
+                ForEach(filteredRegions, id: \.code) { region in
+                    Button {
+                        guard region.code != CountryFlag.storedCode else { return }
+                        Haptics.lightTap()
+                        CountryFlag.storedCode = region.code
+                        store.syncProfileSnapshotToCloud()
+                        onSelected?()
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 12) {
+                            if let flag = CountryFlag.emoji(for: region.code) {
+                                Text(flag)
+                                    .font(.title2)
+                            }
+                            Text(region.name)
+                                .foregroundStyle(AppColors.text)
+                            Spacer()
+                            if region.code == selectedCode {
+                                Image(systemName: "checkmark")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(AppColors.accent)
+                            }
                         }
                     }
                 }
+            } header: {
+                OwlCompanionHeader(pose: .pin, line: "Where in the world are you?")
+                    .textCase(nil)
+                    .padding(.bottom, AppSpacing.xs)
             }
         }
         .searchable(text: $searchText, prompt: "Search countries")

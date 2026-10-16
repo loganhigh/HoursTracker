@@ -129,22 +129,6 @@ struct OnboardingOttoHero: View {
     }
 }
 
-// MARK: - Screen 4 — Otto peeking over the avatar
-
-/// Otto peeking up from behind `content` (the avatar circle), his wing tips
-/// resting on its top edge.
-struct OttoPeekingBehind<Content: View>: View {
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            OwlView(pose: .peek, size: OwlView.Size(height: 58), bobs: false)
-                .offset(y: -38)
-            content()
-        }
-    }
-}
-
 // MARK: - Screen 2 hero — climbing the leaderboard
 
 /// A four-row leaderboard where "You" climbs from 4th to 2nd. Plays once.

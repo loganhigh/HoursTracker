@@ -45,6 +45,23 @@ struct OwlPerch<Content: View>: View {
     }
 }
 
+/// The owl peeking up from behind `content` (an avatar circle), his wing tips
+/// resting on its top edge. `rise` is how far his head clears the content.
+struct OwlPeekingBehind<Content: View>: View {
+    var size: OwlView.Size = OwlView.Size(height: 58)
+    var rise: CGFloat = 38
+    var scarfTint: Color? = nil
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            OwlView(pose: .peek, size: size, scarfTint: scarfTint, bobs: false)
+                .offset(y: -rise)
+            content()
+        }
+    }
+}
+
 enum OwlPerchMetrics {
     /// How far Otto's feet overlap the card under him.
     static let feetOverlap: CGFloat = 8

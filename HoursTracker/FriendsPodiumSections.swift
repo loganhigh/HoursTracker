@@ -14,7 +14,7 @@ struct FriendsHeroHeader: View {
     var body: some View {
         HStack(alignment: .center) {
             Text("Friends")
-                .font(.system(size: 34, weight: .heavy, design: .rounded))
+                .font(AppTypography.heroNumber)
                 .foregroundStyle(AppColors.text)
 
             Spacer(minLength: AppSpacing.xs)
@@ -24,7 +24,7 @@ struct FriendsHeroHeader: View {
                 onAddFriend()
             } label: {
                 Image(systemName: "person.badge.plus")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(AppColors.textOnAccent)
                     .frame(width: 44, height: 44)
                     .background(Circle().fill(AppColors.accent))
@@ -113,7 +113,7 @@ struct PayPeriodPodiumCard: View {
                     PrestigeNameText(
                         name: entry.isMe ? "You" : entry.firstName,
                         prestige: entry.prestige,
-                        font: .system(size: 14, weight: .bold, design: .rounded),
+                        font: .system(.subheadline, design: .rounded, weight: .bold),
                         uid: entry.id
                     )
                         .lineLimit(1)
@@ -128,7 +128,7 @@ struct PayPeriodPodiumCard: View {
                 // Same rule as the rank rows: a friend who hides hours shows
                 // "—", never a bold "0h".
                 Text(entry.hoursHidden ? "—" : AppTheme.Format.hours(entry.payPeriodHours))
-                    .font(.system(size: isWinner ? 22 : 18, weight: .heavy, design: .rounded))
+                    .font(.system(isWinner ? .title2 : .headline, design: .rounded, weight: .heavy))
                     .foregroundStyle(color)
                     .monospacedDigit()
                     .lineLimit(1)
@@ -138,7 +138,7 @@ struct PayPeriodPodiumCard: View {
                     HStack(spacing: 3) {
                         Text("🔥").font(.system(size: 10))
                         Text("\(entry.streak) day streak")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.caption2.weight(.semibold))
                             .foregroundStyle(AppColors.subtext)
                     }
                     .lineLimit(1)
@@ -157,7 +157,7 @@ struct PayPeriodPodiumCard: View {
         if let me, let text = gapText(for: me) {
             HStack(spacing: AppSpacing.sm) {
                 Text(text.label)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(AppTypography.metricLabel.weight(.semibold))
                     .foregroundStyle(AppColors.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -168,7 +168,7 @@ struct PayPeriodPodiumCard: View {
                             .fill(AppColors.stroke.opacity(0.6))
                             .frame(height: 5)
                         Capsule()
-                            .fill(AppColors.accentGradient)
+                            .fill(AppColors.accent)
                             .frame(width: max(5, geo.size.width * text.progress), height: 5)
                         Circle()
                             .fill(AppColors.accent)
@@ -180,7 +180,7 @@ struct PayPeriodPodiumCard: View {
                 .frame(height: 12)
 
                 Image(systemName: "flag.checkered")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(AppColors.faint)
             }
             .padding(.horizontal, AppSpacing.sm)

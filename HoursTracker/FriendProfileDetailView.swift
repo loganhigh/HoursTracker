@@ -16,7 +16,6 @@ struct FriendProfileDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showRemoveConfirm = false
     @State private var isRemoving = false
-    @State private var showFullPhoto = false
     @State private var showAllBadges = false
 
     // Nudge (service owns cooldown + delivery; this is just the entry point).
@@ -119,7 +118,7 @@ struct FriendProfileDetailView: View {
 
         ScrollView {
             VStack(spacing: AppSpacing.lg) {
-                identityHeader(friend: friend, accent: accent)
+                FriendIdentityHeader(friend: friend, accent: accent)
 
                 if friend.hasCompanyInfo {
                     companyCard(friend: friend, accent: accent)
@@ -153,86 +152,6 @@ struct FriendProfileDetailView: View {
         }
         .scrollContentBackground(.hidden)
         .background(AppColors.bg.ignoresSafeArea())
-    }
-
-    // MARK: - Identity
-
-    private func identityHeader(friend: FriendProfile, accent: Color) -> some View {
-        let tier = friend.prestigeTier
-        return VStack(spacing: 10) {
-            ProfileAvatarView(
-                name: friend.displayName,
-                size: 76,
-                photoURL: friend.profilePhotoURL,
-                uid: friend.uid,
-                showsAccentRing: false
-            )
-            .overlay(
-                Circle()
-                    .stroke(accent.opacity(tier.isLegend ? 0 : 0.75), lineWidth: 2)
-                    .padding(-4)
-            )
-            // Ascended (P11+) swap the plain accent ring for their tier ring.
-            .ascendedAvatarRing(prestige: friend.prestige, diameter: 76, inset: 4)
-            .onTapGesture {
-                if friend.profilePhotoURL != nil {
-                    showFullPhoto = true
-                }
-            }
-            .fullScreenCover(isPresented: $showFullPhoto) {
-                ExpandedPhotoView(
-                    name: friend.displayName,
-                    photoURL: friend.profilePhotoURL,
-                    uid: friend.uid
-                )
-            }
-
-            HStack(spacing: 5) {
-                PrestigeNameText(
-                    name: friend.displayName,
-                    prestige: friend.prestige,
-                    font: .system(size: 20, weight: .bold, design: .rounded),
-                    uid: friend.uid
-                )
-                if VerifiedTracker.isVerified(reviewed: friend.hasReviewedApp) {
-                    // The profile is the badge's hero moment — one on screen,
-                    // so it can shimmer like the podium's.
-                    VerifiedBadgeView(variant: .shimmer, size: 17)
-                }
-            }
-
-            Text(friend.rankTitle)
-                .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundStyle(accent)
-
-            Text(friend.levelDisplayLine)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppColors.subtext)
-
-            HStack(spacing: 6) {
-                Image(systemName: tier.icon)
-                    .font(.system(size: 12, weight: .bold))
-                    .legendShimmer(tier)
-                Text("Prestige \(friend.prestige) • \(tier.name)")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-            }
-            .foregroundStyle(accent)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .fill(accent.opacity(0.12))
-                    .overlay(Capsule().stroke(accent.opacity(0.35), lineWidth: 1))
-            )
-
-            if !friend.equippedTitle.isEmpty, friend.privacy.shareBadges {
-                Text(friend.equippedTitle.strippingWrappingQuotes)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppColors.subtext)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Company
@@ -419,10 +338,10 @@ struct FriendProfileDetailView: View {
                     ProgressView().tint(AppColors.accent)
                 } else {
                     Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.subheadline.weight(.bold))
                 }
                 Text(isAdminRecomputing ? "Recomputing…" : "Recompute stats (admin)")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .font(AppTypography.subheadline.weight(.semibold))
             }
             .foregroundStyle(AppColors.accent)
             .frame(maxWidth: .infinity)
@@ -469,10 +388,10 @@ struct FriendProfileDetailView: View {
                         .tint(AppColors.negative)
                 } else {
                     Image(systemName: "person.fill.xmark")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                 }
                 Text("Remove Friend")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(AppTypography.subheadline.weight(.semibold))
             }
             .foregroundStyle(AppColors.negative)
             .frame(maxWidth: .infinity)
