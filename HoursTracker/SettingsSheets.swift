@@ -105,7 +105,7 @@ struct NotificationsSheet: View {
                         }
                     }
                 } header: {
-                    OwlSectionHeader("Alerts", pose: .bell)
+                    SectionEyebrow("Alerts")
                 } footer: {
                     Text("Get notified about milestones, progress, daily reminders, motivation quotes, streak alerts, friend shifts (e.g. \"Jacob worked 13h today\"), when someone passes you on the global leaderboard, and \"Did you work today?\".")
                         .appText(.caption)
@@ -197,7 +197,7 @@ struct ReminderTimePickerSheet: View {
                     }
                     .pickerStyle(.wheel)
                 } header: {
-                    OwlSectionHeader("Daily Reminder Time", pose: .bell)
+                    SectionEyebrow("Daily Reminder Time")
                 } footer: {
                     Text("You'll be reminded to log your shift if you haven't already.")
                         .appText(.caption)
@@ -287,7 +287,7 @@ struct DataExportSheet: View {
                         .tint(AppColors.accent)
                     }
                 } header: {
-                    OwlSectionHeader("Export Range", pose: .clipboard)
+                    SectionEyebrow("Export Range")
                 } footer: {
                     Text("All Data includes active records plus archived yearly history.")
                         .appText(.caption)

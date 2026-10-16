@@ -70,7 +70,7 @@ struct JobSitesSettingsView: View {
                         }
                     }
                 } header: {
-                    OwlSectionHeader("Job Sites", pose: .pin)
+                    SectionEyebrow("Job Sites")
                 } footer: {
                     Text(canAddMore
                          ? "Saved on this device. Picking one when you add a shift fills in its name — deleting a site never changes shifts you've already logged."
@@ -147,8 +147,6 @@ struct JobSiteEditorSheet: View {
                         AddShiftPanel {
                             JobSiteFormFields(draft: $draft, nameFocused: nil)
                         }
-                        .owlPeek(.pin, size: .header)
-                        .padding(.top, OwlView.Size.header.height - OwlPerchMetrics.feetOverlap / 2)
 
                         if existing != nil {
                             Button {

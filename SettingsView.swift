@@ -175,7 +175,7 @@ struct SettingsView: View {
                         .tint(AppColors.accent)
                     }
                 } header: {
-                    OwlSectionHeader("Pay Cycle", pose: .wrench)
+                    SectionEyebrow("Pay Cycle")
                 } footer: {
                     Text(payCycleFooter)
                         .appText(.caption)

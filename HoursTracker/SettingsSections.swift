@@ -166,7 +166,7 @@ struct FriendsPrivacySettingsView: View {
                 }
                 .tint(AppColors.accent)
             } header: {
-                OwlSectionHeader("Sharing", pose: .shield)
+                SectionEyebrow("Sharing")
             } footer: {
                 Text(sharingFooter)
                     .appText(.caption)
