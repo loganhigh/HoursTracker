@@ -196,19 +196,8 @@ struct AddShiftWizardView: View {
     // MARK: - Header / footer
 
     private var header: some View {
-        AddShiftSheetHeader(title: "Add Shift", showsBack: step == .review, owlPose: owlPose) {
+        AddShiftSheetHeader(title: "Add Shift", showsBack: step == .review) {
             if step == .when { dismiss() } else { goBack() }
-        }
-    }
-
-    /// The header owl follows what's being logged, and on Review reacts to
-    /// whether the shift checks out.
-    private var owlPose: OwlPose {
-        if step == .review { return canSave ? .clipboard : .oops }
-        switch shiftKind {
-        case .work: return holidayRule == nil ? .coffee : .calendar
-        case .offDay: return .sleep
-        case .holiday: return .calendar
         }
     }
 

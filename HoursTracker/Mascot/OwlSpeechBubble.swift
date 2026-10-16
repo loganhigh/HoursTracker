@@ -7,7 +7,9 @@ import SwiftUI
 // itself stays hidden.
 
 struct OwlSpeechBubble: View {
-    enum Tail {
+    // `nonisolated`: a plain value type nested in a main-actor view would
+    // otherwise get a main-actor-isolated Equatable conformance (warning).
+    nonisolated enum Tail: Equatable {
         /// Owl sits to the left of the bubble.
         case leading
         /// Owl sits to the right of the bubble.

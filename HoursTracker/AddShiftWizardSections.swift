@@ -15,7 +15,6 @@ import SwiftUI
 struct AddShiftSheetHeader: View {
     let title: String
     var showsBack: Bool = false
-    var owlPose: OwlPose? = nil
     let onTap: () -> Void
 
     var body: some View {
@@ -42,12 +41,7 @@ struct AddShiftSheetHeader: View {
                 .foregroundStyle(AppColors.text)
 
             Spacer()
-
-            if let owlPose {
-                OwlView(pose: owlPose, size: .header)
-            }
         }
-        .frame(minHeight: owlPose == nil ? nil : OwlView.Size.header.height)
     }
 }
 

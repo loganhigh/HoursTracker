@@ -64,27 +64,28 @@ struct HistoryTabView: View {
                     .padding(.top, AppSpacing.xxl)
                 } else {
                     let owl = OwlLines.history(currentChequeHours: currentChequeHours, missingDays: missingDayCount)
-                    // The owl perches on whichever card comes first: the
-                    // missing-shifts card when it shows, else this year's cheques.
-                    OwlPerch(pose: owl.pose, line: owl.line) {
-                        VStack(spacing: AppSpacing.md) {
-                            dataCompletionCard
-                            // Each year is its own card titled with the year, so the
-                            // year label travels with its cheques instead of pinning
-                            // to the top and trailing the user into later years.
-                            ForEach(Array(yearGroups.enumerated()), id: \.element.id) { groupIndex, group in
-                                ChequeYearCard(year: group.year) {
-                                    ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
-                                        if index > 0 {
-                                            Divider().overlay(AppColors.stroke)
-                                        }
-                                        tableRow(for: row, index: index)
+                    // The owl stands on the trailing edge of whichever card comes
+                    // first (missing shifts when shown, else this year's cheques)
+                    // — pose only, no speech bubble.
+                    VStack(spacing: AppSpacing.md) {
+                        dataCompletionCard
+                        // Each year is its own card titled with the year, so the
+                        // year label travels with its cheques instead of pinning
+                        // to the top and trailing the user into later years.
+                        ForEach(Array(yearGroups.enumerated()), id: \.element.id) { groupIndex, group in
+                            ChequeYearCard(year: group.year) {
+                                ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
+                                    if index > 0 {
+                                        Divider().overlay(AppColors.stroke)
                                     }
+                                    tableRow(for: row, index: index)
                                 }
-                                .cardAppear(index: groupIndex, group: "history")
                             }
+                            .cardAppear(index: groupIndex, group: "history")
                         }
                     }
+                    .owlPeek(owl.pose, size: .header)
+                    .padding(.top, OwlView.Size.header.height - OwlPerchMetrics.feetOverlap / 2 - AppSpacing.md)
                 }
             }
             .padding(.horizontal, AppSpacing.md)

@@ -8,10 +8,10 @@ import SwiftUI
 
 // MARK: - Today Hero (the ONE hero card on Home)
 
-/// Today's date with the local weather beneath it, with the owl perched on
-/// top saying one line about today (Home's one owl). Cheque hours live in the
+/// Today's date with the local weather beneath it. Cheque hours live in the
 /// stat triplet below, the pay projection in History, and prestige on the You
-/// tab — so this card is purely "what's today like".
+/// tab — so this card is purely "what's today like". No owl here (user's call):
+/// Home's only owl is on the tip card.
 struct TodayHeroCard: View {
     @ObservedObject var store: HoursStore
     @ObservedObject private var weather = WeatherService.shared
@@ -23,42 +23,7 @@ struct TodayHeroCard: View {
         return f
     }()
 
-    // MARK: Owl inputs (read-only views of existing data)
-
-    private var todayEntries: [WorkEntry] {
-        let cal = Calendar.current
-        return store.entries.filter { cal.isDateInToday($0.date) }
-    }
-
-    private var todayHours: Double {
-        todayEntries.filter { !$0.isOffDay }.reduce(0) { $0 + $1.paidHours }
-    }
-
-    private var isDayOff: Bool {
-        !todayEntries.isEmpty && todayEntries.allSatisfy(\.isOffDay)
-    }
-
-    private var streakDays: Int { store.displayedGamificationProfile().currentStreak }
-
     var body: some View {
-        let hours = todayHours
-        let dayOff = isDayOff
-        let streak = streakDays
-        OwlPerch(
-            pose: OwlLines.homePose(todayHours: hours, isDayOff: dayOff, streakDays: streak),
-            line: OwlLines.home(
-                todayHours: hours,
-                isDayOff: dayOff,
-                streakDays: streak,
-                hasAnyShifts: !store.entries.isEmpty,
-                daySeed: OwlLines.daySeed()
-            )
-        ) {
-            card
-        }
-    }
-
-    private var card: some View {
         VStack(spacing: AppSpacing.sm) {
             SectionEyebrow("Today")
 
@@ -71,7 +36,6 @@ struct TodayHeroCard: View {
             weatherRow
         }
         .padding(AppSpacing.lg)
-        .padding(.top, AppSpacing.xs)
         .frame(maxWidth: .infinity)
         .background(heroBackground)
         .overlay(heroStroke)
