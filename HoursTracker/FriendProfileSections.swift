@@ -323,43 +323,35 @@ enum FriendProfileFormat {
 
 // MARK: - Identity header
 
-/// Avatar, name, rank and prestige, tinted by the friend's tier. The owl
-/// peeks from behind the avatar in the friend's tier colour (this screen's
-/// one owl).
+/// Avatar, name, rank and prestige, tinted by the friend's tier.
 struct FriendIdentityHeader: View {
     let friend: FriendProfile
     let accent: Color
 
     @State private var showFullPhoto = false
 
-    private static let owlSize = OwlView.Size(height: 40)
-    private static let owlRise: CGFloat = 26
-
     var body: some View {
         let tier = friend.prestigeTier
         VStack(spacing: 10) {
-            OwlPeekingBehind(size: Self.owlSize, rise: Self.owlRise, scarfTint: accent) {
-                ProfileAvatarView(
-                    name: friend.displayName,
-                    size: 76,
-                    photoURL: friend.profilePhotoURL,
-                    uid: friend.uid,
-                    showsAccentRing: false
-                )
-                .overlay(
-                    Circle()
-                        .stroke(accent.opacity(tier.isLegend ? 0 : 0.75), lineWidth: 2)
-                        .padding(-4)
-                )
-                // Ascended (P11+) swap the plain accent ring for their tier ring.
-                .ascendedAvatarRing(prestige: friend.prestige, diameter: 76, inset: 4)
-                .onTapGesture {
-                    if friend.profilePhotoURL != nil {
-                        showFullPhoto = true
-                    }
+            ProfileAvatarView(
+                name: friend.displayName,
+                size: 76,
+                photoURL: friend.profilePhotoURL,
+                uid: friend.uid,
+                showsAccentRing: false
+            )
+            .overlay(
+                Circle()
+                    .stroke(accent.opacity(tier.isLegend ? 0 : 0.75), lineWidth: 2)
+                    .padding(-4)
+            )
+            // Ascended (P11+) swap the plain accent ring for their tier ring.
+            .ascendedAvatarRing(prestige: friend.prestige, diameter: 76, inset: 4)
+            .onTapGesture {
+                if friend.profilePhotoURL != nil {
+                    showFullPhoto = true
                 }
             }
-            .padding(.top, Self.owlRise - 6)
             .fullScreenCover(isPresented: $showFullPhoto) {
                 ExpandedPhotoView(
                     name: friend.displayName,

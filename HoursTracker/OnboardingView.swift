@@ -391,7 +391,7 @@ struct OnboardingView: View {
             Spacer(minLength: 0)
 
             VStack(spacing: AppSpacing.lg) {
-                OwlPeekingBehind {
+                OwlPointingAt(size: .form) {
                     Button {
                         Haptics.lightTap()
                         showingPhotoPicker = true
@@ -424,7 +424,6 @@ struct OnboardingView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(hasPhoto ? "Change photo" : "Add a photo")
                 }
-                .padding(.top, AppSpacing.xxl)
 
                 OnboardingTitle(
                     title: hasPhoto ? "Looking good" : "Add a photo",

@@ -328,6 +328,19 @@ final class MascotAssetTests: XCTestCase {
             ("verified-proof", AnyView(VerifiedReviewProofSheet(isVerified: false, accountName: "Logan", accountUid: nil))),
             ("username", AnyView(UsernameSheet(mode: .firstTime, currentUsername: nil, suggestedFrom: "Logan",
                                                friendsService: .shared))),
+            // Stand-in for onboarding's photo page (a private page of OnboardingView).
+            ("onboarding-photo", AnyView(VStack(spacing: AppSpacing.lg) {
+                OwlPointingAt(size: .form) {
+                    Circle().fill(AppColors.accent.opacity(0.18)).frame(width: 132, height: 132)
+                        .overlay(Text("L").font(.system(size: 52, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppColors.accent))
+                }
+                OnboardingTitle(title: "Add a photo",
+                                subline: "Friends and the leaderboard see it next to your name. You can change it any time.")
+            }
+            .padding(.horizontal, AppSpacing.xl)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(AppColors.bg))),
         ]
         for (name, view) in screens {
             // The signed-out host app's listeners empty the list between renders.

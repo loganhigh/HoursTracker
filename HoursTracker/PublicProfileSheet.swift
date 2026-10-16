@@ -93,7 +93,11 @@ struct PublicProfileSheet: View {
             ScrollView {
                 VStack(spacing: AppSpacing.md) {
                     identityHeader
+                    // The sheet's one owl peeks over the first card, scarf in
+                    // their tier colour.
                     prestigeCard
+                        .owlPeek(scarfTint: accent)
+                        .padding(.top, OwlPerchMetrics.peekClearance - AppSpacing.md)
                     statsStrip
                     if let glimpse, glimpse.shareBadges, !glimpse.topBadges.isEmpty {
                         badgesCard(glimpse.topBadges)
@@ -117,19 +121,15 @@ struct PublicProfileSheet: View {
 
     private var identityHeader: some View {
         VStack(spacing: 8) {
-            // The owl peeks from behind their avatar in their tier colour.
-            OwlPeekingBehind(size: OwlView.Size(height: 40), rise: 26, scarfTint: accent) {
-                ProfileAvatarView(
-                    name: tracker.name,
-                    size: 76,
-                    photoURL: tracker.photoURL,
-                    uid: tracker.uid,
-                    showsAccentRing: false
-                )
-                .overlay(Circle().stroke(accent.opacity(tier.isLegend ? 0 : 0.75), lineWidth: 2).padding(-4))
-                .ascendedAvatarRing(prestige: prestige, diameter: 76, inset: 4)
-            }
-            .padding(.top, 20)
+            ProfileAvatarView(
+                name: tracker.name,
+                size: 76,
+                photoURL: tracker.photoURL,
+                uid: tracker.uid,
+                showsAccentRing: false
+            )
+            .overlay(Circle().stroke(accent.opacity(tier.isLegend ? 0 : 0.75), lineWidth: 2).padding(-4))
+            .ascendedAvatarRing(prestige: prestige, diameter: 76, inset: 4)
 
             HStack(spacing: 5) {
                 PrestigeNameText(

@@ -92,12 +92,11 @@ struct VerifiedReviewProofSheet: View {
 
     private var header: some View {
         VStack(spacing: AppSpacing.sm) {
-            // The owl peeks from behind the mark this sheet is about.
-            OwlPeekingBehind(size: OwlView.Size(height: 40), rise: 26) {
+            // The owl stands beside the mark this sheet is about, pointing at it.
+            OwlPointingAt {
                 VerifiedBadgeView(variant: .shimmer, size: 52)
                     .shadow(color: Color(red: 0.114, green: 0.631, blue: 0.949).opacity(0.35), radius: 14)
             }
-            .padding(.top, 20)
 
             Text(isVerified ? "You're verified" : "Get the verified mark")
                 .font(AppTypography.title.weight(.heavy))

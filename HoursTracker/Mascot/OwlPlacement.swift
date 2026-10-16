@@ -45,20 +45,23 @@ struct OwlPerch<Content: View>: View {
     }
 }
 
-/// The owl peeking up from behind `content` (an avatar circle), his wing tips
-/// resting on its top edge. `rise` is how far his head clears the content.
-struct OwlPeekingBehind<Content: View>: View {
-    var size: OwlView.Size = OwlView.Size(height: 58)
-    var rise: CGFloat = 38
+/// The owl standing beside `content` (a photo circle or a badge), pointing at
+/// it. The peek pose needs a flat edge to grip, so round or scalloped things
+/// get this instead. He hangs off the leading side without taking layout
+/// space, so `content` stays centred over a centred title.
+struct OwlPointingAt<Content: View>: View {
+    var size: OwlView.Size = .header
     var scarfTint: Color? = nil
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        ZStack(alignment: .top) {
-            OwlView(pose: .peek, size: size, scarfTint: scarfTint, bobs: false)
-                .offset(y: -rise)
-            content()
-        }
+        content()
+            .overlay(alignment: .bottomLeading) {
+                OwlView(pose: .point, size: size, scarfTint: scarfTint)
+                    .fixedSize()
+                    .alignmentGuide(.leading) { d in d[.trailing] + AppSpacing.xxs }
+                    .allowsHitTesting(false)
+            }
     }
 }
 

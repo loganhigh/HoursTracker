@@ -120,11 +120,18 @@ struct FriendProfileDetailView: View {
             VStack(spacing: AppSpacing.lg) {
                 FriendIdentityHeader(friend: friend, accent: accent)
 
-                if friend.hasCompanyInfo {
-                    companyCard(friend: friend, accent: accent)
-                }
+                // The screen's one owl peeks over the first card's flat top
+                // edge (a round avatar leaves his wing tips floating), scarf
+                // in the friend's tier colour.
+                VStack(spacing: AppSpacing.lg) {
+                    if friend.hasCompanyInfo {
+                        companyCard(friend: friend, accent: accent)
+                    }
 
-                personalBestsCard(friend: friend, accent: accent)
+                    personalBestsCard(friend: friend, accent: accent)
+                }
+                .owlPeek(scarfTint: accent)
+                .padding(.top, OwlPerchMetrics.peekClearance - AppSpacing.lg)
 
                 if friend.privacy.shareHours {
                     careerStatsCard(friend: friend, accent: accent)
