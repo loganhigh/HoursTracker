@@ -189,12 +189,10 @@ struct SoftLoadingIndicator: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            ProgressView()
-                .scaleEffect(0.95)
-                .tint(AppTheme.Colors.accent)
+            LoadingDots()
             Text(title)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.subtext)
+                .appText(.caption)
+                .foregroundStyle(AppColors.subtext)
                 .opacity(pulse ? 1 : 0.65)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -22,8 +22,7 @@ struct SplashView: View {
             .opacity(logoVisible ? 1 : 0)
 
             VStack(spacing: AppSpacing.sm) {
-                ProgressView()
-                    .tint(AppColors.accent)
+                LoadingDots()
                 Text("Loading your data…")
                     .appText(.headline)
                     .foregroundStyle(AppColors.subtext)

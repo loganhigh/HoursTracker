@@ -148,6 +148,46 @@ struct AppLoadingState: View {
     }
 }
 
+// MARK: - LoadingDots
+//
+// The app's loading mark: three accent dots brightening in turn. Drawn in
+// SwiftUI rather than a system ProgressView so it matches the owl-era UI and
+// renders the same everywhere (ImageRenderer can't draw ProgressView). Holds
+// still under Reduce Motion.
+
+struct LoadingDots: View {
+    var color: Color = AppColors.accent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            HStack(spacing: LoadingDots.spacing) {
+                ForEach(0..<3, id: \.self) { index in
+                    Circle()
+                        .fill(color)
+                        .frame(width: LoadingDots.dot, height: LoadingDots.dot)
+                        .opacity(reduceMotion ? 0.7 : LoadingDots.opacity(at: t, index: index))
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
+    }
+
+    /// 0.3–1.0 hump per dot over a 1.2s cycle, each dot trailing the last.
+    static func opacity(at time: TimeInterval, index: Int) -> Double {
+        let raw = time / cycle - Double(index) * stagger
+        let phase = raw - raw.rounded(.down)
+        return 0.3 + 0.7 * sin(phase * .pi)
+    }
+
+    private static let dot: CGFloat = 7
+    private static let spacing: CGFloat = 6
+    private static let cycle: Double = 1.2
+    private static let stagger: Double = 0.18
+}
+
 // MARK: - AppErrorState
 //
 // One error treatment (pattern extracted from FriendsBoardView.errorState).

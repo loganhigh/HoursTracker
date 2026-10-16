@@ -79,6 +79,23 @@ final class MascotAssetTests: XCTestCase {
         XCTAssertEqual(OwlLines.daySeed(for: morning, calendar: cal), OwlLines.daySeed(for: night, calendar: cal))
     }
 
+    func testLoadingDotsStayVisibleAndStagger() {
+        for step in 0..<240 {
+            let t = 1_000_000 + Double(step) * 0.01
+            for index in 0..<3 {
+                let o = LoadingDots.opacity(at: t, index: index)
+                XCTAssertGreaterThanOrEqual(o, 0.3 - 1e-9)
+                XCTAssertLessThanOrEqual(o, 1.0 + 1e-9)
+            }
+        }
+        // Neighbouring dots are out of phase: over one cycle they clearly diverge.
+        let biggestGap = (0..<120).map { step -> Double in
+            let t = 1_000_000 + Double(step) * 0.01
+            return abs(LoadingDots.opacity(at: t, index: 0) - LoadingDots.opacity(at: t, index: 1))
+        }.max() ?? 0
+        XCTAssertGreaterThan(biggestGap, 0.3)
+    }
+
     func testPickWrapsNegativeSeeds() {
         XCTAssertEqual(OwlLines.pick(["a", "b", "c"], seed: -1), "c")
         XCTAssertEqual(OwlLines.pick([], seed: 3), "")
