@@ -290,43 +290,8 @@ private struct AppCardSurface: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         content
             .background(shape.fill(fill))
-            // Depth comes from a faint inner highlight along the top edge,
-            // not a drop shadow — the hero keeps the screen's one glow.
-            .overlay(
-                shape.stroke(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.10), Color.white.opacity(0.0)],
-                        startPoint: .top,
-                        endPoint: .center
-                    ),
-                    lineWidth: 1
-                )
-                .padding(1)
-            )
             .overlay(shape.stroke(AppColors.stroke, lineWidth: 1))
             .clipShape(shape)
-    }
-}
-
-/// Thin accent progress capsule (6pt). `tint` defaults to the prestige accent.
-struct AppProgressBar: View {
-    let progress: Double
-    var tint: Color? = nil
-    var track: Color? = nil
-
-    var body: some View {
-        GeometryReader { geo in
-            let clamped = min(max(progress, 0), 1)
-            ZStack(alignment: .leading) {
-                Capsule().fill(track ?? AppColors.stroke)
-                Capsule()
-                    .fill(tint ?? AppColors.accent)
-                    .frame(width: max(clamped > 0 ? 6 : 0, geo.size.width * clamped))
-            }
-        }
-        .frame(height: 6)
-        .accessibilityElement(children: .ignore)
-        .accessibilityValue("\(Int((min(max(progress, 0), 1) * 100).rounded())) percent")
     }
 }
 
@@ -351,8 +316,6 @@ struct AppChip: View {
             .padding(.vertical, 3)
             .background(Capsule().fill(tint.opacity(0.14)))
             .lineLimit(1)
-            // A chip never truncates its one word; the row text yields instead.
-            .fixedSize()
     }
 }
 
