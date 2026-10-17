@@ -39,7 +39,7 @@ struct RecentShiftsSection: View {
                 )
                 .padding(.vertical, AppSpacing.xs)
             } else {
-                VStack(spacing: AppSpacing.xs) {
+                VStack(spacing: AppSpacing.xs + 2) {
                     ForEach(recentEntries) { entry in
                         Button {
                             Haptics.lightTap()

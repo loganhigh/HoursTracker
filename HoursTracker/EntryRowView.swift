@@ -14,12 +14,11 @@ struct EntryRowView: View {
 
     var body: some View {
         if chunky {
-            HStack(spacing: AppSpacing.sm) {
-                ChunkyIcon(systemName: rowIcon, tint: statusColor == AppTheme.Colors.text ? AppTheme.Colors.accent : statusColor)
-                content
-            }
-            .padding(AppSpacing.sm)
-            .chunkyCard()
+            // No leading icon: every shift would carry the same clock, and
+            // the room is better spent on the date, time and hours.
+            content
+                .padding(12)
+                .chunkyCard(fill: AppTheme.Colors.card2, radius: AppDesignSystem.Radius.md)
         } else {
             content
                 .padding(12)
@@ -32,11 +31,6 @@ struct EntryRowView: View {
                         .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
                 )
         }
-    }
-
-    private var rowIcon: String {
-        if isHoliday { return "airplane" }
-        return entry.isOffDay ? "moon.zzz.fill" : "clock.fill"
     }
 
     private var content: some View {

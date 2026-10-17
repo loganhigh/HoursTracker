@@ -275,15 +275,13 @@ struct SecondaryButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - Chunky surfaces (Duolingo-style)
+// MARK: - Card surfaces (playful, restrained)
 //
-// Every card and button is a flat fill with a 2pt border and a solid 4pt
-// "bottom edge" in the border colour, so it reads as a physical tile. A
-// pressed button sinks onto its edge. No shadows, no gradients.
+// A flat card fill with a thin low-contrast border — subtle surface contrast
+// does the separating, not outlines. No shadows, gradients or raised edges.
 
 enum AppChunk {
-    static let border: CGFloat = 2
-    static let edge: CGFloat = 4
+    static let border: CGFloat = 1
     static let radius: CGFloat = 18
 }
 
@@ -297,25 +295,29 @@ private struct ChunkyCardSurface: ViewModifier {
         content
             .background(shape.fill(fill))
             .overlay(shape.stroke(border, lineWidth: AppChunk.border))
-            .background(shape.fill(border).offset(y: AppChunk.edge))
-            // Reserve the edge so stacked cards don't overlap their neighbour.
-            .padding(.bottom, AppChunk.edge)
     }
 }
 
 extension View {
-    /// Neutral chunky card: card fill, strong hairline border, bottom edge.
+    /// Standard card: card fill with a thin hairline.
     func chunkyCard(fill: Color? = nil, border: Color? = nil, radius: CGFloat = AppChunk.radius) -> some View {
         modifier(ChunkyCardSurface(
             fill: fill ?? AppColors.card,
-            border: border ?? AppColors.strokeStrong,
+            border: border ?? AppColors.stroke,
             radius: radius
         ))
     }
 }
 
-/// Chunky button: flat fill, darker bottom edge, uppercase bold label. On
-/// press the face sinks onto the edge (Reduce Motion: opacity only).
+extension Color {
+    /// A deeper relative of the colour (layered over black) — the surface a
+    /// bright accent sits on so the accent itself can stay selective.
+    func deepened(_ amount: CGFloat = 0.6) -> Color {
+        Color(UIColor(self).overlaidOnBlack(amount))
+    }
+}
+
+/// Flat button with an uppercase bold label: filled, outlined or tinted.
 struct ChunkyButtonStyle: ButtonStyle {
     enum Kind { case primary, secondary, tinted }
     var kind: Kind = .primary
@@ -330,11 +332,11 @@ struct ChunkyButtonStyle: ButtonStyle {
         }
     }
 
-    private var edge: Color {
+    private var border: Color {
         switch kind {
-        case .primary: return (tint ?? AppColors.accent).blendDark()
-        case .secondary: return AppColors.strokeStrong
-        case .tinted: return (tint ?? AppColors.accent).opacity(0.35)
+        case .primary: return .clear
+        case .secondary: return AppColors.stroke
+        case .tinted: return (tint ?? AppColors.accent).opacity(0.25)
         }
     }
 
@@ -355,27 +357,17 @@ struct ChunkyButtonStyle: ButtonStyle {
             .tracking(0.8)
             .foregroundStyle(label)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
+            .padding(.vertical, 13)
             .background(shape.fill(fill))
-            .overlay(shape.stroke(edge, lineWidth: kind == .secondary ? AppChunk.border : 0))
-            .offset(y: pressed && !reduceMotion ? AppChunk.edge : 0)
-            .background(shape.fill(edge).offset(y: AppChunk.edge))
-            .padding(.bottom, AppChunk.edge)
+            .overlay(shape.stroke(border, lineWidth: AppChunk.border))
+            .scaleEffect(pressed && !reduceMotion ? 0.98 : 1)
             .opacity(pressed ? 0.9 : 1)
-            .animation(.easeOut(duration: 0.08), value: pressed)
+            .animation(AppMotion.Spring.press, value: pressed)
             .contentShape(Rectangle())
     }
 }
 
-private extension Color {
-    /// A darker relative of the colour for a button's bottom edge: the
-    /// colour layered over black.
-    func blendDark() -> Color {
-        Color(UIColor(self).overlaidOnBlack(0.4))
-    }
-}
-
-private extension UIColor {
+extension UIColor {
     func overlaidOnBlack(_ amount: CGFloat) -> UIColor {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         getRed(&r, green: &g, blue: &b, alpha: &a)

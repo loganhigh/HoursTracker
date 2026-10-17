@@ -822,27 +822,25 @@ struct HoursHomeView: View {
         // morning, so "today" comes from the schedule, not the countdown.
         let isToday = PayCycleEngine.isPayday(Date(), settings: store.paySettings)
         let shownDate = isToday ? Date() : nextPayday
-        // Duolingo streak-card idiom: a coloured icon square, a bold line and
-        // a sub-line, on a chunky card that turns gold on payday itself.
+        // Dark surface, a small gold celebration icon, a restrained gold
+        // accent on the border that strengthens on payday itself.
         return HStack(spacing: AppSpacing.sm) {
-            ChunkyIcon(systemName: isToday ? "party.popper.fill" : "calendar", tint: AppColors.gold)
-            VStack(alignment: .leading, spacing: 2) {
+            ChunkyIcon(systemName: isToday ? "party.popper.fill" : "calendar", tint: AppColors.gold, size: 32)
+            VStack(alignment: .leading, spacing: 1) {
                 Text(isToday
                      ? "Payday is today!"
                      : (days == 1 ? "Payday in 1 day" : "Payday in \(days) days"))
-                    .font(.system(.headline, design: .rounded, weight: .heavy))
+                    .font(.system(.subheadline, design: .rounded, weight: .heavy))
                     .foregroundStyle(AppColors.text)
                 Text(shownDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                    .font(.system(.caption, design: .rounded, weight: .bold))
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
                     .foregroundStyle(AppColors.subtext)
             }
             Spacer(minLength: 0)
         }
-        .padding(AppSpacing.sm)
-        .chunkyCard(
-            fill: isToday ? AppColors.gold.opacity(0.14) : nil,
-            border: isToday ? AppColors.gold.opacity(0.55) : nil
-        )
+        .padding(.horizontal, AppSpacing.sm)
+        .padding(.vertical, 10)
+        .chunkyCard(border: AppColors.gold.opacity(isToday ? 0.5 : 0.22))
         .accessibilityElement(children: .combine)
     }
 

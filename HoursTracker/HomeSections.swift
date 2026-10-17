@@ -24,18 +24,18 @@ struct TodayHeroCard: View {
     }()
 
     var body: some View {
-        // A solid block of the tier colour, like a Duolingo unit banner:
-        // the one loud surface on Home, so prestige shows at a glance.
+        // A deep tier-colour surface with the bright accent used selectively
+        // (eyebrow, weather link): prestige shows, without shouting.
         VStack(alignment: .leading, spacing: AppSpacing.xs) {
             Text("Today")
                 .font(.system(.caption, design: .rounded, weight: .heavy))
                 .tracking(1.6)
                 .textCase(.uppercase)
-                .foregroundStyle(AppColors.textOnAccent.opacity(0.8))
+                .foregroundStyle(AppColors.accent)
 
             Text(Self.todayFormatter.string(from: Date()))
                 .font(.system(.title, design: .rounded, weight: .heavy))
-                .foregroundStyle(AppColors.textOnAccent)
+                .foregroundStyle(AppColors.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 
@@ -43,13 +43,14 @@ struct TodayHeroCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppSpacing.lg)
-        .chunkyCard(fill: AppColors.accent, border: AppColors.accent.opacity(0.0), radius: 22)
+        .chunkyCard(fill: AppColors.accent.deepened(0.72), border: AppColors.accent.opacity(0.35), radius: 22)
         .onAppear { weather.refreshIfNeeded() }
     }
 
-    /// Text colours for the solid accent fill: full and dimmed on-accent.
-    private var onAccent: Color { AppColors.textOnAccent }
-    private var onAccentDim: Color { AppColors.textOnAccent.opacity(0.8) }
+    /// Text colours on the deep accent surface.
+    private var onAccent: Color { AppColors.text }
+    private var onAccentDim: Color { AppColors.text.opacity(0.75) }
+    private var onAccentLink: Color { AppColors.accent }
 
     @ViewBuilder
     private var weatherRow: some View {
@@ -88,7 +89,7 @@ struct TodayHeroCard: View {
             Button { weather.requestPermission() } label: {
                 Label("Tap to show local weather", systemImage: "location.fill")
                     .font(AppTypography.subheadline.weight(.bold))
-                    .foregroundStyle(onAccent)
+                    .foregroundStyle(onAccentLink)
             }
             .buttonStyle(.plain)
 
@@ -283,15 +284,16 @@ struct HomeStatTriplet: View {
     private var monthHours: Double { store.monthTotalHours(monthDate: Date()) }
 
     var body: some View {
-        HStack(spacing: AppSpacing.sm) {
-            HomeStatTile(icon: "clock.fill", tint: AppColors.accent, label: "Week", value: AppTheme.Format.hours(weekHours))
-            HomeStatTile(icon: "banknote.fill", tint: AppColors.positive, label: "Cheque", value: AppTheme.Format.hours(chequeHours))
-            HomeStatTile(icon: "calendar", tint: AppColors.streak, label: "Month", value: AppTheme.Format.hours(monthHours))
+        HStack(spacing: AppSpacing.xs + 2) {
+            HomeStatTile(icon: "clock.fill", tint: AppColors.accent, label: "This week", value: AppTheme.Format.hours(weekHours))
+            HomeStatTile(icon: "banknote.fill", tint: AppColors.positive, label: "This cheque", value: AppTheme.Format.hours(chequeHours))
+            HomeStatTile(icon: "calendar", tint: AppColors.streak, label: "This month", value: AppTheme.Format.hours(monthHours))
         }
     }
 }
 
-/// Duolingo-style stat tile: coloured icon, bold number, small label.
+/// Compact stat tile: a small coloured icon beside the number, the label
+/// under it. The hours are the focal point.
 struct HomeStatTile: View {
     let icon: String
     let tint: Color
@@ -301,28 +303,27 @@ struct HomeStatTile: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        VStack(spacing: AppSpacing.xs) {
-            Image(systemName: icon)
-                .font(.system(.body, weight: .heavy))
-                .foregroundStyle(tint)
-
-            Text(value)
-                .font(.system(.title3, design: .rounded, weight: .heavy))
-                .monospacedDigit()
-                .foregroundStyle(AppColors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
+        VStack(spacing: 3) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(.caption, weight: .bold))
+                    .foregroundStyle(tint)
+                Text(value)
+                    .font(.system(.title3, design: .rounded, weight: .heavy))
+                    .monospacedDigit()
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
 
             Text(label)
-                .font(.system(.caption2, design: .rounded, weight: .heavy))
-                .tracking(1.2)
-                .textCase(.uppercase)
+                .font(.system(.caption, design: .rounded, weight: .semibold))
                 .foregroundStyle(AppColors.subtext)
                 .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
                 .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, AppSpacing.md)
+        .padding(.vertical, AppSpacing.sm)
         .padding(.horizontal, AppSpacing.xxs)
         .chunkyCard()
     }
