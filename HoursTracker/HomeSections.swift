@@ -24,24 +24,32 @@ struct TodayHeroCard: View {
     }()
 
     var body: some View {
-        VStack(spacing: AppSpacing.sm) {
-            SectionEyebrow("Today")
+        // A solid block of the tier colour, like a Duolingo unit banner:
+        // the one loud surface on Home, so prestige shows at a glance.
+        VStack(alignment: .leading, spacing: AppSpacing.xs) {
+            Text("Today")
+                .font(.system(.caption, design: .rounded, weight: .heavy))
+                .tracking(1.6)
+                .textCase(.uppercase)
+                .foregroundStyle(AppColors.textOnAccent.opacity(0.8))
 
             Text(Self.todayFormatter.string(from: Date()))
-                .font(AppTypography.title.weight(.heavy))
-                .foregroundStyle(AppColors.text)
+                .font(.system(.title, design: .rounded, weight: .heavy))
+                .foregroundStyle(AppColors.textOnAccent)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 
             weatherRow
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppSpacing.lg)
-        .frame(maxWidth: .infinity)
-        .background(heroBackground)
-        .overlay(heroStroke)
-        .appShadowHero()
+        .chunkyCard(fill: AppColors.accent, border: AppColors.accent.opacity(0.0), radius: 22)
         .onAppear { weather.refreshIfNeeded() }
     }
+
+    /// Text colours for the solid accent fill: full and dimmed on-accent.
+    private var onAccent: Color { AppColors.textOnAccent }
+    private var onAccentDim: Color { AppColors.textOnAccent.opacity(0.8) }
 
     @ViewBuilder
     private var weatherRow: some View {
@@ -55,12 +63,12 @@ struct TodayHeroCard: View {
                 Text(snapshot.temperatureText)
                     .font(AppTypography.headline)
                     .monospacedDigit()
-                    .foregroundStyle(AppColors.text)
+                    .foregroundStyle(onAccent)
                 Text(snapshot.locality.isEmpty
                      ? snapshot.conditionText
                      : "\(snapshot.conditionText) · \(snapshot.locality)")
                     .appText(.subheadline)
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(onAccentDim)
             }
             .lineLimit(1)
             .minimumScaleFactor(0.7)
@@ -71,7 +79,7 @@ struct TodayHeroCard: View {
                 LoadingDots()
                 Text("Checking the weather…")
                     .appText(.subheadline)
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(onAccentDim)
             }
 
         case .needsPermission:
@@ -79,8 +87,8 @@ struct TodayHeroCard: View {
             // opens an hours app expecting a location prompt.
             Button { weather.requestPermission() } label: {
                 Label("Tap to show local weather", systemImage: "location.fill")
-                    .font(AppTypography.subheadline.weight(.semibold))
-                    .foregroundStyle(AppColors.accent)
+                    .font(AppTypography.subheadline.weight(.bold))
+                    .foregroundStyle(onAccent)
             }
             .buttonStyle(.plain)
 
@@ -90,7 +98,7 @@ struct TodayHeroCard: View {
             } label: {
                 Label("Allow location in Settings for weather", systemImage: "location.slash")
                     .appText(.caption)
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(onAccentDim)
             }
             .buttonStyle(.plain)
             .lineLimit(1)
@@ -100,46 +108,12 @@ struct TodayHeroCard: View {
             Button { weather.refreshIfNeeded(force: true) } label: {
                 Label("Weather unavailable — tap to retry", systemImage: "arrow.clockwise")
                     .appText(.caption)
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(onAccentDim)
             }
             .buttonStyle(.plain)
         }
     }
 
-    private var heroBackground: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
-                .fill(AppColors.card2)
-            RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            AppColors.accent.opacity(0.14),
-                            Color.clear,
-                            AppColors.accent.opacity(0.05)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        }
-    }
-
-    private var heroStroke: some View {
-        RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
-            .stroke(
-                LinearGradient(
-                    colors: [
-                        AppColors.accent.opacity(0.4),
-                        AppColors.accent.opacity(0.08),
-                        Color.clear
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: 1
-            )
-    }
 }
 
 // MARK: - XP Strip (animated fill, cold-launch seeded from cache)
@@ -309,45 +283,47 @@ struct HomeStatTriplet: View {
     private var monthHours: Double { store.monthTotalHours(monthDate: Date()) }
 
     var body: some View {
-        HStack(spacing: AppSpacing.xs + 2) {
-            HomeStatTile(label: "This Week", value: AppTheme.Format.hours(weekHours))
-            HomeStatTile(label: "This Cheque", value: AppTheme.Format.hours(chequeHours))
-            HomeStatTile(label: "This Month", value: AppTheme.Format.hours(monthHours))
+        HStack(spacing: AppSpacing.sm) {
+            HomeStatTile(icon: "clock.fill", tint: AppColors.accent, label: "Week", value: AppTheme.Format.hours(weekHours))
+            HomeStatTile(icon: "banknote.fill", tint: AppColors.positive, label: "Cheque", value: AppTheme.Format.hours(chequeHours))
+            HomeStatTile(icon: "calendar", tint: AppColors.streak, label: "Month", value: AppTheme.Format.hours(monthHours))
         }
     }
 }
 
-/// One quiet stat tile: eyebrow label, monospaced numeral. Two text lines
-/// max — nothing else.
+/// Duolingo-style stat tile: coloured icon, bold number, small label.
 struct HomeStatTile: View {
+    let icon: String
+    let tint: Color
     let label: String
     /// Pre-formatted display value — "72.63h" or a bare day count.
     let value: String
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        VStack(spacing: AppSpacing.xxs) {
-            Text(label)
-                .appText(.eyebrow)
-                .foregroundStyle(AppColors.faint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6) // three tiles abreast at AX sizes
+        VStack(spacing: AppSpacing.xs) {
+            Image(systemName: icon)
+                .font(.system(.body, weight: .heavy))
+                .foregroundStyle(tint)
 
             Text(value)
-                .font(AppTypography.metricValue)
+                .font(.system(.title3, design: .rounded, weight: .heavy))
+                .monospacedDigit()
                 .foregroundStyle(AppColors.text)
                 .lineLimit(1)
+                .minimumScaleFactor(0.6)
+
+            Text(label)
+                .font(.system(.caption2, design: .rounded, weight: .heavy))
+                .tracking(1.2)
+                .textCase(.uppercase)
+                .foregroundStyle(AppColors.subtext)
+                .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
                 .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, AppSpacing.sm + 2)
+        .padding(.vertical, AppSpacing.md)
         .padding(.horizontal, AppSpacing.xxs)
-        .background(
-            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                .fill(AppColors.card.opacity(0.55))
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                        .stroke(AppColors.stroke, lineWidth: 0.5)
-                )
-        )
+        .chunkyCard()
     }
 }

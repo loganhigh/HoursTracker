@@ -794,15 +794,8 @@ struct HoursHomeView: View {
             if boxed {
                 content()
                     .frame(maxWidth: .infinity)
-                    .padding(16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(AppTheme.Colors.card.opacity(0.55))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                    .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
-                            )
-                    )
+                    .padding(AppSpacing.md)
+                    .chunkyCard()
             } else {
                 content()
             }
@@ -829,34 +822,26 @@ struct HoursHomeView: View {
         // morning, so "today" comes from the schedule, not the countdown.
         let isToday = PayCycleEngine.isPayday(Date(), settings: store.paySettings)
         let shownDate = isToday ? Date() : nextPayday
-        return VStack(spacing: 1) {
-            Text(isToday
-                 ? "Payday is today!"
-                 : (days == 1 ? "Payday in 1 day" : "Payday in \(days) days"))
-                .font(AppTypography.subheadline.weight(.heavy))
-                .foregroundStyle(AppColors.text)
-            Text(shownDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                .font(AppTypography.caption.weight(.semibold))
-                .foregroundStyle(AppColors.subtext)
+        // Duolingo streak-card idiom: a coloured icon square, a bold line and
+        // a sub-line, on a chunky card that turns gold on payday itself.
+        return HStack(spacing: AppSpacing.sm) {
+            ChunkyIcon(systemName: isToday ? "party.popper.fill" : "calendar", tint: AppColors.gold)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(isToday
+                     ? "Payday is today!"
+                     : (days == 1 ? "Payday in 1 day" : "Payday in \(days) days"))
+                    .font(.system(.headline, design: .rounded, weight: .heavy))
+                    .foregroundStyle(AppColors.text)
+                Text(shownDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+                    .font(.system(.caption, design: .rounded, weight: .bold))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            Spacer(minLength: 0)
         }
-        .multilineTextAlignment(.center)
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, AppSpacing.md)
-        .padding(.vertical, AppSpacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                .fill(AppColors.card.opacity(0.55))
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                        .stroke(
-                            LinearGradient(
-                                colors: [AppColors.gold.opacity(isToday ? 0.7 : 0.35), AppColors.stroke],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ),
-                            lineWidth: 1
-                        )
-                )
+        .padding(AppSpacing.sm)
+        .chunkyCard(
+            fill: isToday ? AppColors.gold.opacity(0.14) : nil,
+            border: isToday ? AppColors.gold.opacity(0.55) : nil
         )
         .accessibilityElement(children: .combine)
     }
@@ -890,22 +875,11 @@ struct HoursHomeView: View {
                         }
                     }
 
-                    NavigationLink {
+                    NavigationLink("See more") {
                         GlobalLeaderboardView()
-                    } label: {
-                        Text("See more")
-                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                            .foregroundStyle(AppTheme.Colors.accent)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(AppTheme.Colors.accent.opacity(0.1))
-                            )
                     }
-                    .buttonStyle(InteractiveButtonStyle())
-                    .padding(.top, 8)
+                    .buttonStyle(ChunkyButtonStyle(kind: .tinted))
+                    .padding(.top, AppSpacing.sm)
                 }
             }
         }

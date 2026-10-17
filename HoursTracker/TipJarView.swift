@@ -184,24 +184,20 @@ struct TipJarHomeCard: View {
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("Leave a tip")
-                        .font(AppTypography.subheadline.weight(.semibold))
+                        .font(.system(.subheadline, design: .rounded, weight: .heavy))
+                        .textCase(.uppercase)
+                        .tracking(0.8)
                         .foregroundStyle(AppColors.textOnAccent)
-                        .padding(.horizontal, AppSpacing.lg)
-                        .padding(.vertical, 9)
-                        .background(Capsule().fill(AppColors.accent))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(RoundedRectangle(cornerRadius: AppChunk.radius, style: .continuous).fill(AppColors.accent))
+                        .padding(.top, AppSpacing.xxs)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(AppSpacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                        .fill(AppColors.card.opacity(0.55))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                                .stroke(AppColors.stroke, lineWidth: 0.5)
-                        )
-                )
+                .chunkyCard()
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PremiumPressStyle())
         }
         .frame(maxWidth: .infinity)
         .sheet(isPresented: $showingTipJar) { TipJarView() }

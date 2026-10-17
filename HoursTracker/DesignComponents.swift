@@ -275,6 +275,129 @@ struct SecondaryButtonStyle: ButtonStyle {
     }
 }
 
+// MARK: - Chunky surfaces (Duolingo-style)
+//
+// Every card and button is a flat fill with a 2pt border and a solid 4pt
+// "bottom edge" in the border colour, so it reads as a physical tile. A
+// pressed button sinks onto its edge. No shadows, no gradients.
+
+enum AppChunk {
+    static let border: CGFloat = 2
+    static let edge: CGFloat = 4
+    static let radius: CGFloat = 18
+}
+
+private struct ChunkyCardSurface: ViewModifier {
+    let fill: Color
+    let border: Color
+    let radius: CGFloat
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        content
+            .background(shape.fill(fill))
+            .overlay(shape.stroke(border, lineWidth: AppChunk.border))
+            .background(shape.fill(border).offset(y: AppChunk.edge))
+            // Reserve the edge so stacked cards don't overlap their neighbour.
+            .padding(.bottom, AppChunk.edge)
+    }
+}
+
+extension View {
+    /// Neutral chunky card: card fill, strong hairline border, bottom edge.
+    func chunkyCard(fill: Color? = nil, border: Color? = nil, radius: CGFloat = AppChunk.radius) -> some View {
+        modifier(ChunkyCardSurface(
+            fill: fill ?? AppColors.card,
+            border: border ?? AppColors.strokeStrong,
+            radius: radius
+        ))
+    }
+}
+
+/// Chunky button: flat fill, darker bottom edge, uppercase bold label. On
+/// press the face sinks onto the edge (Reduce Motion: opacity only).
+struct ChunkyButtonStyle: ButtonStyle {
+    enum Kind { case primary, secondary, tinted }
+    var kind: Kind = .primary
+    var tint: Color? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var fill: Color {
+        switch kind {
+        case .primary: return tint ?? AppColors.accent
+        case .secondary: return AppColors.card
+        case .tinted: return (tint ?? AppColors.accent).opacity(0.16)
+        }
+    }
+
+    private var edge: Color {
+        switch kind {
+        case .primary: return (tint ?? AppColors.accent).blendDark()
+        case .secondary: return AppColors.strokeStrong
+        case .tinted: return (tint ?? AppColors.accent).opacity(0.35)
+        }
+    }
+
+    private var label: Color {
+        switch kind {
+        case .primary: return AppColors.textOnAccent
+        case .secondary: return AppColors.text
+        case .tinted: return tint ?? AppColors.accent
+        }
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed
+        let shape = RoundedRectangle(cornerRadius: AppChunk.radius, style: .continuous)
+        configuration.label
+            .font(.system(.subheadline, design: .rounded, weight: .heavy))
+            .textCase(.uppercase)
+            .tracking(0.8)
+            .foregroundStyle(label)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(shape.fill(fill))
+            .overlay(shape.stroke(edge, lineWidth: kind == .secondary ? AppChunk.border : 0))
+            .offset(y: pressed && !reduceMotion ? AppChunk.edge : 0)
+            .background(shape.fill(edge).offset(y: AppChunk.edge))
+            .padding(.bottom, AppChunk.edge)
+            .opacity(pressed ? 0.9 : 1)
+            .animation(.easeOut(duration: 0.08), value: pressed)
+            .contentShape(Rectangle())
+    }
+}
+
+private extension Color {
+    /// A darker relative of the colour for a button's bottom edge: the
+    /// colour layered over black.
+    func blendDark() -> Color {
+        Color(UIColor(self).overlaidOnBlack(0.4))
+    }
+}
+
+private extension UIColor {
+    func overlaidOnBlack(_ amount: CGFloat) -> UIColor {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        getRed(&r, green: &g, blue: &b, alpha: &a)
+        return UIColor(red: r * (1 - amount), green: g * (1 - amount), blue: b * (1 - amount), alpha: 1)
+    }
+}
+
+/// Coloured icon square for a row's leading edge.
+struct ChunkyIcon: View {
+    let systemName: String
+    var tint: Color = AppColors.accent
+    var size: CGFloat = 40
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: size * 0.42, weight: .bold))
+            .foregroundStyle(tint)
+            .frame(width: size, height: size)
+            .background(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).fill(tint.opacity(0.18)))
+    }
+}
+
 // MARK: - SectionEyebrow
 //
 // Centered small-caps section header (extracted from RootView.homeSection).

@@ -39,7 +39,7 @@ struct RecentShiftsSection: View {
                 )
                 .padding(.vertical, AppSpacing.xs)
             } else {
-                VStack(spacing: AppSpacing.xs + 2) {
+                VStack(spacing: AppSpacing.xs) {
                     ForEach(recentEntries) { entry in
                         Button {
                             Haptics.lightTap()
@@ -50,24 +50,16 @@ struct RecentShiftsSection: View {
                                 breakdown: store.payBreakdown(for: entry),
                                 currencyCode: store.paySettings.currencyCode,
                                 showPay: store.paySettings.showPayCalculations,
-                                paySettings: store.paySettings
+                                paySettings: store.paySettings,
+                                chunky: true
                             )
                         }
                         .buttonStyle(PremiumPressStyle())
                     }
 
-                    Button(action: onViewAll) {
-                        Text("View all")
-                            .appText(.headline)
-                            .foregroundStyle(AppColors.accent)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, AppSpacing.sm)
-                            .background(
-                                RoundedRectangle(cornerRadius: AppRadius.sm + 2, style: .continuous)
-                                    .fill(AppColors.accent.opacity(0.1))
-                            )
-                    }
-                    .buttonStyle(PremiumPressStyle())
+                    Button("View all", action: onViewAll)
+                        .buttonStyle(ChunkyButtonStyle(kind: .tinted))
+                        .padding(.top, AppSpacing.xxs)
                 }
             }
         }
@@ -108,7 +100,7 @@ struct YearlyOverviewSection: View {
 
             VStack(spacing: AppSpacing.md) {
                 Text(verbatim: "\(Calendar.current.component(.year, from: Date()))")
-                    .appText(.title)
+                    .font(.system(.title2, design: .rounded, weight: .heavy))
                     .foregroundStyle(AppColors.text)
                     .frame(maxWidth: .infinity, alignment: .center)
 
@@ -116,14 +108,7 @@ struct YearlyOverviewSection: View {
             }
             .frame(maxWidth: .infinity)
             .padding(AppSpacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                    .fill(AppColors.card.opacity(0.55))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                            .stroke(AppColors.stroke, lineWidth: 0.5)
-                    )
-            )
+            .chunkyCard()
         }
         .frame(maxWidth: .infinity)
     }
@@ -173,14 +158,9 @@ struct MonthlyOverviewChart: View {
                                 .frame(maxWidth: .infinity)
                                 .opacity(item.hours > 0 ? 1 : 0)
 
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [AppColors.accent, AppColors.accent2],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
+                            // Flat accent bars, Duolingo-style.
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(AppColors.accent)
                                 .frame(
                                     width: barWidth,
                                     height: appeared && item.hours > 0
@@ -260,14 +240,7 @@ struct HomeFriendsCard: View {
                 )
                 .frame(maxWidth: .infinity)
                 .padding(AppSpacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                        .fill(AppColors.card.opacity(0.55))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                                .stroke(AppColors.stroke, lineWidth: 0.5)
-                        )
-                )
+                .chunkyCard()
             }
             .frame(maxWidth: .infinity)
         }
@@ -490,28 +463,8 @@ struct HomeAdminConsoleCard: View {
     var body: some View {
         Button(action: onOpen) {
             Text("Admin console")
-                .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundStyle(AppColors.text)
-                .frame(maxWidth: .infinity)
-                // Trailing overlay rather than an HStack sibling: a chevron in
-                // the flow would shift the label off true centre by its width.
-                .overlay(alignment: .trailing) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(AppColors.faint)
-                }
-                .padding(AppSpacing.sm)
-            .background(
-                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                    .fill(AppColors.card.opacity(0.55))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                            .stroke(AppColors.stroke, lineWidth: 0.5)
-                    )
-            )
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ChunkyButtonStyle(kind: .secondary))
     }
 }
 

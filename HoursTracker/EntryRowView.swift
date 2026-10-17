@@ -8,14 +8,44 @@ struct EntryRowView: View {
 
     /// When set, shows **PayDay** / **Cutoff** under the hours when the entry falls on those cheque dates.
     var paySettings: PaySettings? = nil
+    /// Home's Duolingo-style row: a coloured icon square on the left and the
+    /// chunky bordered card. History keeps the original quiet card.
+    var chunky: Bool = false
 
     var body: some View {
+        if chunky {
+            HStack(spacing: AppSpacing.sm) {
+                ChunkyIcon(systemName: rowIcon, tint: statusColor == AppTheme.Colors.text ? AppTheme.Colors.accent : statusColor)
+                content
+            }
+            .padding(AppSpacing.sm)
+            .chunkyCard()
+        } else {
+            content
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
+                        .fill(AppTheme.Colors.card2)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
+                        .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
+                )
+        }
+    }
+
+    private var rowIcon: String {
+        if isHoliday { return "airplane" }
+        return entry.isOffDay ? "moon.zzz.fill" : "clock.fill"
+    }
+
+    private var content: some View {
         HStack(alignment: .top, spacing: 12) {
             // LEFT: Date + time range
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(fullDate(entry.date))
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .font(.system(.body, design: .rounded, weight: .heavy))
                         .foregroundStyle(AppTheme.Colors.text)
 
                     if let weather = entry.weather {
@@ -32,7 +62,7 @@ struct EntryRowView: View {
                 // Off days have nothing to say; a stat-paid holiday shows its pay.
                 if !entry.isOffDay || entry.statPayHours > 0 {
                     Text(timeRangeText)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
                         .foregroundStyle(AppTheme.Colors.subtext)
                 }
             }
@@ -44,35 +74,26 @@ struct EntryRowView: View {
                 VStack(alignment: .trailing, spacing: 6) {
                     if showPay, !entry.isOffDay {
                         Text(currency(payValue))
-                            .font(AppDesignSystem.Typography.heroNumerals(size: 16, weight: .bold))
+                            .font(.system(.body, design: .rounded, weight: .heavy).monospacedDigit())
                             .foregroundStyle(AppTheme.Colors.accent)
                     }
 
                     Text(statusLabel)
-                        .font(AppDesignSystem.Typography.heroNumerals(size: showPay ? 15 : 17, weight: .bold))
+                        .font(.system(showPay ? .subheadline : .body, design: .rounded, weight: .heavy).monospacedDigit())
                         .foregroundStyle(statusColor)
 
                     ForEach(periodDayMarkers, id: \.self) { marker in
                         Text(marker)
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .font(.system(.caption2, design: .rounded, weight: .heavy))
                             .foregroundStyle(markerColor(for: marker))
                     }
                 }
                 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(AppTheme.Colors.subtext.opacity(0.5))
             }
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
-                .fill(AppTheme.Colors.card2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppDesignSystem.Radius.md, style: .continuous)
-                .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
-        )
     }
 
     // MARK: - Pay period markers
