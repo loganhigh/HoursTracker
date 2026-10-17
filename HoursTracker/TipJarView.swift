@@ -192,7 +192,14 @@ struct TipJarHomeCard: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(AppSpacing.md)
-                .appCard()
+                .background(
+                    RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                        .fill(AppColors.card.opacity(0.55))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                                .stroke(AppColors.stroke, lineWidth: 0.5)
+                        )
+                )
             }
             .buttonStyle(.plain)
         }

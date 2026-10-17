@@ -794,8 +794,15 @@ struct HoursHomeView: View {
             if boxed {
                 content()
                     .frame(maxWidth: .infinity)
-                    .padding(AppSpacing.md)
-                    .appCard()
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(AppTheme.Colors.card.opacity(0.55))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .stroke(AppTheme.Colors.stroke, lineWidth: 0.5)
+                            )
+                    )
             } else {
                 content()
             }
@@ -822,32 +829,34 @@ struct HoursHomeView: View {
         // morning, so "today" comes from the schedule, not the countdown.
         let isToday = PayCycleEngine.isPayday(Date(), settings: store.paySettings)
         let shownDate = isToday ? Date() : nextPayday
-        // Gold is the payday colour everywhere (confetti, PayDay marker): the
-        // banner carries a hint of it on ordinary days and fills in on the day.
-        return HStack(spacing: AppSpacing.sm) {
-            Image(systemName: isToday ? "party.popper.fill" : "calendar")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(AppColors.gold)
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(AppColors.gold.opacity(isToday ? 0.22 : 0.12)))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(isToday
-                     ? "Payday is today!"
-                     : (days == 1 ? "Payday in 1 day" : "Payday in \(days) days"))
-                    .font(AppTypography.headline)
-                    .foregroundStyle(AppColors.text)
-                Text(shownDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                    .appText(.caption)
-                    .foregroundStyle(AppColors.subtext)
-            }
-            Spacer(minLength: 0)
+        return VStack(spacing: 1) {
+            Text(isToday
+                 ? "Payday is today!"
+                 : (days == 1 ? "Payday in 1 day" : "Payday in \(days) days"))
+                .font(AppTypography.subheadline.weight(.heavy))
+                .foregroundStyle(AppColors.text)
+            Text(shownDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+                .font(AppTypography.caption.weight(.semibold))
+                .foregroundStyle(AppColors.subtext)
         }
-        .padding(.horizontal, AppSpacing.sm)
-        .padding(.vertical, 10)
-        .appCard(fill: isToday ? AppColors.gold.opacity(0.10) : nil)
-        .overlay(
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.vertical, AppSpacing.sm)
+        .background(
             RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                .stroke(AppColors.gold.opacity(isToday ? 0.45 : 0.2), lineWidth: 1)
+                .fill(AppColors.card.opacity(0.55))
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [AppColors.gold.opacity(isToday ? 0.7 : 0.35), AppColors.stroke],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
         )
         .accessibilityElement(children: .combine)
     }
@@ -881,11 +890,22 @@ struct HoursHomeView: View {
                         }
                     }
 
-                    AppLinkButton(title: "See more") {
-                        Haptics.lightTap()
-                        notificationRouter.openGlobalLeaderboard = true
+                    NavigationLink {
+                        GlobalLeaderboardView()
+                    } label: {
+                        Text("See more")
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(AppTheme.Colors.accent)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(AppTheme.Colors.accent.opacity(0.1))
+                            )
                     }
-                    .padding(.top, AppSpacing.xs)
+                    .buttonStyle(InteractiveButtonStyle())
+                    .padding(.top, 8)
                 }
             }
         }

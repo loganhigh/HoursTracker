@@ -25,9 +25,7 @@ struct TodayHeroCard: View {
 
     var body: some View {
         VStack(spacing: AppSpacing.sm) {
-            Text("Today")
-                .appText(.eyebrow)
-                .foregroundStyle(AppColors.accent)
+            SectionEyebrow("Today")
 
             Text(Self.todayFormatter.string(from: Date()))
                 .font(AppTypography.title.weight(.heavy))
@@ -127,16 +125,14 @@ struct TodayHeroCard: View {
         }
     }
 
-    /// Hairline all the way round (so the card has an edge like every other
-    /// card) with the tier colour strongest at the top-left.
     private var heroStroke: some View {
         RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
             .stroke(
                 LinearGradient(
                     colors: [
-                        AppColors.accent.opacity(0.55),
-                        AppColors.accent.opacity(0.18),
-                        AppColors.stroke
+                        AppColors.accent.opacity(0.4),
+                        AppColors.accent.opacity(0.08),
+                        Color.clear
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -327,18 +323,14 @@ struct HomeStatTile: View {
     let label: String
     /// Pre-formatted display value — "72.63h" or a bare day count.
     let value: String
-    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(spacing: AppSpacing.xxs) {
             Text(label)
                 .appText(.eyebrow)
-                .foregroundStyle(AppColors.subtext)
-                // Three tiles abreast: one line normally, two at AX sizes
-                // where "THIS CHEQUE" no longer fits even scaled down.
-                .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.6)
+                .foregroundStyle(AppColors.faint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6) // three tiles abreast at AX sizes
 
             Text(value)
                 .font(AppTypography.metricValue)
@@ -347,8 +339,15 @@ struct HomeStatTile: View {
                 .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, AppSpacing.md)
+        .padding(.vertical, AppSpacing.sm + 2)
         .padding(.horizontal, AppSpacing.xxs)
-        .appCard(radius: AppRadius.md)
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                .fill(AppColors.card.opacity(0.55))
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                        .stroke(AppColors.stroke, lineWidth: 0.5)
+                )
+        )
     }
 }
