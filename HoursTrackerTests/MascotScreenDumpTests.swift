@@ -89,6 +89,17 @@ final class MascotScreenDumpTests: XCTestCase {
                 }
                 .padding(.horizontal, AppSpacing.md)
             }.background(AppColors.bg))),
+            ("global-rows", AnyView(VStack(spacing: 0) {
+                GlobalTrackerRow(tracker: trackers[0], currentUid: nil, isOnline: true)
+                GlobalTrackerRow(tracker: trackers[1], currentUid: nil, lastActive: Date().addingTimeInterval(-3 * 3600))
+                GlobalTrackerRow(tracker: trackers[2], currentUid: nil, lastActive: Date().addingTimeInterval(-26 * 3600))
+                GlobalTrackerRow(tracker: TopTracker(uid: "t4", name: "Christopher_long", hours: 1702, countryCode: "AU", rank: 4,
+                                                     level: 22, prestige: 1, occupation: "Heavy Equipment Operator"),
+                                 currentUid: nil, lastActive: Date().addingTimeInterval(-25 * 60))
+            }
+            .padding(AppSpacing.md)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(AppColors.bg))),
             ("public-profile", AnyView(PublicProfileSheet(tracker: trackers[0], currentUid: nil))),
             ("country-picker", AnyView(NavigationStack { CountryFlagPickerView(store: Self.makeStore()) })),
             ("verified-proof", AnyView(VerifiedReviewProofSheet(isVerified: false, accountName: "Logan", accountUid: nil))),

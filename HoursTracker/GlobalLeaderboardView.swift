@@ -89,6 +89,7 @@ struct GlobalLeaderboardView: View {
             while !Task.isCancelled {
                 await presence.refreshActiveCount()
                 await presence.refreshOnlineUids()
+                await presence.refreshLastActive()
                 try? await Task.sleep(nanoseconds: 45_000_000_000)
             }
         }
@@ -259,6 +260,7 @@ struct GlobalLeaderboardView: View {
                         currentUid: myUid,
                         // Own row skips the dot — you're by definition here.
                         isOnline: tracker.uid != myUid && presence.onlineUids.contains(tracker.uid),
+                        lastActive: tracker.uid == myUid ? nil : presence.lastActive[tracker.uid],
                         movement: topTrackers.movements[tracker.uid]
                     )
                 }

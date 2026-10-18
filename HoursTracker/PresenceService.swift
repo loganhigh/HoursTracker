@@ -76,6 +76,40 @@ final class PresenceService: ObservableObject {
         try? await db.collection("presence").document(uid).delete()
     }
 
+    // MARK: Last active (global board)
+
+    /// Each recently active uid's latest stamp, for the "3h ago" on global
+    /// board rows. Only stamps from the last 30 days come down.
+    @Published private(set) var lastActive: [String: Date] = [:]
+
+    func refreshLastActive() async {
+        guard Auth.auth().currentUser != nil else { return }
+        let cutoff = Timestamp(date: Date().addingTimeInterval(-30 * 24 * 3600))
+        do {
+            let snap = try await db.collection("presence")
+                .whereField("lastActiveAt", isGreaterThan: cutoff)
+                .getDocuments()
+            var map: [String: Date] = [:]
+            for doc in snap.documents {
+                if let ts = doc.data()["lastActiveAt"] as? Timestamp { map[doc.documentID] = ts.dateValue() }
+            }
+            lastActive = map
+        } catch {
+            AppLogger.leaderboard.info("last-active lookup failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// "now", "12m ago", "3h ago", "4d ago".
+    static func lastActiveText(_ date: Date, now: Date = Date()) -> String {
+        let seconds = max(0, now.timeIntervalSince(date))
+        if seconds < activeWindow { return "now" }
+        let minutes = Int(seconds / 60)
+        if minutes < 60 { return "\(minutes)m ago" }
+        let hours = minutes / 60
+        if hours < 24 { return "\(hours)h ago" }
+        return "\(hours / 24)d ago"
+    }
+
     // MARK: Count (everyone's stamps)
 
     /// Every uid whose presence stamp is inside the active window. Drives the

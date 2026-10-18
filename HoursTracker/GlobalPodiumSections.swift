@@ -210,6 +210,8 @@ struct GlobalTrackerRow: View {
     let currentUid: String?
     /// Tracker is on the app right now (their presence stamp is fresh).
     var isOnline: Bool = false
+    /// Their latest presence stamp (last 30 days); nil hides the label.
+    var lastActive: Date? = nil
     /// Places just gained (+) or lost (−) in the latest live reorder; nil when
     /// this row didn't move. Drives the transient chip and highlight.
     var movement: Int? = nil
@@ -259,6 +261,14 @@ struct GlobalTrackerRow: View {
                         )
                     ) {
                         Text(flag).font(.system(size: 14))
+                    }
+                    if isOnline || lastActive != nil {
+                        // After the flag: when they last opened the app.
+                        Text(isOnline ? "Active now" : PresenceService.lastActiveText(lastActive!))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(isOnline ? AppColors.positive : AppColors.faint)
+                            .lineLimit(1)
+                            .fixedSize()
                     }
                     if isMe { YouChip() }
                 }
