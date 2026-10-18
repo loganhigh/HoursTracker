@@ -148,8 +148,10 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         try c.encode(notes, forKey: .notes)
         try c.encode(locationName, forKey: .locationName)
         try c.encode(locationURL, forKey: .locationURL)
-        try c.encodeIfPresent(latitude, forKey: .latitude)
-        try c.encodeIfPresent(longitude, forKey: .longitude)
+        // Written as null when cleared: cloud saves merge, so an absent key
+        // would leave a removed pin behind.
+        try c.encode(latitude, forKey: .latitude)
+        try c.encode(longitude, forKey: .longitude)
         try c.encode(isOffDay, forKey: .isOffDay)
         try c.encode(offDayReason, forKey: .offDayReason)
         try c.encode(isHoliday, forKey: .isHoliday)

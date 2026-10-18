@@ -35,8 +35,8 @@ struct EntryEditorView: View {
     @State private var end: Date
     @State private var breakMinutes: Int
 
-    /// Free-form label for the location and/or job of the day. Stored in `WorkEntry.locationName`.
-    @State private var locationLabel: String
+    /// Where the shift was worked: a map pin plus an optional name.
+    @State private var place: ShiftPlace
     @State private var notes: String
 
     @State private var shiftKind: ShiftKind
@@ -99,7 +99,7 @@ struct EntryEditorView: View {
             _end = State(initialValue: cal.date(bySettingHour: defaultEndHour, minute: defaultEndMinute, second: 0, of: now) ?? now)
             _breakMinutes = State(initialValue: mostRecentEntry?.breakMinutes ?? 0)
 
-            _locationLabel = State(initialValue: "")
+            _place = State(initialValue: ShiftPlace())
             _notes = State(initialValue: "")
             _shiftKind = State(initialValue: .work)
             _offDayReason = State(initialValue: Self.offDayReasons[0])
@@ -115,7 +115,7 @@ struct EntryEditorView: View {
             _end = State(initialValue: entry.end)
             _breakMinutes = State(initialValue: entry.breakMinutes)
 
-            _locationLabel = State(initialValue: entry.locationName)
+            _place = State(initialValue: ShiftPlace(entry: entry))
             _notes = State(initialValue: entry.notes)
 
             // A stat holiday (paid, worked or not) edits as a Work day with
@@ -180,7 +180,8 @@ struct EntryEditorView: View {
                             )
                         }
                         EntryDetailsSection(
-                            locationLabel: $locationLabel,
+                            place: $place,
+                            recentPlaces: store.recentShiftPlaces(),
                             notes: $notes,
                             showsLocation: needsTimes
                         )
@@ -477,7 +478,6 @@ struct EntryEditorView: View {
         let isHolidayWorked = rule?.isWorked ?? false
         let statHours = (rule?.includesStatPay ?? false) ? store.paySettings.statHolidayPaidHours : 0
 
-        let trimmedLabel = locationLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
 
         switch mode {
@@ -486,10 +486,7 @@ struct EntryEditorView: View {
                                   isOffDay: isOffKind, offDayReason: reason, isHoliday: isHolidayWorked)
             entry.holidayPayRule = rule
             entry.statPayHours = statHours
-            entry.locationName = trimmedLabel
-            entry.locationURL = ""
-            entry.latitude = nil
-            entry.longitude = nil
+            (isOffKind ? ShiftPlace() : place).apply(to: &entry)
             withAnimation(AppMotion.Spring.smooth) { store.add(entry) }
         case .edit(let old):
             var updated = old
@@ -498,10 +495,7 @@ struct EntryEditorView: View {
             updated.end = e
             updated.breakMinutes = br
             updated.notes = trimmedNotes
-            updated.locationName = trimmedLabel
-            updated.locationURL = ""
-            updated.latitude = nil
-            updated.longitude = nil
+            (isOffKind ? ShiftPlace() : place).apply(to: &updated)
             updated.isOffDay = isOffKind
             updated.offDayReason = reason
             updated.isHoliday = isHolidayWorked

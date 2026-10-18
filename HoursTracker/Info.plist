@@ -19,7 +19,7 @@
 		<string>snapchat</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Used to show today's local weather on the Home screen.</string>
+	<string>Used to show today's local weather on the Home screen and to drop a pin for where you worked.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Saves your shift card to your photos.</string>
 	<key>NSSupportsLiveActivities</key>

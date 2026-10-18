@@ -110,3 +110,38 @@ final class OvernightSplitTests: XCTestCase {
         XCTAssertGreaterThan(carrier.paidHours, 0, "The break may never consume its whole portion")
     }
 }
+
+/// Map-pin shift locations: what gets written onto an entry and synced.
+final class ShiftPlaceTests: XCTestCase {
+
+    func testApplyWritesPinAndName() {
+        var entry = WorkEntry(date: Date(), start: Date(), end: Date(), breakMinutes: 0, notes: "",
+                              isOffDay: false, offDayReason: "", isHoliday: false)
+        ShiftPlace(name: "  Main Yard ", latitude: 53.5, longitude: -113.5).apply(to: &entry)
+        XCTAssertEqual(entry.locationName, "Main Yard")
+        XCTAssertEqual(entry.latitude, 53.5)
+        XCTAssertEqual(entry.longitude, -113.5)
+        XCTAssertEqual(ShiftPlace(entry: entry).displayText, "Main Yard")
+    }
+
+    func testClearedPinEncodesAsNullSoCloudMergeClearsIt() throws {
+        var entry = WorkEntry(date: Date(), start: Date(), end: Date(), breakMinutes: 0, notes: "",
+                              isOffDay: false, offDayReason: "", isHoliday: false)
+        ShiftPlace(name: "Site", latitude: 1, longitude: 2).apply(to: &entry)
+        ShiftPlace().apply(to: &entry)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(entry)) as? [String: Any])
+        XCTAssertTrue(json["latitude"] is NSNull)
+        XCTAssertTrue(json["longitude"] is NSNull)
+        XCTAssertEqual(json["locationName"] as? String, "")
+        // And it still decodes.
+        let back = try JSONDecoder().decode(WorkEntry.self, from: JSONEncoder().encode(entry))
+        XCTAssertNil(back.latitude)
+    }
+
+    func testNameOnlyPlaceFromOlderEntries() {
+        let place = ShiftPlace(name: "Old free-text site")
+        XCTAssertNil(place.coordinate)
+        XCTAssertFalse(place.isEmpty)
+        XCTAssertEqual(place.displayText, "Old free-text site")
+    }
+}

@@ -39,13 +39,11 @@ struct AddShiftWizardView: View {
     @State private var breakMinutes: Int
     @State private var showCustomBreak: Bool = false
 
-    /// The saved `JobSite` picked from the location sheet, if any.
-    @State private var selectedSiteID: String?
-    /// The label written to `WorkEntry.locationName` (the chosen site's name).
-    @State private var locationLabel: String = ""
+    /// Where the shift was worked: a map pin plus an optional name.
+    @State private var place = ShiftPlace()
     @State private var notes: String = ""
 
-    /// Presents the saved-locations picker as a sheet from screen 1's Location row.
+    /// Presents the map pin picker as a sheet from screen 1's Location row.
     @State private var showLocationPicker = false
 
     @State private var shiftKind: EntryEditorView.ShiftKind = .work
@@ -155,11 +153,7 @@ struct AddShiftWizardView: View {
             }
         }
         .sheet(isPresented: $showLocationPicker) {
-            AddShiftLocationPickerSheet(
-                store: store,
-                selectedSiteID: $selectedSiteID,
-                locationLabel: $locationLabel
-            )
+            ShiftLocationPickerSheet(place: $place, recentPlaces: store.recentShiftPlaces())
         }
         .sheet(isPresented: $showWagePrompt, onDismiss: afterWagePrompt) {
             WagePromptSheet(store: store)
@@ -267,9 +261,9 @@ struct AddShiftWizardView: View {
             AddShiftPanel {
                 AddShiftFieldRow(
                     icon: "mappin.and.ellipse",
-                    label: "Location / Job",
+                    label: "Location",
                     value: locationValueText,
-                    isPlaceholder: locationLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    isPlaceholder: place.isEmpty,
                     accessory: .chevron
                 ) {
                     Haptics.lightTap()
@@ -370,10 +364,10 @@ struct AddShiftWizardView: View {
             breakMinutes = template.breakMinutes
             showCustomBreak = template.breakMinutes > 0 && ![15, 30, 45, 60].contains(template.breakMinutes)
             if !template.locationName.isEmpty {
-                locationLabel = template.locationName
-                selectedSiteID = store.jobSites.first {
-                    $0.name.caseInsensitiveCompare(template.locationName) == .orderedSame
-                }?.id
+                // Reuse the pin from a past shift with the same name, if any.
+                place = store.recentShiftPlaces(limit: 50).first {
+                    $0.trimmedName.caseInsensitiveCompare(template.locationName) == .orderedSame
+                } ?? ShiftPlace(name: template.locationName)
             }
             expandedField = nil
         }
@@ -476,9 +470,9 @@ struct AddShiftWizardView: View {
                 EntryRowDivider()
                 AddShiftFieldRow(
                     icon: "mappin.and.ellipse",
-                    label: "Location / Job",
+                    label: "Location",
                     value: locationValueText,
-                    isPlaceholder: locationLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    isPlaceholder: place.isEmpty,
                     accessory: .hidden
                 )
             }
@@ -531,8 +525,7 @@ struct AddShiftWizardView: View {
     }
 
     private var locationValueText: String {
-        let trimmed = locationLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Select location or job" : trimmed
+        place.displayText ?? "Drop a pin"
     }
 
     private var totalCaption: String {
@@ -685,13 +678,12 @@ struct AddShiftWizardView: View {
         if willSplitAtMidnight,
            let portions = OvernightSplit.split(date: date, start: s, end: e, breakMinutes: br) {
             let sharedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-            let sharedLocation = locationLabel.trimmingCharacters(in: .whitespacesAndNewlines)
             var saved: [WorkEntry] = []
             for portion in [portions.first, portions.second] {
                 var entry = WorkEntry(date: portion.date, start: portion.start, end: portion.end,
                                       breakMinutes: portion.breakMinutes, notes: sharedNotes,
                                       isOffDay: false, offDayReason: "", isHoliday: false)
-                entry.locationName = sharedLocation
+                place.apply(to: &entry)
                 attachWeatherIfToday(to: &entry)
                 withAnimation(AppMotion.Spring.smooth) { store.add(entry) }
                 saved.append(entry)
@@ -708,10 +700,7 @@ struct AddShiftWizardView: View {
             entry.holidayPayRule = rule
             entry.statPayHours = rule.includesStatPay ? store.paySettings.statHolidayPaidHours : 0
         }
-        entry.locationName = isOffKind ? "" : locationLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-        entry.locationURL = ""
-        entry.latitude = nil
-        entry.longitude = nil
+        (isOffKind ? ShiftPlace() : place).apply(to: &entry)
         // Only attach weather for same-day work shifts — a cached "now"
         // reading has no bearing on a backdated or off-day entry.
         if !isOffKind {

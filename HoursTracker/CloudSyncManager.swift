@@ -1534,6 +1534,10 @@ final class CloudSyncManager: ObservableObject {
     /// and Firestore FieldValue objects must be converted first.
     private func functionsCallablePayload(_ value: Any) -> Any {
         switch value {
+        case is NSNull:
+            // Cleared optionals (a removed location pin) must stay null, not
+            // become the string "<null>".
+            return NSNull()
         case let string as String:
             return string as NSString
         case let number as NSNumber:

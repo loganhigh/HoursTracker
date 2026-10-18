@@ -351,7 +351,8 @@ struct EntryShiftTypeSection: View {
 // MARK: - Details section (location + notes)
 
 struct EntryDetailsSection: View {
-    @Binding var locationLabel: String
+    @Binding var place: ShiftPlace
+    var recentPlaces: [ShiftPlace] = []
     @Binding var notes: String
     /// Off days and holidays have no job site, so the location field is asked
     /// for on work shifts only. Notes stay for every kind.
@@ -362,11 +363,7 @@ struct EntryDetailsSection: View {
             EntrySectionLabel("Details")
             EntryEditorCard {
                 if showsLocation {
-                    TextField("Location or job (optional)", text: $locationLabel, axis: .vertical)
-                        .appText(.body)
-                        .foregroundStyle(AppColors.text)
-                        .lineLimit(1...3)
-                        .tint(AppColors.accent)
+                    ShiftLocationRow(place: $place, recentPlaces: recentPlaces)
                     EntryRowDivider()
                         .padding(.vertical, 10)
                 }

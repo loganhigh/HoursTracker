@@ -308,6 +308,16 @@ final class MascotScreenDumpTests: XCTestCase {
         .environment(\.timeZone, cal.timeZone)
         let domeData = Self.windowSnapshot(domes, size: CGSize(width: 200, height: 700), settle: 1)
         try domeData?.write(to: URL(fileURLWithPath: "\(dir)/home-sundome.png"))
+
+        // Map pin picker, opened on a saved pin.
+        let picker = ShiftLocationPickerSheet(
+            place: .constant(ShiftPlace(name: "Main Yard", latitude: 53.5461, longitude: -113.4938)),
+            recentPlaces: [ShiftPlace(name: "Main Yard", latitude: 53.5461, longitude: -113.4938),
+                           ShiftPlace(name: "North Shop", latitude: 53.60, longitude: -113.45)]
+        )
+        .preferredColorScheme(.dark)
+        let pickerData = Self.windowSnapshot(picker, size: CGSize(width: 390, height: 844), settle: 4)
+        try pickerData?.write(to: URL(fileURLWithPath: "\(dir)/location-picker.png"))
     }
 
     /// The app's tab bar (same items as AppTabView) on a fixed tab.
