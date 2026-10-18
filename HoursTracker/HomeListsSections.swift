@@ -228,12 +228,12 @@ struct HomeFriendsCard: View {
     @ObservedObject var friendsService: FriendsService
     @ObservedObject var store: HoursStore
     @ObservedObject var authService: AuthService
-    let onOpenFriends: () -> Void
 
     @State private var showingFriendsPicker = false
 
     var body: some View {
-        Button(action: onOpenFriends) {
+        // Each friend's row opens their profile (with their cheque day by
+        // day); the card itself is not a button.
             VStack(spacing: AppSpacing.sm) {
                 HomeSectionHeader(title: "Friends") {
                         Button {
@@ -262,8 +262,6 @@ struct HomeFriendsCard: View {
                 .homeCard()
             }
             .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.plain)
         .sheet(isPresented: $showingFriendsPicker) {
             HomeFriendsPickerSheet(friendsService: friendsService)
         }
@@ -371,12 +369,12 @@ struct HomeFriendsCardContent: View {
                     if index > 0 {
                         Divider().overlay(AppColors.stroke)
                     }
-                    standingsRow(row, rank: index + 1)
+                    profileLink(row) { standingsRow(row, rank: index + 1) }
                 }
 
                 ForEach(hidden) { row in
                     Divider().overlay(AppColors.stroke)
-                    standingsRow(row, rank: nil)
+                    profileLink(row) { standingsRow(row, rank: nil) }
                 }
             }
 
@@ -387,6 +385,22 @@ struct HomeFriendsCardContent: View {
         .onAppear {
             store.syncProfileSnapshotToCloud()
             Task { await friendsService.refreshFriendProfiles() }
+        }
+    }
+
+    /// Friends' rows push their profile; your own row isn't a link.
+    @ViewBuilder
+    private func profileLink<Row: View>(_ row: StandingsRow, @ViewBuilder _ content: () -> Row) -> some View {
+        if row.isMe {
+            content()
+        } else {
+            NavigationLink {
+                FriendProfileDetailView(friendUid: row.id, friendsService: friendsService)
+            } label: {
+                content().contentShape(Rectangle())
+            }
+            .buttonStyle(PremiumPressStyle())
+            .accessibilityHint("Shows their hours for each day of this cheque")
         }
     }
 
@@ -460,6 +474,11 @@ struct HomeFriendsCardContent: View {
                     .foregroundStyle(AppColors.subtext)
             } else {
                 HoursValue(hours: row.hours, size: 18, unitSize: 11, gap: 4)
+            }
+            if !row.isMe {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.5))
             }
         }
         .padding(.vertical, 10)

@@ -124,6 +124,12 @@ struct FriendProfileDetailView: View {
                 // edge (a round avatar leaves his wing tips floating), scarf
                 // in the friend's tier colour.
                 VStack(spacing: AppSpacing.lg) {
+                    // Day-by-day hours for their current cheque, first so
+                    // "what did we work on the 13th?" is one tap away.
+                    if friend.privacy.shareHours {
+                        FriendChequeDaysCard(friend: friend, accent: accent)
+                    }
+
                     if friend.hasCompanyInfo {
                         companyCard(friend: friend, accent: accent)
                     }

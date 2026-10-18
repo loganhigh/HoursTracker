@@ -33,7 +33,13 @@ final class MascotScreenDumpTests: XCTestCase {
         ]
         let saved = FriendsService.shared.friends
         FriendsService.shared.friends = friends
-        defer { FriendsService.shared.friends = saved }
+        let store = Self.makeStore()
+        Self.removeSampleShifts(store)
+        Self.addSampleShifts(store, includingToday: true)
+        defer {
+            FriendsService.shared.friends = saved
+            Self.removeSampleShifts(store)
+        }
 
         var entries = [LeaderboardEntry(id: "me", name: "Logan", isMe: true, level: 12, prestige: 0, streak: 4,
                                         payPeriodHours: 38, photoURL: nil, hoursHidden: false)]
@@ -105,7 +111,9 @@ final class MascotScreenDumpTests: XCTestCase {
         for (name, view) in screens {
             // The signed-out host app's listeners empty the list between renders.
             FriendsService.shared.friends = friends
-            let data = Self.windowSnapshot(view.environmentObject(AuthService.shared))
+            let height: CGFloat = name == "friend-profile" ? 1800 : 844
+            let data = Self.windowSnapshot(view.environmentObject(AuthService.shared).environmentObject(store),
+                                           size: CGSize(width: 390, height: height))
             try data?.write(to: URL(fileURLWithPath: "\(dir)/friends-\(name).png"))
         }
     }
@@ -383,8 +391,29 @@ final class MascotScreenDumpTests: XCTestCase {
             badgeCount: 9, unlockedBadgeSummaries: [], equippedTitle: "", profilePhotoURL: nil,
             companyName: "Northline Electric", companyOccupation: "Electrician", companyStartDate: nil,
             companyHoursLogged: 1240, companyDaysWorked: 150, updatedAt: nil, friendsSince: nil,
-            chequeDailySummary: [], chequeWindowStart: "", chequeWindowCutoff: "", privacy: .default
+            chequeDailySummary: sampleChequeDays(), chequeWindowStart: sampleWindow().start,
+            chequeWindowCutoff: sampleWindow().cutoff, privacy: .default
         )
+    }
+
+    /// A cheque that started 9 days ago: weekdays worked, one double shift.
+    private static func sampleWindow() -> (start: String, cutoff: String) {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let iso = FriendDailyEntry.isoFormatter
+        return (iso.string(from: cal.date(byAdding: .day, value: -9, to: today)!),
+                iso.string(from: cal.date(byAdding: .day, value: 4, to: today)!))
+    }
+
+    private static func sampleChequeDays() -> [FriendDailyEntry] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        return (0...9).compactMap { back in
+            let day = cal.date(byAdding: .day, value: -back, to: today)!
+            guard back == 0 || !cal.isDateInWeekend(day) else { return nil }
+            let hours = back == 0 ? 9 : (back == 3 ? 10.5 : 8)
+            return FriendDailyEntry(date: FriendDailyEntry.isoFormatter.string(from: day), hours: hours, shifts: back == 3 ? 2 : 1)
+        }
     }
 
     /// Hosts `view` in a window on the test host's scene and draws it, so

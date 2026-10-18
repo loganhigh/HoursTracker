@@ -108,7 +108,7 @@ struct FriendsPrivacySettingsView: View {
                     SettingsRowLabel(
                         icon: "clock.fill",
                         title: "Show hours to friends",
-                        subtitle: "Weekly + total hours on the friends leaderboard"
+                        subtitle: "Friends see your hours for each day of this cheque, plus weekly and total hours"
                     )
                 }
                 .tint(AppColors.accent)

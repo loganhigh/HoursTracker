@@ -528,10 +528,7 @@ struct HoursHomeView: View {
                     HomeFriendsCard(
                         friendsService: friendsService,
                         store: store,
-                        authService: authService,
-                        onOpenFriends: {
-                            tabRouter.selection = .friends
-                        }
+                        authService: authService
                     )
                     .cardAppear(index: 5)
 
