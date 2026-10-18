@@ -199,9 +199,31 @@ final class MascotScreenDumpTests: XCTestCase {
         guard let dir = ProcessInfo.processInfo.environment["MASCOT_DUMP_DIR"] else {
             throw XCTSkip("Set MASCOT_DUMP_DIR to dump support screen renders")
         }
+        SupporterRegistry.shared.record(name: "tipper", isSupporter: true)
+        defer { SupporterRegistry.shared.record(name: "tipper", isSupporter: false) }
+        // Owner, supporter and a plain name as viewers on four prestige themes
+        // see them: the supporter must stay blue on every one.
+        let names = HStack(spacing: 12) {
+            ForEach([0, 1, 3, 4], id: \.self) { prestige in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("P\(prestige)").font(.caption).foregroundStyle(.gray)
+                    PrestigeNameText(name: "logan", prestige: 4, font: .headline)
+                    PrestigeNameText(name: "tipper", prestige: 0, font: .headline)
+                    PrestigeNameText(name: "jordan", prestige: 0, font: .headline)
+                }
+                .padding(10)
+                .background(AppColors.card)
+                .adaptiveTheme(prestige: prestige)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AppColors.bg)
         let screens: [(String, AnyView)] = [
             ("tip-jar", AnyView(TipJarView())),
             ("paywall", AnyView(PremiumUpgradeView())),
+            ("welcome-back", AnyView(WelcomeBackView(onFinished: {}))),
+            ("name-colours", AnyView(names)),
         ]
         for (name, view) in screens {
             let data = Self.windowSnapshot(view.environmentObject(AuthService.shared), settle: 2.5)

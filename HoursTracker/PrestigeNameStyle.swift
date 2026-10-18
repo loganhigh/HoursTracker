@@ -31,6 +31,9 @@ struct PrestigeNameText: View {
 
     @ObservedObject private var supporters = SupporterRegistry.shared
 
+    /// Supporters' name fill: the same blue for every viewer and tier.
+    static let supporterColors = [Color(hex: 0x5B9BFF), Color(hex: 0x8CC8FF), Color(hex: 0x5B9BFF)]
+
     private var tier: PrestigeTheme.Tier { PrestigeTheme.tier(for: prestige) }
 
     private var text: Text {
@@ -55,11 +58,12 @@ struct PrestigeNameText: View {
             } else if tier.isLegend {
                 AscendedNameFill(text: text, tier: tier)
             } else if isSupporter {
-                // Tinted rather than the plain name colour, so the sweep of
-                // light has something to show against.
+                // A fixed blue, never the viewer's theme accent: on bronze or
+                // gold prestige themes the accent is orange and supporters
+                // were indistinguishable from the owner's gold.
                 text.foregroundStyle(
                     LinearGradient(
-                        colors: [AppColors.accent, AppColors.accentHighlight, AppColors.accent],
+                        colors: Self.supporterColors,
                         startPoint: .leading,
                         endPoint: .trailing
                     )

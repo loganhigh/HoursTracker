@@ -43,10 +43,14 @@ struct WelcomeBackView: View {
             AppColors.bg.ignoresSafeArea()
 
             VStack(spacing: AppSpacing.md) {
-                // Otto waves hello, matching the onboarding welcome.
-                OwlView(pose: .wave, size: .hero)
+                // The Hour Tracker logo (the owl stays off this screen).
+                Image("AppLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 120, height: 120)
                     .opacity(logoVisible ? 1 : 0)
                     .scaleEffect(logoVisible ? 1 : 0.92)
+                    .accessibilityHidden(true)
 
                 // One size is chosen for the whole greeting so both lines match;
                 // the first candidate that fits the available width wins.
