@@ -147,7 +147,7 @@ struct ShiftTemplateEditorSheet: View {
         let day = cal.startOfDay(for: Date())
         // Direct assignment rather than `.map(...)` on the optional: passing a
         // main-actor-isolated initializer as a function value trips the
-        // concurrency checker (same reason as JobSiteEditorSheet).
+        // concurrency checker (the editor's text fields).
         if let existing {
             _name = State(initialValue: existing.name)
             _start = State(initialValue: existing.date(existing.startMinutes, on: day))
@@ -194,7 +194,7 @@ struct ShiftTemplateEditorSheet: View {
 
                         AddShiftPanel {
                             VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                                Text("Location / Job (optional)")
+                                Text("Location (optional)")
                                     .appText(.metricLabel)
                                     .foregroundStyle(AppColors.subtext)
                                 TextField("e.g. Main Yard", text: $locationName)

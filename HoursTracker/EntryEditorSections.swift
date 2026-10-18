@@ -354,7 +354,7 @@ struct EntryDetailsSection: View {
     @Binding var place: ShiftPlace
     var recentPlaces: [ShiftPlace] = []
     @Binding var notes: String
-    /// Off days and holidays have no job site, so the location field is asked
+    /// Off days and holidays have no work location, so the location field is asked
     /// for on work shifts only. Notes stay for every kind.
     var showsLocation: Bool = true
 

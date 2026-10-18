@@ -15,12 +15,13 @@ struct ShiftTemplate: Identifiable, Codable, Equatable, Hashable {
     var startMinutes: Int
     var endMinutes: Int
     var breakMinutes: Int
-    /// Optional — matches a saved job site's name, or free text, or empty.
+    /// Optional place name; a past shift's pin with this name is reused.
     var locationName: String
     var createdAt: Date
     var lastUsedAt: Date?
 
     static let nameLimit = 60
+    static let locationNameLimit = 120
     static let minutesInDay = 24 * 60
 
     init(
@@ -38,7 +39,7 @@ struct ShiftTemplate: Identifiable, Codable, Equatable, Hashable {
         self.startMinutes = ShiftTemplate.clampMinutes(startMinutes)
         self.endMinutes = ShiftTemplate.clampMinutes(endMinutes)
         self.breakMinutes = max(0, breakMinutes)
-        self.locationName = ShiftTemplate.clean(locationName, limit: JobSite.nameLimit)
+        self.locationName = ShiftTemplate.clean(locationName, limit: ShiftTemplate.locationNameLimit)
         self.createdAt = createdAt
         self.lastUsedAt = lastUsedAt
     }
@@ -55,7 +56,7 @@ struct ShiftTemplate: Identifiable, Codable, Equatable, Hashable {
         breakMinutes = max(0, try c.decodeIfPresent(Int.self, forKey: .breakMinutes) ?? 0)
         locationName = ShiftTemplate.clean(
             try c.decodeIfPresent(String.self, forKey: .locationName) ?? "",
-            limit: JobSite.nameLimit
+            limit: ShiftTemplate.locationNameLimit
         )
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         lastUsedAt = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt)

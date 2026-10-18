@@ -6,7 +6,7 @@ import SwiftUI
 // `EntryEditorView` — edit is meant to feel different from add.
 //
 // Screen 1 "When & Where" — date / start / end / location rows, break, shift
-//   type, and a live Total Time panel. Tapping the Location / Job row opens
+//   type, and a live Total Time panel. Tapping the Location row opens
 //   the saved-locations picker as a sheet (search + Recent + All + add new)
 //   rather than as a separate wizard step.
 // Screen 2 "Review" — read-only summary, notes, and Save Shift.
@@ -255,7 +255,7 @@ struct AddShiftWizardView: View {
             }
         }
 
-        // A day you didn't work has no job site — asking for one on an off
+        // A day you didn't work has no work location — asking for one on an off
         // day or holiday was just a question with no right answer.
         if needsTimes {
             AddShiftPanel {

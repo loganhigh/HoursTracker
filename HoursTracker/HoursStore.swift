@@ -73,9 +73,6 @@ final class HoursStore: ObservableObject {
     @Published var payHistoryEntries: [PayHistoryEntry] = []
     @Published var certificateEntries: [CertificateEntry] = []
     @Published var awardEntries: [AwardEntry] = []
-    /// Saved locations / jobs offered by the Add Shift wizard. Local-only
-    /// (never pushed to Firestore) — see `saveJobSites()`.
-    @Published var jobSites: [JobSite] = []
     /// Saved shift patterns offered by the Add Shift wizard. Local-only, and
     /// Pro-gated at the UI layer — see `ShiftTemplatesSettingsView`.
     @Published var shiftTemplates: [ShiftTemplate] = []
@@ -109,6 +106,7 @@ final class HoursStore: ObservableObject {
     private let payHistoryKey = "pay_history_v1"
     private let certificatesKey = "certificate_entries_v2"
     private let awardsKey = "award_entries_v1"
+    /// Retired (shifts use map pins); kept only to clear the old data.
     private let jobSitesKey = "job_sites_v1"
     private let shiftTemplatesKey = "shift_templates_v1"
     private let yearArchivesKey = "year_archives_v1"
@@ -147,9 +145,8 @@ final class HoursStore: ObservableObject {
            let profile = try? dec.decode(GamificationProfile.self, from: data) {
             gamificationProfile = profile
         }
-        // Saved job sites are small and local-only, so read them here rather
-        // than threading them through loadAsync's remote-merge path.
-        loadJobSites()
+        // Job sites were retired for map pins; drop the old local list.
+        UserDefaults.standard.removeObject(forKey: jobSitesKey)
         loadShiftTemplates()
         // NOTE: the legacy admin-level/prestige floor is deliberately NOT
         // restored from UserDefaults anymore. Nothing reads those overrides for
@@ -969,7 +966,6 @@ final class HoursStore: ObservableObject {
         payHistoryEntries.removeAll()
         certificateEntries.removeAll()
         awardEntries.removeAll()
-        jobSites.removeAll()
         gamificationProfile = .defaultProfile
         gamificationEventMessage = nil
         lastSeenCloudGamificationAnchors = nil
@@ -1102,88 +1098,9 @@ final class HoursStore: ObservableObject {
         UserDefaults.standard.set(data, forKey: awardsKey)
     }
 
-    // MARK: - Job sites (saved locations / jobs)
-    //
-    // Local-only on purpose. Certificates and awards set the precedent for
-    // small user-owned collections: their own UserDefaults key, no Firestore
-    // document, no security-rule surface. Shifts still store only the site's
-    // NAME in `WorkEntry.locationName`, so deleting a site never rewrites
-    // history — past shifts keep the name they were saved with.
-
-    /// Sites ordered for pickers: most recently used first, never-used last.
-    var jobSitesByRecency: [JobSite] {
-        jobSites.sorted { lhs, rhs in
-            switch (lhs.lastUsedAt, rhs.lastUsedAt) {
-            case let (l?, r?): return l > r
-            case (nil, _?): return false
-            case (_?, nil): return true
-            case (nil, nil): return lhs.createdAt > rhs.createdAt
-            }
-        }
-    }
-
-    /// False when another saved site would exceed the free allowance.
-    /// Users already over the limit (from before it existed, or after
-    /// letting Pro lapse) keep every site they have — this only blocks
-    /// adding more.
-    func canAddJobSite(isPro: Bool) -> Bool {
-        isPro || jobSites.count < JobSite.freeLimit
-    }
-
-    /// Adds a site, reusing an existing one when the name already exists
-    /// (case-insensitive) so the list can't fill up with duplicates.
-    @discardableResult
-    func addJobSite(_ site: JobSite) -> JobSite {
-        let trimmed = site.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return site }
-        if let existing = jobSites.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
-            return existing
-        }
-        jobSites.append(site)
-        saveJobSites()
-        return site
-    }
-
-    func updateJobSite(_ site: JobSite) {
-        guard let idx = jobSites.firstIndex(where: { $0.id == site.id }) else { return }
-        guard !site.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        jobSites[idx] = site
-        saveJobSites()
-    }
-
-    /// Removes a saved site. Existing shifts are untouched — their
-    /// `locationName` text stays exactly as it was.
-    func deleteJobSite(_ site: JobSite) {
-        jobSites.removeAll { $0.id == site.id }
-        saveJobSites()
-    }
-
-    /// Stamps a site as just-used so it floats to the top of "Recent".
-    func markJobSiteUsed(id: String, at date: Date = Date()) {
-        guard let idx = jobSites.firstIndex(where: { $0.id == id }) else { return }
-        jobSites[idx].lastUsedAt = date
-        saveJobSites()
-    }
-
-    private func saveJobSites() {
-        let enc = JSONEncoder()
-        enc.dateEncodingStrategy = .iso8601
-        guard let data = try? enc.encode(jobSites) else { return }
-        UserDefaults.standard.set(data, forKey: jobSitesKey)
-    }
-
-    private func loadJobSites() {
-        guard let data = UserDefaults.standard.data(forKey: jobSitesKey) else { return }
-        let dec = JSONDecoder()
-        dec.dateDecodingStrategy = .iso8601
-        if let sites = try? dec.decode([JobSite].self, from: data) {
-            jobSites = sites
-        }
-    }
-
     // MARK: - Shift templates (Hour Tracker Pro)
     //
-    // Local-only, same as job sites: a template is a convenience for filling
+    // Local-only: a template is a convenience for filling
     // the Add Shift wizard, never part of an entry, so nothing here reaches
     // Firestore or rewrites logged shifts.
 

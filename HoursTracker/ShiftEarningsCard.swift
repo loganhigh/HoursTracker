@@ -16,7 +16,7 @@ struct ShiftEarnings: Equatable {
     /// The saved entries, so the view can pick up weather that arrives after
     /// the card opens (backdated shifts are looked up asynchronously).
     let entryIDs: [UUID]
-    /// Job site if the user set one on the shift.
+    /// Location name if the user set one on the shift.
     let locationName: String
     /// Worked-day streak including this shift.
     let streak: Int

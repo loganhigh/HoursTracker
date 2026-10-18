@@ -21,8 +21,7 @@ struct PremiumUpgradeView: View {
     // Restore those rows only together with reverting that commit.
     private let benefits: [(icon: String, title: String, subtitle: String)] = [
         ("square.on.square", "Shift Templates", "Save the shift you always work and log it in one tap."),
-        ("doc.richtext.fill", "Professional PDF Reports", "Send polished, branded hours straight to payroll or your foreman."),
-        ("mappin.and.ellipse", "Unlimited Locations", "Free saves \(JobSite.freeLimit) job sites. Pro saves every yard, plant, and site.")
+        ("doc.richtext.fill", "Professional PDF Reports", "Send polished, branded hours straight to payroll or your foreman.")
     ]
 
     var body: some View {

@@ -41,7 +41,7 @@ enum OwlPose: String, CaseIterable {
     case bell
     /// Shield with a check: privacy, sign-in, verification.
     case shield
-    /// Map pin: locations, job sites, country.
+    /// Map pin: locations, country.
     case pin
     /// Sunglasses: Wrapped.
     case shades
