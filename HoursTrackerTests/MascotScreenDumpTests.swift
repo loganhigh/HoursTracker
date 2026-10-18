@@ -193,6 +193,39 @@ final class MascotScreenDumpTests: XCTestCase {
         }
     }
 
+    /// Holds the animated poses on screen so a simulator recording can
+    /// capture the motion (set OWL_MOTION_SECONDS to run).
+    func testOwlMotionPreview() throws {
+        guard let seconds = ProcessInfo.processInfo.environment["OWL_MOTION_SECONDS"].flatMap(Double.init) else {
+            throw XCTSkip("Set OWL_MOTION_SECONDS to hold the owl motion preview on screen")
+        }
+        let poses: [(OwlPose, String)] = [(.wave, "Wave · rock"), (.cheer, "Cheer · hop"), (.heart, "Heart · pulse"),
+                                          (.idle, "Idle · breathe"), (.peek, "Peek"), (.bell, "Bell · ring"),
+                                          (.oops, "Oops · shake"), (.sleep, "Sleep · doze"), (.trophy, "Trophy · hop")]
+        let grid = VStack(spacing: 18) {
+            Text("Owl motion preview").font(.headline).foregroundStyle(.white)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 26) {
+                ForEach(poses, id: \.1) { pose, label in
+                    VStack(spacing: 8) {
+                        OwlView(pose: pose, size: .emptyState)
+                        Text(label).font(.caption).foregroundStyle(.gray)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AppColors.bg)
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+        let window = UIWindow(windowScene: scene)
+        window.overrideUserInterfaceStyle = .dark
+        window.rootViewController = UIHostingController(rootView: grid)
+        window.windowLevel = .alert + 1
+        window.makeKeyAndVisible()
+        RunLoop.current.run(until: Date().addingTimeInterval(seconds))
+        window.isHidden = true
+    }
+
     /// The tip jar and the Pro paywall (no StoreKit products in tests, so
     /// both show their no-products state).
     func testDumpSupportScreens() throws {

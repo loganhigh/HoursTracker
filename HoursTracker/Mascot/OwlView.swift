@@ -5,8 +5,8 @@ import SwiftUI
 // Draws Otto in one pose. The scarf layer is multiplied with the prestige
 // accent (or a screen-scoped override such as a friend's tier) so the scarf
 // follows the user's rank while the rest of the owl keeps its fixed palette.
-// Purely decorative: hidden from VoiceOver, and the idle bob stops under
-// Reduce Motion. One owl per screen.
+// Purely decorative: hidden from VoiceOver. Each pose has its own idle
+// motion (OwlMotion) that stops under Reduce Motion. One owl per screen.
 
 struct OwlView: View {
     struct Size: Equatable {
@@ -30,10 +30,10 @@ struct OwlView: View {
     var size: Size = .companion
     /// Overrides the prestige accent for the scarf (friend profiles use the friend's tier).
     var scarfTint: Color? = nil
+    /// False keeps the owl still (dense or repeated placements).
     var bobs: Bool = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var bobUp = false
 
     var body: some View {
         ZStack {
@@ -42,15 +42,9 @@ struct OwlView: View {
                 .transition(.opacity)
         }
         .frame(height: size.height)
-        .offset(y: bobUp && bobs && !reduceMotion ? -OwlView.bobDistance : 0)
+        .modifier(OwlMotionModifier(motion: OwlMotion(pose: pose), height: size.height, enabled: bobs))
         .animation(AppMotion.animation(.easeInOut(duration: AppMotion.Duration.standard), reduceMotion: reduceMotion), value: pose)
         .accessibilityHidden(true)
-        .onAppear {
-            guard bobs, !reduceMotion, !bobUp else { return }
-            withAnimation(.easeInOut(duration: OwlView.bobPeriod).repeatForever(autoreverses: true)) {
-                bobUp = true
-            }
-        }
     }
 
     private func layers(for pose: OwlPose) -> some View {
@@ -64,9 +58,6 @@ struct OwlView: View {
                 .colorMultiply(scarfTint ?? AppColors.accent)
         }
     }
-
-    private static let bobDistance: CGFloat = 2
-    private static let bobPeriod: Double = 1.8
 }
 
 #Preview("Otto poses") {
