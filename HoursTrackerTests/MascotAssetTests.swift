@@ -264,4 +264,21 @@ final class MascotAssetTests: XCTestCase {
             }
         }
     }
+
+    /// London on the June solstice: sunrise 04:43, sunset 21:21 BST.
+    func testSunTimesMatchKnownCity() throws {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Europe/London")!
+        let day = cal.date(from: DateComponents(year: 2026, month: 6, day: 21))!
+        let times = try XCTUnwrap(SunTimes.sunriseSunset(on: day, latitude: 51.5074, longitude: -0.1278, calendar: cal))
+        let rise = cal.dateComponents([.hour, .minute], from: times.sunrise)
+        let set = cal.dateComponents([.hour, .minute], from: times.sunset)
+        XCTAssertEqual(Double(rise.hour! * 60 + rise.minute!), 4 * 60 + 43, accuracy: 3)
+        XCTAssertEqual(Double(set.hour! * 60 + set.minute!), 21 * 60 + 21, accuracy: 3)
+    }
+
+    func testSunTimesNilDuringPolarNight() {
+        let day = Calendar.current.date(from: DateComponents(year: 2026, month: 12, day: 21))!
+        XCTAssertNil(SunTimes.sunriseSunset(on: day, latitude: 80, longitude: 0))
+    }
 }

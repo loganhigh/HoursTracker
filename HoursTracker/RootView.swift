@@ -765,44 +765,6 @@ struct HoursHomeView: View {
         .buttonStyle(TapBurstButtonStyle())
     }
 
-    /// Minimal section: a left-aligned small-caps label over content — quiet,
-    /// editorial hierarchy instead of pill chrome. When `boxed`, the content
-    /// sits in a subtle hairline surface; otherwise it floats on the
-    /// background for maximum air (rows supply their own backgrounds).
-    @ViewBuilder
-    private func homeSection<Content: View>(
-        _ title: String,
-        subtitle: String? = nil,
-        boxed: Bool = false,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(spacing: 12) {
-            VStack(spacing: 2) {
-                Text(title.uppercased())
-                    .font(.system(.caption, design: .rounded, weight: .bold))
-                    .tracking(1.6)
-                    .foregroundStyle(AppTheme.Colors.subtext)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.system(.caption, weight: .medium))
-                        .foregroundStyle(AppTheme.Colors.faint)
-                }
-            }
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity, alignment: .center)
-
-            if boxed {
-                content()
-                    .frame(maxWidth: .infinity)
-                    .padding(AppSpacing.md)
-                    .chunkyCard()
-            } else {
-                content()
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-
     /// Days from today to payday, in calendar days (start-of-day to
     /// start-of-day, matching the widget).
     private var daysUntilPayday: Int {
@@ -822,26 +784,25 @@ struct HoursHomeView: View {
         // morning, so "today" comes from the schedule, not the countdown.
         let isToday = PayCycleEngine.isPayday(Date(), settings: store.paySettings)
         let shownDate = isToday ? Date() : nextPayday
-        // Dark surface, a small gold celebration icon, a restrained gold
-        // accent on the border that strengthens on payday itself.
-        return HStack(spacing: AppSpacing.sm) {
-            ChunkyIcon(systemName: isToday ? "party.popper.fill" : "calendar", tint: AppColors.gold, size: 32)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(isToday
-                     ? "Payday is today!"
-                     : (days == 1 ? "Payday in 1 day" : "Payday in \(days) days"))
-                    .font(.system(.subheadline, design: .rounded, weight: .heavy))
-                    .foregroundStyle(AppColors.text)
-                Text(shownDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                    .font(.system(.caption, design: .rounded, weight: .semibold))
-                    .foregroundStyle(AppColors.subtext)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, AppSpacing.sm)
-        .padding(.vertical, 10)
-        .chunkyCard(border: AppColors.gold.opacity(isToday ? 0.5 : 0.22))
-        .accessibilityElement(children: .combine)
+        // Gold strip on payday itself, a dark card with gold text otherwise.
+        // Title only, centred: the date already sits in the Today card.
+        let title = isToday
+            ? "Payday is today!"
+            : (days == 1 ? "Payday in 1 day" : "Payday in \(days) days")
+        return Text(title)
+            .font(.system(.headline, design: .rounded, weight: .bold))
+            .foregroundStyle(isToday ? Color(red: 0.10, green: 0.07, blue: 0) : AppColors.rankGold)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(isToday ? AppColors.rankGold : AppColors.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(isToday ? Color.clear : AppColors.rankGold.opacity(0.25), lineWidth: 1)
+            )
+            .accessibilityLabel(Text("\(title) \(shownDate.formatted(date: .complete, time: .omitted))"))
     }
 
     /// Payday banner. The Prestige button used to sit here too; it now lives
@@ -855,7 +816,8 @@ struct HoursHomeView: View {
     // MARK: - Top 5 Hour Trackers (moved from the side menu)
 
     private var homeTopTrackersSection: some View {
-        homeSection("Top 5 Hour Trackers", boxed: true) {
+        VStack(spacing: AppSpacing.sm) {
+            HomeSectionHeader("Top 5 hour trackers")
             VStack(spacing: 0) {
                 if topTrackers.topTrackers.isEmpty {
                     Text(topTrackers.hasLoaded ? "No rankings yet" : "Loading…")
@@ -867,20 +829,23 @@ struct HoursHomeView: View {
                     ForEach(topTrackers.topTrackers.prefix(5)) { tracker in
                         topTrackerRow(tracker: tracker)
                         if tracker.id != topTrackers.topTrackers.prefix(5).last?.id {
-                            Divider()
-                                .overlay(AppTheme.Colors.stroke)
-                                .padding(.leading, 40)
+                            Divider().overlay(AppTheme.Colors.stroke)
                         }
                     }
-
-                    NavigationLink("See more") {
-                        GlobalLeaderboardView()
-                    }
-                    .buttonStyle(ChunkyButtonStyle(kind: .tinted))
-                    .padding(.top, AppSpacing.sm)
                 }
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, AppSpacing.xxs)
+            .padding(.horizontal, AppSpacing.md)
+            .homeCard()
+
+            if !topTrackers.topTrackers.isEmpty {
+                NavigationLink("See the full leaderboard") { GlobalLeaderboardView() }
+                    .buttonStyle(QuietSectionButtonStyle())
+                    .padding(.top, AppSpacing.xxs)
+            }
         }
+        .frame(maxWidth: .infinity)
     }
 
     private func topTrackerRankColor(_ rank: Int) -> Color {
@@ -892,19 +857,12 @@ struct HoursHomeView: View {
         }
     }
 
-    private func topTrackerHoursLabel(_ hours: Double) -> String {
-        if hours >= 1000 {
-            return String(format: "%.0fh", hours)
-        }
-        return String(format: "%.1fh", hours)
-    }
-
     private func topTrackerRow(tracker: TopTracker) -> some View {
         HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(topTrackerRankColor(tracker.rank).opacity(tracker.rank <= 3 ? 0.22 : 0.12))
-                    .frame(width: 28, height: 28)
+                    .fill(topTrackerRankColor(tracker.rank).opacity(0.2))
+                    .frame(width: 24, height: 24)
                 Text("\(tracker.rank)")
                     .font(.system(.footnote, design: .rounded, weight: .heavy))
                     .foregroundStyle(topTrackerRankColor(tracker.rank))
@@ -933,12 +891,9 @@ struct HoursHomeView: View {
 
             Spacer()
 
-            Text(topTrackerHoursLabel(tracker.hours))
-                .font(.system(.footnote, design: .rounded, weight: .bold))
-                .monospacedDigit()
-                .foregroundStyle(AppTheme.Colors.subtext)
+            HoursValue(hours: (tracker.hours * 10).rounded() / 10, size: 18, unitSize: 11, gap: 4)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
     }
 
 }

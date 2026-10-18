@@ -291,6 +291,23 @@ final class MascotScreenDumpTests: XCTestCase {
             let data = Self.windowSnapshot(hosted, size: CGSize(width: 390, height: height), settle: 3)
             try data?.write(to: URL(fileURLWithPath: "\(dir)/home-\(name).png"))
         }
+
+        // Sun dome states, independent of the simulator's clock and location.
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "America/Edmonton")!
+        let day = cal.date(from: DateComponents(year: 2026, month: 10, day: 16))!
+        let times = SunTimes.sunriseSunset(on: day, latitude: 53.55, longitude: -113.49, calendar: cal)
+        let domes = VStack(spacing: 16) {
+            ForEach([(9, 0), (13, 0), (17, 40), (21, 0)], id: \.0) { hm in
+                SunDome(now: cal.date(bySettingHour: hm.0, minute: hm.1, second: 0, of: day)!, times: times)
+            }
+            SunDome(now: cal.date(bySettingHour: 17, minute: 40, second: 0, of: day)!, times: nil)
+        }
+        .padding(20)
+        .background(Color.heroSurface)
+        .environment(\.timeZone, cal.timeZone)
+        let domeData = Self.windowSnapshot(domes, size: CGSize(width: 200, height: 700), settle: 1)
+        try domeData?.write(to: URL(fileURLWithPath: "\(dir)/home-sundome.png"))
     }
 
     /// The app's tab bar (same items as AppTabView) on a fixed tab.

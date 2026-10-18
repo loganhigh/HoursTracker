@@ -23,7 +23,7 @@ struct RecentShiftsSection: View {
 
     var body: some View {
         VStack(spacing: AppSpacing.sm) {
-            SectionEyebrow("Recent Shifts")
+            HomeSectionHeader("Recent shifts")
 
             if recentEntries.isEmpty {
                 // No owl here: the Today card's owl directly above already
@@ -39,8 +39,12 @@ struct RecentShiftsSection: View {
                 )
                 .padding(.vertical, AppSpacing.xs)
             } else {
-                VStack(spacing: AppSpacing.xs + 2) {
-                    ForEach(recentEntries) { entry in
+                VStack(spacing: 0) {
+                    ForEach(Array(recentEntries.enumerated()), id: \.element.id) { index, entry in
+                        if index > 0, !Calendar.current.isDateInToday(entry.date),
+                           !Calendar.current.isDateInToday(recentEntries[index - 1].date) {
+                            Divider().overlay(AppColors.stroke)
+                        }
                         Button {
                             Haptics.lightTap()
                             onSelect(entry)
@@ -51,15 +55,15 @@ struct RecentShiftsSection: View {
                                 currencyCode: store.paySettings.currencyCode,
                                 showPay: store.paySettings.showPayCalculations,
                                 paySettings: store.paySettings,
-                                chunky: true
+                                leaf: true
                             )
                         }
                         .buttonStyle(PremiumPressStyle())
                     }
 
-                    Button("View all", action: onViewAll)
-                        .buttonStyle(ChunkyButtonStyle(kind: .tinted))
-                        .padding(.top, AppSpacing.xxs)
+                    Button("View all shifts", action: onViewAll)
+                        .buttonStyle(QuietSectionButtonStyle())
+                        .padding(.top, AppSpacing.sm)
                 }
             }
         }
@@ -96,11 +100,11 @@ struct YearlyOverviewSection: View {
 
     var body: some View {
         VStack(spacing: AppSpacing.sm) {
-            SectionEyebrow("Yearly Overview")
+            HomeSectionHeader("Yearly overview")
 
             VStack(spacing: AppSpacing.md) {
                 Text(verbatim: "\(Calendar.current.component(.year, from: Date()))")
-                    .font(.system(.title2, design: .rounded, weight: .heavy))
+                    .font(.system(.title, design: .rounded, weight: .heavy))
                     .foregroundStyle(AppColors.text)
                     .frame(maxWidth: .infinity, alignment: .center)
 
@@ -108,7 +112,7 @@ struct YearlyOverviewSection: View {
             }
             .frame(maxWidth: .infinity)
             .padding(AppSpacing.md)
-            .chunkyCard()
+            .homeCard()
         }
         .frame(maxWidth: .infinity)
     }
@@ -123,6 +127,15 @@ struct MonthlyOverviewChart: View {
 
     private var maxHours: Double {
         max(data.map(\.hours).max() ?? 8, 8)
+    }
+
+    private var currentMonthIndex: Int {
+        Calendar.current.component(.month, from: Date()) - 1
+    }
+
+    /// The number part of `compactHours`.
+    private func compactNumber(_ value: Double) -> String {
+        String(compactHours(value).dropLast())
     }
 
     /// Compact label above bars. Shows whole hours for values ≥ 10 so labels
@@ -149,25 +162,32 @@ struct MonthlyOverviewChart: View {
                 HStack(alignment: .bottom, spacing: barSpacing) {
                     ForEach(Array(data.enumerated()), id: \.offset) { index, item in
                         VStack(spacing: 6) {
-                            Text(item.hours > 0 ? compactHours(item.hours) : " ")
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                .foregroundStyle(AppColors.text)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: .infinity)
-                                .opacity(item.hours > 0 ? 1 : 0)
+                            // Number and a small "h" as one tight label.
+                            HStack(alignment: .firstTextBaseline, spacing: 1.5) {
+                                Text(compactNumber(item.hours))
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .foregroundStyle(AppColors.text)
+                                Text("h")
+                                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(AppColors.accent.opacity(0.75))
+                            }
+                            .lineLimit(1)
+                            .fixedSize()
+                            .frame(width: barWidth)
+                            .opacity(item.hours > 0 ? 1 : 0)
 
-                            // Flat accent bars, Duolingo-style.
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(AppColors.accent)
+                            // Flat bars; the current month a lighter tint,
+                            // months with no hours a short stub on the base.
+                            RoundedRectangle(cornerRadius: item.hours > 0 ? 5 : 1.5, style: .continuous)
+                                .fill(item.hours > 0
+                                      ? (index == currentMonthIndex ? AppColors.accent.opacity(0.7) : AppColors.accent)
+                                      : AppColors.stroke)
                                 .frame(
                                     width: barWidth,
-                                    height: appeared && item.hours > 0
-                                        ? (maxHours > 0 ? max(4, CGFloat(item.hours / maxHours) * (chartHeight - labelReserve - 8)) : 4)
-                                        : 0
+                                    height: item.hours > 0
+                                        ? (appeared ? max(4, CGFloat(item.hours / maxHours) * (chartHeight - labelReserve - 8)) : 0)
+                                        : 3
                                 )
-                                .opacity(item.hours > 0 ? 1 : 0)
                                 // Ease-out growth from the baseline: fast
                                 // launch, gentle landing — no spring wobble on
                                 // a data chart. 40ms per month keeps the whole
@@ -187,10 +207,10 @@ struct MonthlyOverviewChart: View {
             .frame(height: chartHeight)
 
             HStack(spacing: 0) {
-                ForEach(Array(data.enumerated()), id: \.offset) { _, item in
+                ForEach(Array(data.enumerated()), id: \.offset) { index, item in
                     Text(item.label)
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(AppColors.subtext)
+                        .foregroundStyle(index == currentMonthIndex ? AppColors.text : AppColors.subtext)
                         .frame(maxWidth: .infinity)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -215,10 +235,7 @@ struct HomeFriendsCard: View {
     var body: some View {
         Button(action: onOpenFriends) {
             VStack(spacing: AppSpacing.sm) {
-                SectionEyebrow("Friends")
-                    // Trailing overlay so the eyebrow itself stays centered.
-                    .frame(maxWidth: .infinity)
-                    .overlay(alignment: .trailing) {
+                HomeSectionHeader(title: "Friends") {
                         Button {
                             Haptics.lightTap()
                             showingFriendsPicker = true
@@ -231,6 +248,7 @@ struct HomeFriendsCard: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Choose which friends show here")
+                        .offset(y: -6)
                     }
 
                 HomeFriendsCardContent(
@@ -239,8 +257,9 @@ struct HomeFriendsCard: View {
                     authService: authService
                 )
                 .frame(maxWidth: .infinity)
-                .padding(AppSpacing.md)
-                .chunkyCard()
+                .padding(.vertical, AppSpacing.xxs)
+                .padding(.horizontal, AppSpacing.md)
+                .homeCard()
             }
             .frame(maxWidth: .infinity)
         }
@@ -350,13 +369,13 @@ struct HomeFriendsCardContent: View {
             LazyVStack(spacing: 0) {
                 ForEach(Array(ranked.enumerated()), id: \.element.id) { index, row in
                     if index > 0 {
-                        Divider().opacity(0.2)
+                        Divider().overlay(AppColors.stroke)
                     }
                     standingsRow(row, rank: index + 1)
                 }
 
                 ForEach(hidden) { row in
-                    Divider().opacity(0.2)
+                    Divider().overlay(AppColors.stroke)
                     standingsRow(row, rank: nil)
                 }
             }
@@ -383,10 +402,10 @@ struct HomeFriendsCardContent: View {
     /// `rank` is nil for private friends — they get a lock pip instead of a
     /// number because they are not ranked against the sharing standings.
     private func standingsRow(_ row: StandingsRow, rank: Int?) -> some View {
-        HStack(spacing: AppSpacing.xs + 2) {
+        HStack(spacing: AppSpacing.sm) {
             ZStack {
                 Circle()
-                    .fill((rank.map(rankColor) ?? AppColors.subtext).opacity(0.18))
+                    .fill((rank.map(rankColor) ?? AppColors.subtext).opacity(0.2))
                     .frame(width: 24, height: 24)
                 if let rank {
                     Text("\(rank)")
@@ -401,11 +420,11 @@ struct HomeFriendsCardContent: View {
 
             ProfileAvatarView(
                 name: row.name,
-                size: 32,
+                size: 34,
                 photoURL: row.profilePhotoURL,
                 uid: row.id
             )
-            .ascendedAvatarRing(prestige: row.prestige, diameter: 32, inset: 1.5)
+            .ascendedAvatarRing(prestige: row.prestige, diameter: 34, inset: 1.5)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -440,12 +459,10 @@ struct HomeFriendsCardContent: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(AppColors.subtext)
             } else {
-                Text(AppTheme.Format.hours(row.hours))
-                    .font(AppTypography.metricValue)
-                    .foregroundStyle(rank == 1 ? AppColors.accent : AppColors.text)
+                HoursValue(hours: row.hours, size: 18, unitSize: 11, gap: 4)
             }
         }
-        .padding(.vertical, AppSpacing.xs)
+        .padding(.vertical, 10)
     }
 }
 
@@ -465,93 +482,5 @@ struct HomeAdminConsoleCard: View {
             Text("Admin console")
         }
         .buttonStyle(ChunkyButtonStyle(kind: .secondary))
-    }
-}
-
-
-// MARK: - Home friends visibility
-
-/// Which friends the HOME card shows. A device-local display preference: it
-/// never touches the friendship itself, and the Friends tab still lists
-/// everyone. Default is everyone visible, so the card behaves exactly as
-/// before until someone hides a row.
-@MainActor
-final class HomeFriendsFilter: ObservableObject {
-    static let shared = HomeFriendsFilter()
-    private static let key = "home_friends_hidden_uids_v1"
-
-    @Published private(set) var hiddenUids: Set<String>
-
-    private init() {
-        hiddenUids = Set(UserDefaults.standard.stringArray(forKey: Self.key) ?? [])
-    }
-
-    func isVisible(_ uid: String) -> Bool { !hiddenUids.contains(uid) }
-
-    func setVisible(_ visible: Bool, uid: String) {
-        if visible { hiddenUids.remove(uid) } else { hiddenUids.insert(uid) }
-        UserDefaults.standard.set(Array(hiddenUids), forKey: Self.key)
-    }
-}
-
-/// The toggle list behind the Home card's slider button: every friend, each
-/// with a switch for whether they appear on the Home card.
-struct HomeFriendsPickerSheet: View {
-    @ObservedObject var friendsService: FriendsService
-    @ObservedObject private var filter = HomeFriendsFilter.shared
-    @Environment(\.dismiss) private var dismiss
-
-    private var sortedFriends: [FriendProfile] {
-        friendsService.friends.sorted {
-            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-        }
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    ForEach(sortedFriends) { friend in
-                        Toggle(isOn: Binding(
-                            get: { filter.isVisible(friend.uid) },
-                            set: { visible in
-                                Haptics.lightTap()
-                                filter.setVisible(visible, uid: friend.uid)
-                            }
-                        )) {
-                            HStack(spacing: AppSpacing.sm) {
-                                ProfileAvatarView(
-                                    name: friend.displayName,
-                                    size: 34,
-                                    photoURL: friend.profilePhotoURL,
-                                    uid: friend.uid
-                                )
-                                .ascendedAvatarRing(prestige: friend.prestige, diameter: 34, inset: 1.5)
-                                PrestigeNameText(name: friend.displayName, prestige: friend.prestige, uid: friend.uid)
-                                    .appText(.body)
-                                    .lineLimit(1)
-                                if VerifiedTracker.isVerified(reviewed: friend.hasReviewedApp) {
-                                    VerifiedBadgeView(variant: .static, size: 12)
-                                }
-                            }
-                        }
-                        .tint(AppColors.accent)
-                        .listRowBackground(AppColors.card.opacity(0.55))
-                    }
-                } footer: {
-                    Text("Only changes who shows on your Home screen. Everyone stays in your Friends tab, and nobody is notified.")
-                        .foregroundStyle(AppColors.faint)
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .background(AppColors.bg.ignoresSafeArea())
-            .navigationTitle("Friends on Home")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
     }
 }

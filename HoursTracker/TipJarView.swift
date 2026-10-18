@@ -169,35 +169,32 @@ struct TipJarHomeCard: View {
     @State private var showingTipJar = false
 
     var body: some View {
-        VStack(spacing: 12) {
-            SectionEyebrow("Support Hour Tracker", subtitle: "Help keep it free and ad-free")
+        VStack(spacing: AppSpacing.sm) {
+            HomeSectionHeader("Support Hour Tracker", subtitle: "Help keep it free and ad-free")
 
-            Button {
-                Haptics.lightTap()
-                showingTipJar = true
-            } label: {
-                VStack(spacing: AppSpacing.sm) {
-                    OwlView(pose: .heart, size: .companion)
-                    Text("Hour Tracker is free to use. If you find it useful, you can leave a small tip to help cover the cost of keeping it running.")
-                        .appText(.subheadline)
-                        .foregroundStyle(AppColors.subtext)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("Leave a tip")
-                        .font(.system(.subheadline, design: .rounded, weight: .heavy))
-                        .textCase(.uppercase)
-                        .tracking(0.8)
-                        .foregroundStyle(AppColors.textOnAccent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(RoundedRectangle(cornerRadius: AppChunk.radius, style: .continuous).fill(AppColors.accent))
-                        .padding(.top, AppSpacing.xxs)
+            VStack(spacing: 0) {
+                OwlView(pose: .heart, size: .companion)
+                Text("Hour Tracker is free to use.")
+                    .font(.system(.callout, design: .rounded, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                    .padding(.top, AppSpacing.sm)
+                Text("If you find it useful, a small tip helps cover the cost of keeping it running.")
+                    .appText(.subheadline)
+                    .foregroundStyle(AppColors.subtext)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+                Button("Leave a tip") {
+                    Haptics.lightTap()
+                    showingTipJar = true
                 }
-                .frame(maxWidth: .infinity)
-                .padding(AppSpacing.md)
-                .chunkyCard()
+                .buttonStyle(QuietSectionButtonStyle(fullWidth: false))
+                .padding(.top, AppSpacing.md)
             }
-            .buttonStyle(PremiumPressStyle())
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, AppSpacing.lg)
+            .padding(.horizontal, AppSpacing.lg)
+            .homeCard()
         }
         .frame(maxWidth: .infinity)
         .sheet(isPresented: $showingTipJar) { TipJarView() }

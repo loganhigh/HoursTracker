@@ -8,17 +8,14 @@ struct EntryRowView: View {
 
     /// When set, shows **PayDay** / **Cutoff** under the hours when the entry falls on those cheque dates.
     var paySettings: PaySettings? = nil
-    /// Home's Duolingo-style row: a coloured icon square on the left and the
-    /// chunky bordered card. History keeps the original quiet card.
-    var chunky: Bool = false
+    /// Home's calendar-leaf row (see `leafContent`). History keeps the
+    /// original quiet card.
+    var leaf: Bool = false
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        if chunky {
-            // No leading icon: every shift would carry the same clock, and
-            // the room is better spent on the date, time and hours.
-            content
-                .padding(12)
-                .chunkyCard(fill: AppTheme.Colors.card2, radius: AppDesignSystem.Radius.md)
+        if leaf {
+            leafRow
         } else {
             content
                 .padding(12)
@@ -88,6 +85,85 @@ struct EntryRowView: View {
                     .foregroundStyle(AppTheme.Colors.subtext.opacity(0.5))
             }
         }
+    }
+
+
+    // MARK: - Calendar-leaf row (Home)
+
+    private var isToday: Bool { Calendar.current.isDateInToday(entry.date) }
+
+    /// Leaf tile · weekday + time · hours · chevron. Only today's row gets a
+    /// surface (a faint accent tint); the rest sit flat on the page.
+    private var leafRow: some View {
+        HStack(spacing: 12) {
+            CalendarLeaf(date: entry.date, highlighted: isToday)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Text(weekdayTitle)
+                        .font(.system(.subheadline, design: .rounded, weight: isToday ? .bold : .semibold))
+                        .foregroundStyle(AppTheme.Colors.text)
+                        .lineLimit(1)
+                    ForEach(periodDayMarkers, id: \.self) { marker in
+                        Text(marker.uppercased())
+                            .font(.system(size: 9, weight: .heavy, design: .rounded))
+                            .tracking(1)
+                            .foregroundStyle(marker == "PayDay" ? Color(red: 0.10, green: 0.07, blue: 0) : .white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(marker == "PayDay" ? AppColors.rankGold : AppTheme.Colors.danger))
+                            .fixedSize()
+                    }
+                }
+                Text(leafSubtitle)
+                    .font(.system(.footnote, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(AppTheme.Colors.subtext)
+                    .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
+                    .minimumScaleFactor(0.85)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if entry.isOffDay {
+                Text(statusLabel)
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                    .foregroundStyle(statusColor)
+            } else {
+                HoursValue(hours: entry.paidHours, size: 22, unitSize: 12, gap: 4)
+            }
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AppTheme.Colors.subtext.opacity(0.5))
+        }
+        .padding(.vertical, 9)
+        .padding(.horizontal, isToday ? 12 : 0)
+        .background {
+            if isToday {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(AppColors.accent.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(AppColors.accent.opacity(0.32), lineWidth: 1)
+                    )
+            }
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    /// "Friday" — plus the year when it isn't this year.
+    private var weekdayTitle: String {
+        let f = DateFormatter()
+        let sameYear = Calendar.current.component(.year, from: entry.date) == Calendar.current.component(.year, from: Date())
+        f.dateFormat = sameYear ? "EEEE" : "EEEE, yyyy"
+        return f.string(from: entry.date)
+    }
+
+    /// Time range, with the pay appended when pay is shown.
+    private var leafSubtitle: String {
+        guard showPay, !entry.isOffDay else { return timeRangeText }
+        return "\(timeRangeText) · \(currency(payValue))"
     }
 
     // MARK: - Pay period markers

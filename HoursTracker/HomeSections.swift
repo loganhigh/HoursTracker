@@ -16,80 +16,83 @@ struct TodayHeroCard: View {
     @ObservedObject var store: HoursStore
     @ObservedObject private var weather = WeatherService.shared
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var typeSize
 
-    private static let todayFormatter: DateFormatter = {
+    private static let weekdayFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = "EEEE, MMMM d"
+        f.dateFormat = "EEEE"
         return f
     }()
 
     var body: some View {
-        // A deep tier-colour surface with the bright accent used selectively
-        // (eyebrow, weather link): prestige shows, without shouting.
-        VStack(alignment: .leading, spacing: AppSpacing.xs) {
-            Text("Today")
-                .font(.system(.caption, design: .rounded, weight: .heavy))
-                .tracking(1.6)
-                .textCase(.uppercase)
-                .foregroundStyle(AppColors.accent)
+        // Plain tier-colour surface: text on the left, the sun path on the
+        // right. At accessibility sizes the dome drops below the text.
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            let layout = typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: AppSpacing.md))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: AppSpacing.xs))
+            layout {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("TODAY")
+                        .font(.system(.caption2, design: .rounded, weight: .semibold))
+                        .tracking(2)
+                        .foregroundStyle(Color.white.opacity(0.78))
+                    Text(Self.weekdayFormatter.string(from: context.date))
+                        .font(.system(.largeTitle, design: .rounded, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.top, 6)
+                    Text(context.date.formatted(.dateTime.month(.wide).day().year()))
+                        .font(.system(.callout, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.85))
+                        .padding(.top, 2)
+                    weatherPill
+                        .padding(.top, AppSpacing.md)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(Self.todayFormatter.string(from: Date()))
-                .font(.system(.title, design: .rounded, weight: .heavy))
-                .foregroundStyle(AppColors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-
-            weatherRow
+                SunDome(now: context.date, times: sunTimes(on: context.date))
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(AppSpacing.lg)
-        .chunkyCard(fill: AppColors.accent.deepened(0.72), border: AppColors.accent.opacity(0.35), radius: 22)
+        .padding(.vertical, 20)
+        .padding(.leading, 22)
+        .padding(.trailing, 18)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color.heroSurface)
+        )
         .onAppear { weather.refreshIfNeeded() }
     }
 
-    /// Text colours on the deep accent surface.
-    private var onAccent: Color { AppColors.text }
-    private var onAccentDim: Color { AppColors.text.opacity(0.75) }
-    private var onAccentLink: Color { AppColors.accent }
+    private func sunTimes(on date: Date) -> (sunrise: Date, sunset: Date)? {
+        guard let snapshot = weather.snapshot else { return nil }
+        return SunTimes.sunriseSunset(on: date, latitude: snapshot.latitude, longitude: snapshot.longitude)
+    }
 
     @ViewBuilder
-    private var weatherRow: some View {
+    private var weatherPill: some View {
         switch weather.status {
         case .loaded where weather.snapshot != nil:
             let snapshot = weather.snapshot!
-            HStack(spacing: 6) {
+            pill {
                 Image(systemName: snapshot.symbolName)
                     .symbolRenderingMode(.multicolor)
-                    .font(AppTypography.subheadline.weight(.semibold))
-                Text(snapshot.temperatureText)
-                    .font(AppTypography.headline)
-                    .monospacedDigit()
-                    .foregroundStyle(onAccent)
-                Text(snapshot.locality.isEmpty
-                     ? snapshot.conditionText
-                     : "\(snapshot.conditionText) · \(snapshot.locality)")
-                    .appText(.subheadline)
-                    .foregroundStyle(onAccentDim)
+                Text("\(snapshot.temperatureText) · \(snapshot.conditionText)")
             }
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
             .accessibilityElement(children: .combine)
 
         case .loading, .loaded:
-            HStack(spacing: 6) {
+            pill {
                 LoadingDots()
                 Text("Checking the weather…")
-                    .appText(.subheadline)
-                    .foregroundStyle(onAccentDim)
             }
 
         case .needsPermission:
             // Permission is asked for on the tap, not on launch — nobody
             // opens an hours app expecting a location prompt.
             Button { weather.requestPermission() } label: {
-                Label("Tap to show local weather", systemImage: "location.fill")
-                    .font(AppTypography.subheadline.weight(.bold))
-                    .foregroundStyle(onAccentLink)
+                pill { sunBadge; Text("Tap for local weather") }
             }
             .buttonStyle(.plain)
 
@@ -97,24 +100,37 @@ struct TodayHeroCard: View {
             Button {
                 if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
             } label: {
-                Label("Allow location in Settings for weather", systemImage: "location.slash")
-                    .appText(.caption)
-                    .foregroundStyle(onAccentDim)
+                pill { Image(systemName: "location.slash"); Text("Allow location for weather") }
             }
             .buttonStyle(.plain)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
 
         case .failed:
             Button { weather.refreshIfNeeded(force: true) } label: {
-                Label("Weather unavailable — tap to retry", systemImage: "arrow.clockwise")
-                    .appText(.caption)
-                    .foregroundStyle(onAccentDim)
+                pill { Image(systemName: "arrow.clockwise"); Text("Weather unavailable") }
             }
             .buttonStyle(.plain)
         }
     }
 
+    private var sunBadge: some View {
+        Image(systemName: "sun.max.fill")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(Color(red: 0.10, green: 0.07, blue: 0))
+            .frame(width: 20, height: 20)
+            .background(Circle().fill(Color(red: 0.95, green: 0.76, blue: 0.31)))
+    }
+
+    private func pill<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        HStack(spacing: 7) { content() }
+            .font(.system(.footnote, weight: .semibold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.vertical, 7)
+            .padding(.leading, 9)
+            .padding(.trailing, 12)
+            .background(Capsule().fill(Color.black.opacity(0.28)))
+    }
 }
 
 // MARK: - XP Strip (animated fill, cold-launch seeded from cache)
@@ -284,47 +300,59 @@ struct HomeStatTriplet: View {
     private var monthHours: Double { store.monthTotalHours(monthDate: Date()) }
 
     var body: some View {
-        HStack(spacing: AppSpacing.xs + 2) {
-            HomeStatTile(icon: "clock.fill", tint: AppColors.accent, label: "This week", value: AppTheme.Format.hours(weekHours))
-            HomeStatTile(icon: "banknote.fill", tint: AppColors.positive, label: "This cheque", value: AppTheme.Format.hours(chequeHours))
-            HomeStatTile(icon: "calendar", tint: AppColors.streak, label: "This month", value: AppTheme.Format.hours(monthHours))
+        HStack(spacing: 10) {
+            HomeStatTile(icon: "clock", band: "WEEK", label: "This week", hours: weekHours, tone: 0)
+            HomeStatTile(icon: "banknote", band: "CHEQUE", label: "This cheque", hours: chequeHours, tone: 1)
+            HomeStatTile(icon: "calendar", band: "MONTH", label: "This month", hours: monthHours, tone: 2)
         }
     }
 }
 
-/// Compact stat tile: a small coloured icon beside the number, the label
-/// under it. The hours are the focal point.
+/// A stat in the calendar-leaf shape: a tinted band with an icon and short
+/// label, then the hours and a plain label, all centred. The three tiles step
+/// through slightly different tints of the tier accent with equal weight.
 struct HomeStatTile: View {
     let icon: String
-    let tint: Color
+    let band: String
     let label: String
-    /// Pre-formatted display value — "72.63h" or a bare day count.
-    let value: String
+    let hours: Double
+    /// 0, 1, 2: band tint step.
+    let tone: Int
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 0) {
             HStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.system(.caption, weight: .bold))
-                    .foregroundStyle(tint)
-                Text(value)
-                    .font(.system(.title3, design: .rounded, weight: .heavy))
-                    .monospacedDigit()
-                    .foregroundStyle(AppColors.text)
+                    .font(.system(size: 11, weight: .bold))
+                Text(band)
+                    .font(.system(.caption2, design: .rounded, weight: .bold))
+                    .tracking(1.2)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                    .minimumScaleFactor(0.7)
             }
+            .foregroundStyle(Color.white.opacity(0.82))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background(AppColors.accent.opacity(0.26 + Double(tone) * 0.05))
 
-            Text(label)
-                .font(.system(.caption, design: .rounded, weight: .semibold))
-                .foregroundStyle(AppColors.subtext)
-                .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
-                .minimumScaleFactor(0.7)
+            VStack(spacing: 5) {
+                HoursValue(hours: hours, size: 28, unitSize: 13, gap: 5)
+                    .minimumScaleFactor(0.6)
+                Text(label)
+                    .font(.system(.caption, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
+                    .minimumScaleFactor(0.7)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
+            .padding(.horizontal, 6)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, AppSpacing.sm)
-        .padding(.horizontal, AppSpacing.xxs)
-        .chunkyCard()
+        .multilineTextAlignment(.center)
+        .homeCard(radius: 18)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }
