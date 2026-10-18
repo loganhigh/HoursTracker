@@ -2,136 +2,134 @@ import SwiftUI
 
 // MARK: - Owl motion
 //
-// Per-pose idle motion for the flat owl art: the whole image moves (rock,
-// hop, pulse, breathe…) since the poses are single drawings. Driven straight
-// from the clock, so it never stacks or drifts when a view reappears, and a
-// tap adds a quick squash-and-hop. Off under Reduce Motion.
+// The body stays still except for the poses where moving it reads as the
+// pose itself (cheer/trophy/crown/streak hop, sleep dozes). Elsewhere only
+// parts move: the eyes blink and, on wave/bell/point, the wing swings from
+// the shoulder. All of it is computed from the clock, so nothing stacks or
+// drifts when a view reappears. Off under Reduce Motion.
 
 enum OwlMotion {
-    case breathe, rock, hop, pulse, shake, ring, peek, doze
+    enum Body { case still, hop, doze }
+    enum Wing { case wave, ring, nudge }
 
-    init(pose: OwlPose) {
+    static func body(for pose: OwlPose) -> Body {
         switch pose {
-        case .wave, .point: self = .rock
-        case .cheer, .trophy, .crown, .streak: self = .hop
-        case .heart: self = .pulse
-        case .oops: self = .shake
-        case .bell: self = .ring
-        case .peek: self = .peek
-        case .sleep: self = .doze
-        default: self = .breathe
+        case .cheer, .trophy, .crown, .streak: return .hop
+        case .sleep: return .doze
+        default: return .still
+        }
+    }
+
+    static func wing(for pose: OwlPose) -> Wing? {
+        switch pose {
+        case .wave: return .wave
+        case .bell: return .ring
+        case .point: return .nudge
+        default: return nil
         }
     }
 
     struct Frame {
         var dy: CGFloat = 0
-        var dx: CGFloat = 0
         var angle: Double = 0
         var scaleX: CGFloat = 1
         var scaleY: CGFloat = 1
     }
 
-    /// The transform at time `t` (seconds), for an owl `height` points tall.
-    func frame(at t: Double, height: CGFloat) -> Frame {
-        let k = height / 150 // motion scales with the owl's size
-        var f = Frame()
-        func cycle(_ period: Double) -> Double { (t / period).truncatingRemainder(dividingBy: 1) }
-        /// 0→1→0 over the window [start, start+length) of a cycle, else 0.
-        func bump(_ u: Double, _ start: Double, _ length: Double) -> Double {
-            guard u >= start, u < start + length else { return 0 }
-            return sin(.pi * (u - start) / length)
-        }
-        let breath = (sin(2 * .pi * t / 2.4) + 1) / 2
+    /// 0→1→0 over [start, start + length), else 0.
+    static func bump(_ u: Double, _ start: Double, _ length: Double) -> Double {
+        guard u >= start, u < start + length else { return 0 }
+        return sin(.pi * (u - start) / length)
+    }
 
-        switch self {
-        case .breathe:
-            f.scaleY = 1 + 0.022 * breath
-            f.scaleX = 1 - 0.008 * breath
-            f.angle = 4 * sin(2 * .pi * cycle(5.2) / 0.16) * bump(cycle(5.2), 0, 0.16)
+    static func cycle(_ t: Double, _ period: Double) -> Double {
+        let u = (t / period).truncatingRemainder(dividingBy: 1)
+        return u < 0 ? u + 1 : u
+    }
+
+    /// Whole-body transform (hop / doze), scaled to the owl's height.
+    static func bodyFrame(_ motion: Body, at t: Double, height: CGFloat) -> Frame {
+        var f = Frame()
+        switch motion {
+        case .still:
+            break
+        case .hop:
+            let u = cycle(t, 2.6)
+            f.dy = -10 * (height / 150) * bump(u, 0.08, 0.22)
+            let land = bump(u, 0.30, 0.10), crouch = bump(u, 0.0, 0.08)
+            f.scaleY = 1 - 0.08 * land - 0.05 * crouch
+            f.scaleX = 1 + 0.06 * land + 0.03 * crouch
         case .doze:
             let slow = (sin(2 * .pi * t / 3.6) + 1) / 2
             f.scaleY = 1 + 0.04 * slow
             f.angle = -2 + 2 * slow
-        case .rock:
-            let u = cycle(3.2)
-            f.angle = 7 * sin(2 * .pi * 3 * u / 0.5) * bump(u, 0, 0.5)
-            f.scaleY = 1 + 0.015 * breath
-        case .hop:
-            let u = cycle(2.6)
-            f.dy = -10 * k * bump(u, 0.08, 0.22)
-            let land = bump(u, 0.30, 0.10), crouch = bump(u, 0.0, 0.08)
-            f.scaleY = 1 - 0.08 * land - 0.05 * crouch
-            f.scaleX = 1 + 0.06 * land + 0.03 * crouch
-        case .pulse:
-            let u = cycle(1.6)
-            let beat = bump(u, 0, 0.12) + 0.7 * bump(u, 0.18, 0.12)
-            f.scaleX = 1 + 0.06 * beat
-            f.scaleY = 1 + 0.06 * beat
-        case .shake:
-            let u = cycle(3.8)
-            f.dx = 3 * k * sin(2 * .pi * 4 * u / 0.22) * bump(u, 0, 0.22)
-            f.scaleY = 1 + 0.015 * breath
-        case .ring:
-            let u = cycle(3.0)
-            f.angle = 9 * sin(2 * .pi * 5 * u / 0.3) * bump(u, 0, 0.3)
-        case .peek:
-            let u = cycle(4.0)
-            f.dy = -4 * k * bump(u, 0.05, 0.45)
-            f.angle = 5 * bump(u, 0.2, 0.25)
         }
         return f
     }
-}
 
-/// Applies `OwlMotion` plus the appear pop and tap bounce.
-struct OwlMotionModifier: ViewModifier {
-    let motion: OwlMotion
-    let height: CGFloat
-    let enabled: Bool
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var appeared = false
-    @State private var tapTime: Date?
-    /// Desynchronises owls that appear together.
-    @State private var seed = Double.random(in: 0..<10)
-
-    func body(content: Content) -> some View {
-        if enabled && !reduceMotion {
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
-                let t = timeline.date.timeIntervalSinceReferenceDate + seed
-                var f = motion.frame(at: t, height: height)
-                let _ = applyTap(&f, now: timeline.date)
-                content
-                    .scaleEffect(x: f.scaleX, y: f.scaleY, anchor: .bottom)
-                    .rotationEffect(.degrees(f.angle), anchor: .bottom)
-                    .offset(x: f.dx, y: f.dy)
-            }
-            .scaleEffect(appeared ? 1 : 0.8, anchor: .bottom)
-            .opacity(appeared ? 1 : 0)
-            .onAppear {
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.6)) { appeared = true }
-            }
-            .contentShape(Rectangle())
-            .simultaneousGesture(TapGesture().onEnded {
-                Haptics.lightTap()
-                tapTime = Date()
-            })
-        } else {
-            content
+    /// Wing rotation in degrees around the shoulder.
+    static func wingAngle(_ motion: Wing, at t: Double) -> Double {
+        switch motion {
+        case .wave:
+            // Two or three friendly waves, then a rest.
+            let u = cycle(t, 3.4)
+            return -13 * sin(2 * .pi * 2.5 * u / 0.55) * bump(u, 0, 0.55)
+        case .ring:
+            // A quick shake of the bell.
+            let u = cycle(t, 2.8)
+            return 11 * sin(2 * .pi * 5 * u / 0.32) * bump(u, 0, 0.32)
+        case .nudge:
+            // Two little pokes toward whatever it's pointing at.
+            let u = cycle(t, 2.6)
+            return -7 * bump(u, 0, 0.12) - 5 * bump(u, 0.16, 0.12)
         }
     }
 
-    /// A 0.45 s squash, hop and settle after a tap, layered on the idle frame.
-    private func applyTap(_ f: inout OwlMotion.Frame, now: Date) {
-        guard let tapTime else { return }
-        let e = now.timeIntervalSince(tapTime)
-        guard e >= 0, e < 0.45 else { return }
-        let u = e / 0.45
-        let squash = u < 0.2 ? sin(.pi * u / 0.2) : 0
-        let lift = u >= 0.15 && u < 0.75 ? sin(.pi * (u - 0.15) / 0.6) : 0
-        let land = u >= 0.75 ? sin(.pi * (u - 0.75) / 0.25) : 0
-        f.scaleY *= 1 - 0.12 * squash - 0.06 * land
-        f.scaleX *= 1 + 0.08 * squash + 0.04 * land
-        f.dy -= 14 * (height / 150) * lift
+    /// Eyelid closure 0 (open) … 1 (shut). A blink every ~4 s, a double
+    /// blink every third time.
+    static func blink(at t: Double) -> Double {
+        let period = 4.2
+        let u = cycle(t, period)
+        let n = Int(floor(t / period))
+        var closed = bump(u, 0, 0.036)
+        if n % 3 == 0 { closed = max(closed, bump(u, 0.06, 0.036)) }
+        return closed
+    }
+}
+
+// MARK: - Eyelids
+
+/// Eyelids drawn over the iris rects: a face-coloured lid that drops from the
+/// top, with a lash line once it's nearly shut.
+struct OwlEyelids: View {
+    let rig: OwlRig
+    let closed: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(Array(rig.eyes.enumerated()), id: \.offset) { _, eye in
+                // A little larger than the iris so its dark rim is covered.
+                let w = eye.width * geo.size.width * 1.16
+                let h = eye.height * geo.size.height * 1.16
+                let cx = eye.midX * geo.size.width
+                let cy = eye.midY * geo.size.height
+                ZStack(alignment: .top) {
+                    Ellipse()
+                        .fill(Color(hex: rig.lidHex))
+                        .frame(width: w, height: h)
+                        .scaleEffect(x: 1, y: max(0.001, closed), anchor: .top)
+                    if closed > 0.7 {
+                        Capsule()
+                            .fill(Color(hex: 0x3A2316))
+                            .frame(width: w * 0.86, height: max(1.5, h * 0.09))
+                            .offset(y: h * 0.5)
+                            .opacity((closed - 0.7) / 0.3)
+                    }
+                }
+                .frame(width: w, height: h, alignment: .top)
+                .position(x: cx, y: cy)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }

@@ -193,15 +193,45 @@ final class MascotScreenDumpTests: XCTestCase {
         }
     }
 
+    /// Every rigged pose with its eyelids shut and its wing at full swing,
+    /// to check the lids sit on the eyes and the wing joins at the shoulder.
+    func testDumpOwlRig() throws {
+        guard let dir = ProcessInfo.processInfo.environment["MASCOT_DUMP_DIR"] else {
+            throw XCTSkip("Set MASCOT_DUMP_DIR to dump the owl rig check")
+        }
+        let poses: [OwlPose] = [.idle, .wave, .peek, .coffee, .calendar, .clipboard, .crown, .oops,
+                                .pin, .shield, .wrench, .bell, .point]
+        let grid = LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 16) {
+            ForEach(poses, id: \.self) { pose in
+                let rig = OwlRig.forPose(pose)
+                ZStack {
+                    Image(rig.wingPivot == nil ? pose.assetName : "\(pose.assetName)-base")
+                        .resizable().scaledToFit()
+                        .overlay { OwlEyelids(rig: rig, closed: 1) }
+                    if let pivot = rig.wingPivot {
+                        Image("\(pose.assetName)-wing").resizable().scaledToFit()
+                            .rotationEffect(.degrees(pose == .bell ? 11 : -13), anchor: pivot)
+                    }
+                }
+                .frame(height: 110)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AppColors.bg)
+        let data = Self.windowSnapshot(grid, size: CGSize(width: 390, height: 640))
+        try data?.write(to: URL(fileURLWithPath: "\(dir)/owl-rig.png"))
+    }
+
     /// Holds the animated poses on screen so a simulator recording can
     /// capture the motion (set OWL_MOTION_SECONDS to run).
     func testOwlMotionPreview() throws {
         guard let seconds = ProcessInfo.processInfo.environment["OWL_MOTION_SECONDS"].flatMap(Double.init) else {
             throw XCTSkip("Set OWL_MOTION_SECONDS to hold the owl motion preview on screen")
         }
-        let poses: [(OwlPose, String)] = [(.wave, "Wave · rock"), (.cheer, "Cheer · hop"), (.heart, "Heart · pulse"),
-                                          (.idle, "Idle · breathe"), (.peek, "Peek"), (.bell, "Bell · ring"),
-                                          (.oops, "Oops · shake"), (.sleep, "Sleep · doze"), (.trophy, "Trophy · hop")]
+        let poses: [(OwlPose, String)] = [(.wave, "Wave · wing"), (.cheer, "Cheer · hop"), (.bell, "Bell · wing"),
+                                          (.idle, "Idle · blink"), (.peek, "Peek · blink"), (.point, "Point · wing"),
+                                          (.coffee, "Coffee · blink"), (.sleep, "Sleep · doze"), (.crown, "Crown · hop")]
         let grid = VStack(spacing: 18) {
             Text("Owl motion preview").font(.headline).foregroundStyle(.white)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 26) {
