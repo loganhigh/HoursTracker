@@ -205,12 +205,16 @@ final class MascotScreenDumpTests: XCTestCase {
             ForEach(poses, id: \.self) { pose in
                 let rig = OwlRig.forPose(pose)
                 ZStack {
-                    Image(rig.wingPivot == nil ? pose.assetName : "\(pose.assetName)-base")
+                    Image(rig.isLayered ? "\(pose.assetName)-base" : pose.assetName)
                         .resizable().scaledToFit()
                         .overlay { OwlEyelids(rig: rig, closed: 1) }
                     if let pivot = rig.wingPivot {
                         Image("\(pose.assetName)-wing").resizable().scaledToFit()
                             .rotationEffect(.degrees(pose == .bell ? 11 : -13), anchor: pivot)
+                    }
+                    if let pivot = rig.propPivot {
+                        Image("\(pose.assetName)-part").resizable().scaledToFit()
+                            .rotationEffect(.degrees(7), anchor: pivot)
                     }
                 }
                 .frame(height: 110)
@@ -230,8 +234,8 @@ final class MascotScreenDumpTests: XCTestCase {
             throw XCTSkip("Set OWL_MOTION_SECONDS to hold the owl motion preview on screen")
         }
         let poses: [(OwlPose, String)] = [(.wave, "Wave · wing"), (.cheer, "Cheer · hop"), (.bell, "Bell · wing"),
-                                          (.idle, "Idle · blink"), (.peek, "Peek · blink"), (.point, "Point · wing"),
-                                          (.coffee, "Coffee · blink"), (.sleep, "Sleep · doze"), (.crown, "Crown · hop")]
+                                          (.idle, "Idle · blink"), (.peek, "Peek · pop up"), (.point, "Point · wing"),
+                                          (.pin, "Pin · bounce"), (.sleep, "Sleep · doze"), (.crown, "Crown · wobble")]
         let grid = VStack(spacing: 18) {
             Text("Owl motion preview").font(.headline).foregroundStyle(.white)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 26) {

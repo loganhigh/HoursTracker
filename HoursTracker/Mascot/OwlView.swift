@@ -36,6 +36,7 @@ struct OwlView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
     @State private var tapTime: Date?
+    @State private var appearTime = Date()
     /// Desynchronises owls that appear together.
     @State private var seed = Double.random(in: 0..<10)
 
@@ -46,6 +47,7 @@ struct OwlView: View {
             let t = timeline.date.timeIntervalSinceReferenceDate + seed
             let tap = tapTime.map { timeline.date.timeIntervalSince($0) } ?? .infinity
             let f = bodyFrame(t: t, sinceTap: tap)
+            let peek = peekDrop(now: timeline.date)
             ZStack {
                 layers(for: pose, t: t, sinceTap: tap)
                     .id(pose)
@@ -53,12 +55,20 @@ struct OwlView: View {
             }
             .scaleEffect(x: f.scaleX, y: f.scaleY, anchor: .bottom)
             .rotationEffect(.degrees(f.angle), anchor: .bottom)
-            .offset(y: f.dy)
+            .offset(y: f.dy + peek)
         }
         .frame(height: size.height)
+        // Peek rises from behind its edge, so hide whatever is below it.
+        .mask {
+            Rectangle()
+                .padding(.horizontal, -size.height)
+                .padding(.top, -size.height)
+                .padding(.bottom, OwlMotion.body(for: pose) == .peekaboo ? 0 : -size.height)
+        }
         .scaleEffect(appeared || !animates ? 1 : 0.85, anchor: .bottom)
         .opacity(appeared || !animates ? 1 : 0)
         .onAppear {
+            appearTime = Date()
             guard animates, !appeared else { return }
             withAnimation(.spring(response: 0.45, dampingFraction: 0.65)) { appeared = true }
         }
@@ -89,6 +99,11 @@ struct OwlView: View {
         return f
     }
 
+    private func peekDrop(now: Date) -> CGFloat {
+        guard animates, OwlMotion.body(for: pose) == .peekaboo else { return 0 }
+        return CGFloat(OwlMotion.peekOffset(sinceAppear: now.timeIntervalSince(appearTime))) * size.height
+    }
+
     private func blink(t: Double, sinceTap: Double) -> Double {
         guard animates else { return 0 }
         // A tap gets an immediate blink.
@@ -108,7 +123,7 @@ struct OwlView: View {
     private func layers(for pose: OwlPose, t: Double, sinceTap: Double) -> some View {
         let rig = self.rig
         return ZStack {
-            Image(rig.wingPivot == nil ? pose.assetName : "\(pose.assetName)-base")
+            Image(rig.isLayered ? "\(pose.assetName)-base" : pose.assetName)
                 .resizable()
                 .scaledToFit()
                 .overlay {
@@ -125,6 +140,14 @@ struct OwlView: View {
                     .resizable()
                     .scaledToFit()
                     .rotationEffect(.degrees(wingAngle(t: t, sinceTap: sinceTap)), anchor: pivot)
+            }
+            if let pivot = rig.propPivot, let prop = OwlMotion.prop(for: pose) {
+                let pf = animates ? OwlMotion.propFrame(prop, at: sinceTap < 0.6 ? sinceTap : t) : .init()
+                Image("\(pose.assetName)-part")
+                    .resizable()
+                    .scaledToFit()
+                    .scaleEffect(x: pf.scaleX, y: pf.scaleY, anchor: pivot)
+                    .rotationEffect(.degrees(pf.angle), anchor: pivot)
             }
         }
     }

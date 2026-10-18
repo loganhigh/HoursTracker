@@ -3,19 +3,22 @@ import SwiftUI
 // MARK: - Owl motion
 //
 // The body stays still except for the poses where moving it reads as the
-// pose itself (cheer/trophy/crown/streak hop, sleep dozes). Elsewhere only
-// parts move: the eyes blink and, on wave/bell/point, the wing swings from
-// the shoulder. All of it is computed from the clock, so nothing stacks or
+// pose itself (cheer/trophy/streak hop, sleep dozes, peek pops up from
+// behind the edge). Elsewhere only parts move: the eyes blink, the wing
+// swings from the shoulder on wave/bell/point, the crown wobbles and the
+// map pin bounces. All of it is computed from the clock, so nothing stacks or
 // drifts when a view reappears. Off under Reduce Motion.
 
 enum OwlMotion {
-    enum Body { case still, hop, doze }
+    enum Body { case still, hop, doze, peekaboo }
     enum Wing { case wave, ring, nudge }
+    enum Prop { case wobble, bounce }
 
     static func body(for pose: OwlPose) -> Body {
         switch pose {
-        case .cheer, .trophy, .crown, .streak: return .hop
+        case .cheer, .trophy, .streak: return .hop
         case .sleep: return .doze
+        case .peek: return .peekaboo
         default: return .still
         }
     }
@@ -25,6 +28,14 @@ enum OwlMotion {
         case .wave: return .wave
         case .bell: return .ring
         case .point: return .nudge
+        default: return nil
+        }
+    }
+
+    static func prop(for pose: OwlPose) -> Prop? {
+        switch pose {
+        case .crown: return .wobble
+        case .pin: return .bounce
         default: return nil
         }
     }
@@ -51,7 +62,7 @@ enum OwlMotion {
     static func bodyFrame(_ motion: Body, at t: Double, height: CGFloat) -> Frame {
         var f = Frame()
         switch motion {
-        case .still:
+        case .still, .peekaboo:
             break
         case .hop:
             let u = cycle(t, 2.6)
@@ -82,6 +93,43 @@ enum OwlMotion {
             // Two little pokes toward whatever it's pointing at.
             let u = cycle(t, 2.6)
             return -7 * bump(u, 0, 0.12) - 5 * bump(u, 0.16, 0.12)
+        }
+    }
+
+    /// Prop transform (crown wobble, map-pin bounce) around its pivot.
+    static func propFrame(_ motion: Prop, at t: Double) -> Frame {
+        var f = Frame()
+        switch motion {
+        case .wobble:
+            let u = cycle(t, 3.2)
+            f.angle = 7 * sin(2 * .pi * 2 * u / 0.4) * bump(u, 0, 0.4)
+        case .bounce:
+            let u = cycle(t, 2.6)
+            let stretch = bump(u, 0, 0.14), land = bump(u, 0.14, 0.1)
+            f.scaleY = 1 + 0.1 * stretch - 0.08 * land
+            f.scaleX = 1 - 0.05 * stretch + 0.06 * land
+            f.angle = 5 * sin(2 * .pi * 2 * u / 0.25) * bump(u, 0.24, 0.25)
+        }
+        return f
+    }
+
+    /// How far below its edge the peek owl is, as a fraction of its height,
+    /// `t` seconds after it appeared: hidden, pops up with a little
+    /// overshoot, looks around, ducks back down.
+    static func peekOffset(sinceAppear t: Double) -> Double {
+        let u = cycle(t, 7)
+        func backOut(_ x: Double) -> Double {
+            let c1 = 1.70158, c3 = c1 + 1
+            return 1 + c3 * pow(x - 1, 3) + c1 * pow(x - 1, 2)
+        }
+        switch u {
+        case ..<0.12: return 1
+        case ..<0.2: return 1 - backOut((u - 0.12) / 0.08)
+        case ..<0.84: return 0
+        case ..<0.9:
+            let x = (u - 0.84) / 0.06
+            return x * x
+        default: return 1
         }
     }
 
