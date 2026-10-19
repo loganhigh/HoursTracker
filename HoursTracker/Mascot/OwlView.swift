@@ -141,6 +141,9 @@ struct OwlView: View {
                     .scaledToFit()
                     .rotationEffect(.degrees(wingAngle(t: t, sinceTap: sinceTap)), anchor: pivot)
             }
+            if pose == .heart, animates {
+                FloatingHearts(t: t, height: size.height)
+            }
             if let pivot = rig.propPivot, let prop = OwlMotion.prop(for: pose) {
                 let pf = animates ? OwlMotion.propFrame(prop, at: sinceTap < 0.6 ? sinceTap : t) : .init()
                 Image("\(pose.assetName)-part")

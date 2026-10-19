@@ -93,7 +93,9 @@ private struct OwlPeekModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content.overlay(alignment: Alignment(horizontal: alignment, vertical: .top)) {
-            OwlView(pose: pose, size: size, scarfTint: scarfTint, bobs: false)
+            // Animated like everywhere else (blink, wing, peekaboo…); taps
+            // still go to the card underneath.
+            OwlView(pose: pose, size: size, scarfTint: scarfTint)
                 .padding(.horizontal, AppSpacing.lg)
                 .alignmentGuide(.top) { d in d[.bottom] - OwlPerchMetrics.feetOverlap / 2 }
                 .allowsHitTesting(false)

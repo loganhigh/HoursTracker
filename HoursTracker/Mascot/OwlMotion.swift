@@ -181,3 +181,31 @@ struct OwlEyelids: View {
         .allowsHitTesting(false)
     }
 }
+
+// MARK: - Floating hearts (heart pose)
+
+/// Two small hearts drifting up from the heart the owl is holding, so the
+/// pose has life without moving the body.
+struct FloatingHearts: View {
+    let t: Double
+    let height: CGFloat
+
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(0..<2, id: \.self) { i in
+                let u = OwlMotion.cycle(t + Double(i) * 1.6, 3.2)
+                if u < 0.6 {
+                    let p = u / 0.6
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: max(7, height * 0.09), weight: .bold))
+                        .foregroundStyle(Color(hex: 0xEF5A5A))
+                        .opacity(sin(.pi * p))
+                        .scaleEffect(0.6 + 0.4 * p)
+                        .position(x: geo.size.width * (i == 0 ? 0.62 : 0.4) + CGFloat(sin(p * 6)) * 3,
+                                  y: geo.size.height * (0.5 - 0.42 * p))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
