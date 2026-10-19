@@ -92,14 +92,22 @@ private struct OwlPeekModifier: ViewModifier {
     let scarfTint: Color?
 
     func body(content: Content) -> some View {
-        content.overlay(alignment: Alignment(horizontal: alignment, vertical: .top)) {
-            // Animated like everywhere else (blink, wing, peekaboo…); taps
-            // still go to the card underneath.
-            OwlView(pose: pose, size: size, scarfTint: scarfTint)
-                .padding(.horizontal, AppSpacing.lg)
-                .alignmentGuide(.top) { d in d[.bottom] - OwlPerchMetrics.feetOverlap / 2 }
-                .allowsHitTesting(false)
+        // The peek pose pops up from behind the card, so it's drawn under the
+        // card; every other pose stands on the card's edge, in front of it.
+        if OwlMotion.body(for: pose) == .peekaboo {
+            content.background(alignment: Alignment(horizontal: alignment, vertical: .top)) { owl }
+        } else {
+            content.overlay(alignment: Alignment(horizontal: alignment, vertical: .top)) { owl }
         }
+    }
+
+    private var owl: some View {
+        // Animated like everywhere else (blink, wing, peekaboo…); taps
+        // still go to the card underneath.
+        OwlView(pose: pose, size: size, scarfTint: scarfTint)
+            .padding(.horizontal, AppSpacing.lg)
+            .alignmentGuide(.top) { d in d[.bottom] - OwlPerchMetrics.feetOverlap / 2 }
+            .allowsHitTesting(false)
     }
 }
 
