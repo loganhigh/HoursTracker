@@ -6,7 +6,8 @@ import SwiftUI
 // wave a wing while the body stays put. Rects and pivots are fractions of
 // the pose image (0…1). Eyes were found from the art's pupil shapes; wings
 // are separate base/wing image layers cut along the shoulder
-// (otto-<pose>-base / otto-<pose>-wing); the crown and map pin are lifted
+// (otto-<pose>-base / otto-<pose>-wing); the crown, map pin, pencil,
+// magnifier and high-five sparkles are lifted
 // the same way (otto-<pose>-part).
 
 struct OwlRig {
@@ -28,7 +29,7 @@ struct OwlRig {
     static func forPose(_ pose: OwlPose) -> OwlRig {
         switch pose {
         case .calendar: return OwlRig(eyes: [CGRect(x: 0.2665, y: 0.2231, width: 0.1701, height: 0.144), CGRect(x: 0.5884, y: 0.2184, width: 0.173, height: 0.1481)], lidHex: 0xF5D6BA, wingPivot: nil)
-        case .clipboard: return OwlRig(eyes: [CGRect(x: 0.2371, y: 0.2521, width: 0.1747, height: 0.149), CGRect(x: 0.5666, y: 0.2327, width: 0.1649, height: 0.1459)], lidHex: 0xF5D9BD, wingPivot: nil)
+        case .clipboard: return OwlRig(eyes: [CGRect(x: 0.2371, y: 0.2521, width: 0.1747, height: 0.149), CGRect(x: 0.5666, y: 0.2327, width: 0.1649, height: 0.1459)], lidHex: 0xF5D9BD, wingPivot: nil, propPivot: UnitPoint(x: 0.4145, y: 0.5495))
         case .coffee: return OwlRig(eyes: [CGRect(x: 0.2408, y: 0.2234, width: 0.1798, height: 0.1542), CGRect(x: 0.5788, y: 0.2221, width: 0.1749, height: 0.1534)], lidHex: 0xF6DBC0, wingPivot: nil)
         case .crown: return OwlRig(eyes: [CGRect(x: 0.2835, y: 0.2829, width: 0.1498, height: 0.1385), CGRect(x: 0.5711, y: 0.2881, width: 0.1492, height: 0.1412)], lidHex: 0xF9DBBE, wingPivot: nil, propPivot: UnitPoint(x: 0.6886, y: 0.2051))
         case .idle: return OwlRig(eyes: [CGRect(x: 0.2676, y: 0.2245, width: 0.1646, height: 0.149), CGRect(x: 0.5725, y: 0.2248, width: 0.1679, height: 0.1513)], lidHex: 0xF4D2B2, wingPivot: nil)
@@ -40,6 +41,8 @@ struct OwlRig {
         case .wrench: return OwlRig(eyes: [CGRect(x: 0.3672, y: 0.2264, width: 0.1399, height: 0.143), CGRect(x: 0.6315, y: 0.2313, width: 0.1359, height: 0.149)], lidHex: 0xF3D4B6, wingPivot: nil)
         case .bell: return OwlRig(eyes: [], lidHex: 0xF4D4B7, wingPivot: UnitPoint(x: 0.6771, y: 0.603))
         case .point: return OwlRig(eyes: [], lidHex: 0xF9DCC1, wingPivot: UnitPoint(x: 0.6883, y: 0.565))
+        case .search: return OwlRig(eyes: [], lidHex: 0xFADEC6, wingPivot: nil, propPivot: UnitPoint(x: 0.7718, y: 0.6215))
+        case .buddies: return OwlRig(eyes: [], lidHex: 0xF9DBC1, wingPivot: nil, propPivot: UnitPoint(x: 0.5354, y: 0.1972))
         default: return .none
         }
     }

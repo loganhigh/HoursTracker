@@ -12,7 +12,7 @@ import SwiftUI
 enum OwlMotion {
     enum Body { case still, hop, doze, peekaboo }
     enum Wing { case wave, ring, nudge }
-    enum Prop { case wobble, bounce }
+    enum Prop { case wobble, bounce, scribble, sweep, sparkle }
 
     static func body(for pose: OwlPose) -> Body {
         switch pose {
@@ -36,6 +36,9 @@ enum OwlMotion {
         switch pose {
         case .crown: return .wobble
         case .pin: return .bounce
+        case .clipboard: return .scribble
+        case .search: return .sweep
+        case .buddies: return .sparkle
         default: return nil
         }
     }
@@ -109,6 +112,19 @@ enum OwlMotion {
             f.scaleY = 1 + 0.1 * stretch - 0.08 * land
             f.scaleX = 1 - 0.05 * stretch + 0.06 * land
             f.angle = 5 * sin(2 * .pi * 2 * u / 0.25) * bump(u, 0.24, 0.25)
+        case .scribble:
+            // The pencil writes a few quick strokes, then pauses.
+            let u = cycle(t, 2.4)
+            f.angle = 6 * sin(2 * .pi * 6 * u / 0.5) * bump(u, 0, 0.5)
+        case .sweep:
+            // The magnifying glass slowly scans side to side.
+            f.angle = 5 * sin(2 * .pi * t / 3.0)
+        case .sparkle:
+            // The high-five "!" marks pop with each clap.
+            let u = cycle(t, 1.8)
+            let pop = bump(u, 0, 0.16) + 0.6 * bump(u, 0.2, 0.14)
+            f.scaleX = 1 + 0.35 * pop
+            f.scaleY = 1 + 0.35 * pop
         }
         return f
     }
@@ -136,7 +152,7 @@ enum OwlMotion {
     /// Eyelid closure 0 (open) … 1 (shut). A blink every ~4 s, a double
     /// blink every third time.
     static func blink(at t: Double) -> Double {
-        let period = 4.2
+        let period = 3.4
         let u = cycle(t, period)
         let n = Int(floor(t / period))
         var closed = bump(u, 0, 0.036)
@@ -193,11 +209,11 @@ struct FloatingHearts: View {
     var body: some View {
         GeometryReader { geo in
             ForEach(0..<2, id: \.self) { i in
-                let u = OwlMotion.cycle(t + Double(i) * 1.6, 3.2)
+                let u = OwlMotion.cycle(t + Double(i) * 1.3, 2.6)
                 if u < 0.6 {
                     let p = u / 0.6
                     Image(systemName: "heart.fill")
-                        .font(.system(size: max(7, height * 0.09), weight: .bold))
+                        .font(.system(size: max(10, height * 0.16), weight: .bold))
                         .foregroundStyle(Color(hex: 0xEF5A5A))
                         .opacity(sin(.pi * p))
                         .scaleEffect(0.6 + 0.4 * p)

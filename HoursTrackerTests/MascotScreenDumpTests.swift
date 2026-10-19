@@ -245,8 +245,8 @@ final class MascotScreenDumpTests: XCTestCase {
             throw XCTSkip("Set OWL_MOTION_SECONDS to hold the owl motion preview on screen")
         }
         let poses: [(OwlPose, String)] = [(.wave, "Wave · wing"), (.cheer, "Cheer · hop"), (.bell, "Bell · wing"),
-                                          (.idle, "Idle · blink"), (.peek, "Peek · pop up"), (.heart, "Heart · hearts"),
-                                          (.pin, "Pin · bounce"), (.sleep, "Sleep · doze"), (.crown, "Crown · wobble")]
+                                          (.clipboard, "Clipboard · pencil"), (.peek, "Peek · pop up"), (.heart, "Heart · hearts"),
+                                          (.search, "Search · sweep"), (.sleep, "Sleep · doze"), (.buddies, "Buddies · clap")]
         let grid = VStack(spacing: 18) {
             Text("Owl motion preview").font(.headline).foregroundStyle(.white)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 26) {
@@ -260,7 +260,7 @@ final class MascotScreenDumpTests: XCTestCase {
             // Owls placed on cards, the way History, Friends and profiles use them.
             HStack(spacing: 14) {
                 RoundedRectangle(cornerRadius: 16).fill(AppColors.card).frame(height: 50)
-                    .owlStanding(.wave)
+                    .owlStanding(.clipboard)
                 RoundedRectangle(cornerRadius: 16).fill(AppColors.card).frame(height: 50)
                     .owlPeek(.peek, size: .header, alignment: .center)
                     .padding(.top, OwlPerchMetrics.headerClearance)
