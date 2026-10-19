@@ -112,4 +112,57 @@ final class LeaderboardMovementTests: XCTestCase {
         XCTAssertEqual(parsed[1].hours, 200.5)
         XCTAssertFalse(parsed[1].hoursHidden)
     }
+
+    // MARK: Climb replay
+
+    /// A short climb stops at every place on the way up.
+    func testClimbStepsShortClimbIsOnePlaceAtATime() {
+        XCTAssertEqual(LeaderboardClimbReplay.steps(from: 9, to: 5), [8, 7, 6, 5])
+    }
+
+    /// A long climb is capped in steps but still lands exactly on the new rank,
+    /// always moving up.
+    func testClimbStepsLongClimbIsCappedAndEndsOnTarget() {
+        let steps = LeaderboardClimbReplay.steps(from: 60, to: 4)
+        XCTAssertEqual(steps.count, LeaderboardClimbReplay.maxSteps)
+        XCTAssertEqual(steps.last, 4)
+        XCTAssertEqual(steps, steps.sorted(by: >))
+        XCTAssertEqual(Set(steps).count, steps.count)
+        XCTAssertLessThan(steps.first ?? 99, 60)
+    }
+
+    /// Drops and no-change never replay.
+    func testClimbStepsOnlyForClimbs() {
+        XCTAssertEqual(LeaderboardClimbReplay.steps(from: 5, to: 5), [])
+        XCTAssertEqual(LeaderboardClimbReplay.steps(from: 3, to: 8), [])
+    }
+
+    /// Placing the viewer at a rank renumbers everyone by position.
+    func testClimbOrderPlacesRowAndRenumbers() {
+        let board = ["a", "b", "me", "c", "d"].enumerated().map { tracker($0.element, rank: $0.offset + 1) }
+        let back = LeaderboardClimbReplay.order(board, placing: "me", atRank: 5)
+        XCTAssertEqual(back.map(\.uid), ["a", "b", "c", "d", "me"])
+        XCTAssertEqual(back.map(\.rank), [1, 2, 3, 4, 5])
+        let top = LeaderboardClimbReplay.order(board, placing: "me", atRank: 1)
+        XCTAssertEqual(top.map(\.uid), ["me", "a", "b", "c", "d"])
+        XCTAssertEqual(LeaderboardClimbReplay.order(board, placing: "ghost", atRank: 1), board)
+    }
+
+    func testPassedTextSingularAndPlural() {
+        XCTAssertEqual(LeaderboardClimbReplay.passedText(1), "You passed 1 person")
+        XCTAssertEqual(LeaderboardClimbReplay.passedText(7), "You passed 7 people")
+    }
+
+    /// Seeding records a first rank but never overwrites what the user saw.
+    func testSeedNeverOverwritesLastSeenRank() {
+        let defaults = UserDefaults(suiteName: "climb-replay-tests")!
+        defaults.removePersistentDomain(forName: "climb-replay-tests")
+        XCTAssertNil(LeaderboardClimbReplay.lastSeenRank(uid: "u", defaults: defaults))
+        LeaderboardClimbReplay.seedIfNeeded(rank: 12, uid: "u", defaults: defaults)
+        XCTAssertEqual(LeaderboardClimbReplay.lastSeenRank(uid: "u", defaults: defaults), 12)
+        LeaderboardClimbReplay.seedIfNeeded(rank: 4, uid: "u", defaults: defaults)
+        XCTAssertEqual(LeaderboardClimbReplay.lastSeenRank(uid: "u", defaults: defaults), 12)
+        LeaderboardClimbReplay.rememberRank(4, uid: "u", defaults: defaults)
+        XCTAssertEqual(LeaderboardClimbReplay.lastSeenRank(uid: "u", defaults: defaults), 4)
+    }
 }

@@ -279,6 +279,23 @@ final class MascotScreenDumpTests: XCTestCase {
         window.isHidden = true
     }
 
+    /// Holds a stand-in global board on screen and plays the climb replay
+    /// (rank 18 → 6) with the real hero card, rows and step logic, so a
+    /// simulator recording can capture it (set CLIMB_REPLAY_SECONDS to run).
+    func testClimbReplayPreview() throws {
+        guard let seconds = ProcessInfo.processInfo.environment["CLIMB_REPLAY_SECONDS"].flatMap(Double.init) else {
+            throw XCTSkip("Set CLIMB_REPLAY_SECONDS to hold the climb replay preview on screen")
+        }
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+        let window = UIWindow(windowScene: scene)
+        window.overrideUserInterfaceStyle = .dark
+        window.rootViewController = UIHostingController(rootView: ClimbReplayPreview())
+        window.windowLevel = .alert + 1
+        window.makeKeyAndVisible()
+        RunLoop.current.run(until: Date().addingTimeInterval(seconds))
+        window.isHidden = true
+    }
+
     /// The tip jar and the Pro paywall (no StoreKit products in tests, so
     /// both show their no-products state).
     func testDumpSupportScreens() throws {
@@ -539,5 +556,66 @@ final class MascotScreenDumpTests: XCTestCase {
         return UIGraphicsImageRenderer(size: size, format: format).image { _ in
             window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
         }.pngData()
+    }
+}
+
+/// Stand-in for GlobalLeaderboardView's climb: same rows, hero card and steps.
+private struct ClimbReplayPreview: View {
+    private static let names = ["mika", "jordan", "sam", "riley", "casey", "devon", "alex", "taylor", "quinn",
+                                "jamie", "morgan", "harper", "rowan", "blake", "avery", "logan", "emery", "kai",
+                                "reese", "skyler", "drew", "parker", "sage", "remy", "noel"]
+    private let board: [TopTracker] = names.enumerated().map { i, name in
+        TopTracker(uid: name, name: name, hours: Double(900 - i * 31), countryCode: "CA", rank: i + 1,
+                   level: 20 - i / 2, prestige: i < 5 ? 2 : 1)
+    }
+    @State private var rows: [TopTracker] = []
+    @State private var banner: String?
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: AppSpacing.sm) {
+                    GlobalRankHeroCard(rank: rows.first { $0.uid == "logan" }?.rank)
+                    VStack(spacing: 0) {
+                        ForEach(rows) { t in
+                            GlobalTrackerRow(tracker: t, currentUid: "logan").id(t.uid)
+                        }
+                    }
+                    .background(RoundedRectangle(cornerRadius: AppRadius.lg).fill(AppColors.card.opacity(0.55)))
+                }
+                .padding(.horizontal, AppSpacing.md)
+            }
+            .overlay(alignment: .bottom) {
+                if let banner {
+                    Text(banner)
+                        .contentTransition(.numericText())
+                        .font(AppTypography.metricLabel.weight(.bold))
+                        .foregroundStyle(AppColors.textOnAccent)
+                        .padding(.horizontal, 14).padding(.vertical, 9)
+                        .background(Capsule().fill(AppColors.accent))
+                        .padding(.bottom, AppSpacing.md)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .task {
+                let from = 18, to = 6
+                rows = LeaderboardClimbReplay.order(board, placing: "logan", atRank: from)
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                proxy.scrollTo("logan", anchor: .center)
+                withAnimation(AppMotion.Spring.snappy) { banner = LeaderboardClimbReplay.passedText(0) }
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                let steps = LeaderboardClimbReplay.steps(from: from, to: to)
+                let interval = LeaderboardClimbReplay.stepInterval(stepCount: steps.count)
+                for rank in steps {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        rows = LeaderboardClimbReplay.order(board, placing: "logan", atRank: rank)
+                        banner = LeaderboardClimbReplay.passedText(from - rank)
+                        proxy.scrollTo("logan", anchor: .center)
+                    }
+                    try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                }
+            }
+        }
+        .background(AppColors.bg)
     }
 }

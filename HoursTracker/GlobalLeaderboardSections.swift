@@ -77,6 +77,8 @@ struct GlobalRankHeroCard: View {
                 Text(rank.map { "#\($0)" } ?? "—")
                     .font(.system(size: 56, weight: .heavy, design: .rounded))
                     .monospacedDigit()
+                    // Counts down with the climb replay instead of swapping.
+                    .contentTransition(.numericText(value: Double(rank ?? 0)))
                     .foregroundStyle(AppColors.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)

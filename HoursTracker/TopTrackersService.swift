@@ -1,5 +1,6 @@
 import Foundation
 import FirebaseFirestore
+import FirebaseAuth
 import Combine
 import SwiftUI
 import os
@@ -286,6 +287,12 @@ final class TopTrackersService: ObservableObject {
         }
         topTrackers = Array(allTrackers.prefix(5))
         hasServerFullList = true
+        // A starting point for the climb replay, so someone who has never
+        // opened the global board still sees their first climb on it.
+        if !fromCache, let uid = Auth.auth().currentUser?.uid,
+           let mine = allTrackers.first(where: { $0.uid == uid }) {
+            LeaderboardClimbReplay.seedIfNeeded(rank: mine.rank, uid: uid)
+        }
         AppLogger.leaderboard.info("leaderboards/global snapshot: \(self.allTrackers.count, privacy: .public) ranked (fromCache: \(fromCache, privacy: .public))")
     }
 
