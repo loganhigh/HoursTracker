@@ -78,8 +78,8 @@ struct GlobalPodiumRow: View {
                 .minimumScaleFactor(0.7)
 
                 HStack(spacing: 5) {
-                    Text(GlobalHoursFormat.hours(entry.hours))
-                        .font(.system(size: isWinner ? 21 : 18, weight: .heavy, design: .rounded))
+                    Text(entry.hoursHidden ? "Hours hidden" : GlobalHoursFormat.hours(entry.hours))
+                        .font(.system(size: entry.hoursHidden ? 13 : (isWinner ? 21 : 18), weight: .heavy, design: .rounded))
                         .monospacedDigit()
                         .contentTransition(.numericText())
                         .animation(AppMotion.Spring.snappy, value: entry.hours)
@@ -291,12 +291,12 @@ struct GlobalTrackerRow: View {
                 RankMovementChip(delta: movement)
             }
 
-            Text(GlobalHoursFormat.hours(tracker.hours))
-                .font(.system(size: 15, weight: .bold, design: .rounded))
+            Text(tracker.hoursHidden ? "Hours hidden" : GlobalHoursFormat.hours(tracker.hours))
+                .font(.system(size: tracker.hoursHidden ? 12 : 15, weight: tracker.hoursHidden ? .semibold : .bold, design: .rounded))
                 .monospacedDigit()
                 .contentTransition(.numericText())
                 .animation(AppMotion.Spring.snappy, value: tracker.hours)
-                .foregroundStyle(isMe ? AppColors.accent : AppColors.text)
+                .foregroundStyle(tracker.hoursHidden ? AppColors.subtext : (isMe ? AppColors.accent : AppColors.text))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }

@@ -25,6 +25,9 @@ struct TopTracker: Identifiable, Equatable {
     /// Job title, shown beside the level on the global board. Empty when the
     /// user hasn't entered one.
     var occupation: String = ""
+    /// They hide their hours: ranked at their true place, shown as
+    /// "Hours hidden" (`hours` is 0).
+    var hoursHidden: Bool = false
 
     var id: String { uid }
 
@@ -136,9 +139,6 @@ enum CountryFlag {
 final class TopTrackersService: ObservableObject {
     static let shared = TopTrackersService()
 
-    /// Broadcast slice mirrored from the retired board doc's rank cap.
-    private static let liveRankLimit = 100
-
     @Published private(set) var topTrackers: [TopTracker] = []
     @Published private(set) var allTrackers: [TopTracker] = []
     @Published private(set) var hasLoaded = false
@@ -166,26 +166,26 @@ final class TopTrackersService: ObservableObject {
     func startListening() {
         guard !isListening else { return }
         isListening = true
+        // The server ranks everyone by real hours (people who hide theirs
+        // included) into one doc; that's the whole board.
         listenerKey = FirebaseListenerRegistry.shared.register(
             owner: .leaderboard,
-            purpose: "publicProfiles.topByHours",
+            purpose: "leaderboards.global",
             uid: nil,
-            registration: db.collection("publicProfiles")
-                .order(by: "totalHours", descending: true)
-                .limit(to: Self.liveRankLimit)
+            registration: db.collection("leaderboards").document("global")
                 .addSnapshotListener { [weak self] snapshot, error in
                     Task { @MainActor in
                         guard let self else { return }
                         if let error {
                             FirestoreOperationLog.listenerError(
                                 owner: .leaderboard,
-                                purpose: "publicProfiles.topByHours",
+                                purpose: "leaderboards.global",
                                 uid: nil,
                                 error: error
                             )
                             return
                         }
-                        self.applyRankedProfiles(snapshot)
+                        self.applyBoard(snapshot)
                         self.hasLoaded = true
                     }
                 }
@@ -246,41 +246,23 @@ final class TopTrackersService: ObservableObject {
         movements = [:]
     }
 
-    /// Loads the full global rankings when the server doc has not been backfilled yet.
-    func ensureFullLeaderboardLoaded() async {
-        guard !hasServerFullList, !isFetchingFull else { return }
-        isFetchingFull = true
-        isLoadingFull = true
-        defer {
-            isFetchingFull = false
-            isLoadingFull = false
-        }
-
-        do {
-            let snap = try await db.collection("publicProfiles")
-                .order(by: "totalHours", descending: true)
-                .limit(to: 500)
-                .getDocuments()
-            allTrackers = Self.parsePublicProfileDocuments(snap.documents)
-        } catch {
-            FirestoreOperationLog.listenerError(
-                owner: .leaderboard,
-                purpose: "publicProfiles.globalLeaderboard",
-                uid: nil,
-                error: error
-            )
-        }
-    }
+    /// The board doc already carries every ranked user; kept so callers
+    /// don't change.
+    func ensureFullLeaderboardLoaded() async {}
 
     func tracker(for uid: String?) -> TopTracker? {
         guard let uid else { return nil }
         return allTrackers.first { $0.uid == uid }
     }
 
-    private func applyRankedProfiles(_ snapshot: QuerySnapshot?) {
-        let previousAllCount = allTrackers.count
-        let documents = snapshot?.documents ?? []
-        let parsed = Self.parsePublicProfileDocuments(documents)
+    private func applyBoard(_ snapshot: DocumentSnapshot?) {
+        let rows = (snapshot?.data()?["all"] as? [[String: Any]]) ?? []
+        let parsed = Self.parseBoardRows(rows)
+        for row in rows {
+            if let name = row["name"] as? String {
+                SupporterRegistry.shared.record(name: name, isSupporter: row["isSupporter"] as? Bool ?? false)
+            }
+        }
 
         // Cache replays on listener attach look like fresh data but are just
         // the baseline coming back — movement only ever comes from a live,
@@ -290,30 +272,52 @@ final class TopTrackersService: ObservableObject {
             ? Self.rankMovements(previous: allTrackers, current: parsed)
             : [:]
 
-        let next = Self.mergeLiveSlice(
-            parsed,
-            into: allTrackers,
-            liveCoversFullSlice: documents.count >= Self.liveRankLimit
-        )
-
         if moves.isEmpty {
-            allTrackers = next
+            allTrackers = parsed
         } else {
             // One coordinated transaction: every affected row slides to its
             // new position together under the same spring.
             withAnimation(AppMotion.Spring.podium) {
-                allTrackers = next
+                allTrackers = parsed
             }
             movements = moves
             movementToken &+= 1
             scheduleMovementClear()
         }
         topTrackers = Array(allTrackers.prefix(5))
-        // Fewer raw documents than the query limit means the query exhausted
-        // publicProfiles — the live slice already holds every ranked user, so
-        // ensureFullLeaderboardLoaded() has nothing deeper to page in.
-        hasServerFullList = documents.count < Self.liveRankLimit
-        AppLogger.leaderboard.info("publicProfiles leaderboard snapshot: ranked \(previousAllCount, privacy: .public) -> \(self.allTrackers.count, privacy: .public), leader hours \(String(format: "%.2f", self.topTrackers.first?.hours ?? 0), privacy: .public) (fromCache: \(snapshot?.metadata.isFromCache == true, privacy: .public))")
+        hasServerFullList = true
+        AppLogger.leaderboard.info("leaderboards/global snapshot: \(self.allTrackers.count, privacy: .public) ranked (fromCache: \(fromCache, privacy: .public))")
+    }
+
+    /// Rows of the server board doc → trackers, in rank order.
+    nonisolated static func parseBoardRows(_ rows: [[String: Any]]) -> [TopTracker] {
+        rows.compactMap { row -> TopTracker? in
+            guard let uid = row["uid"] as? String, !uid.isEmpty else { return nil }
+            let name = ((row["name"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let photo = (row["photoURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return TopTracker(
+                uid: uid,
+                name: name.isEmpty ? "Tracker" : name,
+                hours: doubleValue(row["hours"]),
+                countryCode: (row["countryCode"] as? String) ?? "",
+                rank: intValue(row["rank"]),
+                photoURL: (photo?.isEmpty ?? true) ? nil : photo,
+                level: intValue(row["level"]),
+                prestige: intValue(row["prestige"]),
+                streak: intValue(row["streak"]),
+                hasReviewedApp: row["hasReviewedApp"] as? Bool ?? false,
+                occupation: TopTracker.displayOccupation(row["occupation"] as? String),
+                hoursHidden: row["hoursHidden"] as? Bool ?? false
+            )
+        }
+        .sorted { $0.rank < $1.rank }
+    }
+
+    nonisolated private static func doubleValue(_ raw: Any?) -> Double {
+        if let v = raw as? Double { return v }
+        if let v = raw as? Int { return Double(v) }
+        if let v = raw as? NSNumber { return v.doubleValue }
+        return 0
     }
 
     /// The live listener only covers the top `liveLimit` rows, but
@@ -353,52 +357,9 @@ final class TopTrackersService: ObservableObject {
         return live + renumbered
     }
 
-    private static func parsePublicProfileDocuments(_ documents: [QueryDocumentSnapshot]) -> [TopTracker] {
-        var rank = 0
-        return documents.compactMap { doc in
-            let data = doc.data()
-            let hours: Double = {
-                if let v = data["totalHours"] as? Double { return v }
-                if let v = data["totalHours"] as? Int { return Double(v) }
-                if let v = data["totalHours"] as? NSNumber { return v.doubleValue }
-                return 0
-            }()
-            guard hours > 0 else { return nil }
-            // Mirrors the server's rebuild filter. This paged query is the
-            // fallback for rankings deeper than the broadcast doc carries, so
-            // without it an opted-out user would be absent from the visible
-            // board but reappear once the list paged past the cutoff. Absent
-            // means true, matching profiles written before the flag existed.
-            guard data["showOnGlobalLeaderboard"] as? Bool ?? true else { return nil }
-            rank += 1
-            // The public board shows usernames (plain, no @ prefix); full names
-            // are for friends. Profiles that haven't claimed one yet fall
-            // back to a first name.
-            let username = Username.normalize((data["username"] as? String) ?? "")
-            let displayName = (data["displayName"] as? String) ?? ""
-            let name = username.isEmpty ? firstNameOnly(displayName) : username
-            let countryCode = (data["countryCode"] as? String) ?? ""
-            let photo = (data["profilePhotoURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            SupporterRegistry.shared.record(name: name, isSupporter: data["isSupporter"] as? Bool ?? false)
-            return TopTracker(
-                uid: doc.documentID,
-                name: name.isEmpty ? "Tracker" : name,
-                hours: hours,
-                countryCode: countryCode,
-                rank: rank,
-                photoURL: (photo?.isEmpty ?? true) ? nil : photo,
-                level: intValue(data["level"]),
-                prestige: intValue(data["prestige"]),
-                streak: intValue(data["currentStreak"]),
-                hasReviewedApp: data["hasReviewedApp"] as? Bool ?? false,
-                occupation: TopTracker.displayOccupation(data["companyOccupation"] as? String)
-            )
-        }
-    }
-
     /// Firestore hands numbers back as Int, Double, or NSNumber depending on how
     /// they were written; normalize rather than guessing one type.
-    private static func intValue(_ raw: Any?) -> Int {
+    nonisolated private static func intValue(_ raw: Any?) -> Int {
         if let v = raw as? Int { return v }
         if let v = raw as? Double { return Int(v) }
         if let v = raw as? NSNumber { return v.intValue }

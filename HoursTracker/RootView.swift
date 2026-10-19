@@ -888,7 +888,13 @@ struct HoursHomeView: View {
 
             Spacer()
 
-            HoursValue(hours: (tracker.hours * 10).rounded() / 10, size: 18, unitSize: 11, gap: 4)
+            if tracker.hoursHidden {
+                Text("Hours hidden")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppColors.subtext)
+            } else {
+                HoursValue(hours: (tracker.hours * 10).rounded() / 10, size: 18, unitSize: 11, gap: 4)
+            }
         }
         .padding(.vertical, 10)
     }

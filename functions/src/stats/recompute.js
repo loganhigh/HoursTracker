@@ -1255,6 +1255,14 @@ async function recomputeUserStats(db, uid, options = {}) {
     updatedAt,
   };
   batch.set(db.collection("publicProfiles").doc(uid), publicProfile, { merge: true });
+  // Real lifetime hours for ranking the global board. Server-only (no rule
+  // grants clients access), so people who hide their hours can still be
+  // placed at their true rank without their hours ever reaching a client.
+  batch.set(db.collection("boardHours").doc(uid), {
+    hours: Math.round((Number(totalHours) || 0) * 100) / 100,
+    hidden: !privacy.shareHours,
+    updatedAt,
+  });
 
   // The users/{uid} "legacy mirror" of these stats is retired. publicProfiles
   // is the single friend-facing projection and users/{uid}/stats/* the single
@@ -1441,9 +1449,8 @@ async function recomputeUserStats(db, uid, options = {}) {
     cal
   );
 
-  // Refresh the global "Top 5 Hour Trackers" board. publicProfiles.totalHours is
-  // already 0 for users who turned off hour-sharing, so they're naturally
-  // excluded by the hours > 0 filter below. Skippable for bulk callers (e.g.
+  // Refresh the global "Top 5 Hour Trackers" board. Everyone is ranked by real
+  // hours (boardHours); hidden-hours users show "Hours hidden". Skippable for bulk callers (e.g.
   // refreshing all users at once) that only need this done ONCE at the end
   // rather than redundantly recomputed after every single user.
   if (!options.skipLeaderboardUpdate) {
@@ -1486,7 +1493,7 @@ async function enrichLeaderboardCountryCodes(db, entries) {
 
 // Cap the broadcast `all` array (see the long rationale where it's applied in
 // updateGlobalLeaderboard). Shared with the per-user delta patch below.
-const BROADCAST_RANK_LIMIT = 100;
+const BROADCAST_RANK_LIMIT = 1000;
 
 /**
  * Instantly patch ONE user's row into the existing `leaderboards/global` doc
@@ -1508,86 +1515,45 @@ const BROADCAST_RANK_LIMIT = 100;
  * - `totalRanked` is only clamped upward, never recounted here.
  */
 async function applyLeaderboardDeltaForUser(db, uid) {
-  const boardRef = db.collection("leaderboards").doc("global");
-  const profileRef = db.collection("publicProfiles").doc(uid);
-  const outcome = await db.runTransaction(async (tx) => {
-    const [boardSnap, profileSnap] = await Promise.all([
-      tx.get(boardRef),
-      tx.get(profileRef),
-    ]);
-    // No board yet — the scheduled/full rebuild owns creation.
-    if (!boardSnap.exists) return { action: "no-board" };
+  // Everyone is ranked by their real hours now, including people who hide
+  // them (their row says "Hours hidden"). The board doc can't carry hidden
+  // hours to sort by, so a shift write rebuilds the whole board instead of
+  // patching one row — a few hundred reads at this scale.
+  const { current } = await updateGlobalLeaderboard(db);
+  const row = current.find((e) => e.uid === uid);
+  console.log(`applyLeaderboardDeltaForUser uid=${uid} action=rebuilt rank=${row ? row.rank : "none"}`);
+}
 
-    const board = boardSnap.data() || {};
-    const all = Array.isArray(board.all) ? board.all.slice() : [];
-    const profile = profileSnap.exists ? profileSnap.data() : null;
-    const hours = profile
-      ? Math.round((Number(profile.totalHours) || 0) * 100) / 100
-      : 0;
-    // Honored here as well as in the full rebuild — otherwise a user who opted
-    // out would be silently patched back onto the board by their next shift
-    // write and stay there until the 15-minute refresh removed them again.
-    const optedOut = profile ? profile.showOnGlobalLeaderboard === false : false;
-    const idx = all.findIndex((e) => e && e.uid === uid);
-
-    if (hours <= 0 || optedOut) {
-      if (idx === -1) return { action: "absent" }; // not on the board, nothing to change
-      all.splice(idx, 1);
-    } else {
-      const entry = {
-        uid,
-        name: firstNameOnly(sanitizeDisplayName(profile.displayName, "Tracker")),
-        hours,
-        countryCode: String(profile.countryCode || "").trim().toUpperCase(),
-      };
-      if (idx >= 0) {
-        all[idx] = { ...all[idx], ...entry };
-      } else {
-        const last = all[all.length - 1];
-        if (all.length >= BROADCAST_RANK_LIMIT && last && hours <= (Number(last.hours) || 0)) {
-          return { action: "below-cutoff", hours }; // slice unchanged
-        }
-        all.push(entry);
-      }
-    }
-
-    all.sort((a, b) => (Number(b.hours) || 0) - (Number(a.hours) || 0));
-    const trimmed = all
-      .slice(0, BROADCAST_RANK_LIMIT)
-      .map((e, i) => ({ ...e, rank: i + 1 }));
-    const top = trimmed.slice(0, 5).map(({ uid: u, name, hours: h, countryCode }) => ({
-      uid: u,
-      name,
-      hours: h,
-      countryCode,
-    }));
-
-    tx.set(
-      boardRef,
-      {
-        top,
-        all: trimmed,
-        totalRanked: Math.max(Number(board.totalRanked) || 0, trimmed.length),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-    const newRank = trimmed.find((e) => e.uid === uid)?.rank ?? null;
+/**
+ * Pure: ranked board rows from each user's real hours (`boardHours`) and
+ * their public profile. Everyone with hours is ranked by real hours; rows for
+ * people who hide their hours carry hours 0 and hoursHidden true, so the
+ * placement shows but the number never leaves the server.
+ */
+function buildBoardEntries(hourRows, profilesByUid) {
+  const rows = hourRows
+    .filter((r) => (Number(r.hours) || 0) > 0)
+    .sort((a, b) => (Number(b.hours) - Number(a.hours)) || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0));
+  return rows.map((r, i) => {
+    const p = profilesByUid.get(r.uid) || {};
+    const hidden = r.hidden === true;
+    const username = String(p.username || "").trim();
     return {
-      action: (hours <= 0 || optedOut) ? "removed" : "patched",
-      hours,
-      rank: newRank,
+      rank: i + 1,
+      uid: r.uid,
+      name: username || firstNameOnly(sanitizeDisplayName(p.displayName, "Tracker")),
+      hours: hidden ? 0 : Math.round(Number(r.hours) * 100) / 100,
+      hoursHidden: hidden,
+      countryCode: String(p.countryCode || "").trim().toUpperCase(),
+      photoURL: p.profilePhotoURL || null,
+      level: Number(p.level) || 0,
+      prestige: Number(p.prestige) || 0,
+      streak: hidden ? 0 : Number(p.currentStreak) || 0,
+      hasReviewedApp: p.hasReviewedApp === true,
+      isSupporter: p.isSupporter === true,
+      occupation: String(p.companyOccupation || "").trim(),
     };
   });
-  // Observability: pairs with the recomputeUserStats commit line so board
-  // movement (or the reason it didn't move) is visible per shift write.
-  if (outcome && outcome.action !== "absent") {
-    console.log(
-      `applyLeaderboardDeltaForUser uid=${uid} action=${outcome.action}` +
-      (outcome.hours !== undefined ? ` hours=${outcome.hours}` : "") +
-      (outcome.rank ? ` rank=${outcome.rank}` : "")
-    );
-  }
 }
 
 /**
@@ -1600,37 +1566,35 @@ async function applyLeaderboardDeltaForUser(db, uid) {
  * notify users who moved (see notifyLeaderboardRankMoves in index.js).
  */
 async function updateGlobalLeaderboard(db) {
-  const all = [];
-  const pageSize = 500;
-  let lastDoc = null;
-
-  while (true) {
-    let query = db.collection("publicProfiles").orderBy("totalHours", "desc").limit(pageSize);
-    if (lastDoc) {
-      query = query.startAfter(lastDoc);
-    }
-    const snap = await query.get();
-    if (snap.empty) break;
-
-    for (const doc of snap.docs) {
-      const data = doc.data() || {};
-      const hours = Number(data.totalHours) || 0;
-      if (hours <= 0) continue;
-      // Opted out of the public board. They keep their hours on publicProfiles
-      // so friends still see them — only the global ranking excludes them.
-      if (data.showOnGlobalLeaderboard === false) continue;
-      all.push({
-        rank: all.length + 1,
-        uid: doc.id,
-        name: firstNameOnly(sanitizeDisplayName(data.displayName, "Tracker")),
-        hours: Math.round(hours * 100) / 100,
-        countryCode: data.countryCode || "",
-      });
-    }
-
-    lastDoc = snap.docs[snap.docs.length - 1];
-    if (snap.size < pageSize) break;
+  // Real hours for everyone (server-only collection written by
+  // recomputeUserStats). Users not yet recomputed since this collection
+  // existed fall back to their public totalHours, so nobody drops off.
+  const hourRows = [];
+  const seen = new Set();
+  const hoursSnap = await db.collection("boardHours").get();
+  for (const doc of hoursSnap.docs) {
+    const d = doc.data() || {};
+    hourRows.push({ uid: doc.id, hours: Number(d.hours) || 0, hidden: d.hidden === true });
+    seen.add(doc.id);
   }
+  const publicSnap = await db.collection("publicProfiles").orderBy("totalHours", "desc").get();
+  const profilesByUid = new Map();
+  for (const doc of publicSnap.docs) {
+    const d = doc.data() || {};
+    profilesByUid.set(doc.id, d);
+    if (!seen.has(doc.id) && (Number(d.totalHours) || 0) > 0) {
+      hourRows.push({ uid: doc.id, hours: Number(d.totalHours) || 0, hidden: false });
+    }
+  }
+  // Profiles with no totalHours field (hidden hours wrote 0, but very old
+  // docs may lack it) aren't in an orderBy query; fetch any we still need.
+  const missing = hourRows.map((r) => r.uid).filter((uid) => !profilesByUid.has(uid));
+  if (missing.length > 0) {
+    const snaps = await db.getAll(...missing.map((uid) => db.collection("publicProfiles").doc(uid)));
+    for (const snap of snaps) if (snap.exists) profilesByUid.set(snap.id, snap.data() || {});
+  }
+
+  const all = buildBoardEntries(hourRows, profilesByUid);
 
   await enrichLeaderboardCountryCodes(db, all);
 
@@ -1641,6 +1605,8 @@ async function updateGlobalLeaderboard(db) {
     countryCode,
   }));
 
+  // Every ranked user now rides in this doc (~300 bytes each, so the 1000 cap
+  // is ~300 KB, well under 1 MiB) — the app reads only this doc.
   // Cap the broadcast `all` array. Writing EVERY ranked user into this single
   // doc is both a hard scaling cliff (Firestore's 1 MiB per-document limit is hit
   // around ~10k ranked users, and because this is an atomic merge:false write the
@@ -1685,6 +1651,7 @@ module.exports = {
   rankTitle,
   updateGlobalLeaderboard,
   applyLeaderboardDeltaForUser,
+  buildBoardEntries,
   entryDerivedXP,
   entryXPComponents,
   resolveTotalXP,

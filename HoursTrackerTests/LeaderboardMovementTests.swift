@@ -97,4 +97,19 @@ final class LeaderboardMovementTests: XCTestCase {
         let stale = (1...5).map { tracker("s\($0)", rank: $0) }
         XCTAssertEqual(TopTrackersService.mergeLiveSlice(live, into: stale, liveCoversFullSlice: false).map(\.uid), ["a", "b"])
     }
+
+    /// The server board doc: rank order, hidden-hours rows flagged with no hours.
+    func testParseBoardRowsKeepsRankAndHiddenFlag() {
+        let rows: [[String: Any]] = [
+            ["uid": "c", "name": "cal", "hours": 200.5, "rank": 2],
+            ["uid": "b", "name": "ben", "hours": 0, "rank": 1, "hoursHidden": true, "countryCode": "CA"],
+            ["uid": "", "name": "bad", "rank": 3],
+        ]
+        let parsed = TopTrackersService.parseBoardRows(rows)
+        XCTAssertEqual(parsed.map(\.uid), ["b", "c"])
+        XCTAssertTrue(parsed[0].hoursHidden)
+        XCTAssertEqual(parsed[0].hours, 0)
+        XCTAssertEqual(parsed[1].hours, 200.5)
+        XCTAssertFalse(parsed[1].hoursHidden)
+    }
 }

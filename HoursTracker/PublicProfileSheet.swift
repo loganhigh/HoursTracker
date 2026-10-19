@@ -84,9 +84,8 @@ struct PublicProfileSheet: View {
     private var tier: PrestigeTheme.Tier { PrestigeTheme.tier(for: prestige) }
     private var accent: Color { prestige > 0 ? tier.primary : AppColors.accent }
 
-    /// The board already carries hours; the doc refines them. A board row is
-    /// only ever someone sharing hours, so absent a doc they're shareable.
-    private var sharesHours: Bool { glimpse?.shareHours ?? (tracker.hours > 0) }
+    /// The board row says whether they hide their hours; the doc refines it.
+    private var sharesHours: Bool { glimpse?.shareHours ?? !tracker.hoursHidden }
 
     var body: some View {
         NavigationStack {
