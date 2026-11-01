@@ -1371,6 +1371,20 @@ async function recomputeUserStats(db, uid, options = {}) {
     );
   }
 
+  // The "logged a shift" event (which fans out friend pushes) belongs to THIS
+  // write, not to the stats snapshot, so it must run before the fence below:
+  // a create is routinely followed within milliseconds by an update or a
+  // client recompute call, and the superseded run is the only one that knows
+  // the entry is new. Emitting is idempotent per entry id.
+  await emitShiftActivityIfNeeded(
+    db,
+    uid,
+    userData,
+    options.beforeEntry,
+    options.afterEntry,
+    cal
+  );
+
   // Bail out if a newer recompute has already started since we began — it
   // will (or already did) produce a fresher result, so persisting ours now
   // would only reintroduce the exact staleness this fence exists to prevent.
@@ -1439,15 +1453,6 @@ async function recomputeUserStats(db, uid, options = {}) {
       console.log(parts.join(" "));
     }
   }
-
-  await emitShiftActivityIfNeeded(
-    db,
-    uid,
-    userData,
-    options.beforeEntry,
-    options.afterEntry,
-    cal
-  );
 
   // Refresh the global "Top 5 Hour Trackers" board. Everyone is ranked by real
   // hours (boardHours); hidden-hours users show "Hours hidden". Skippable for bulk callers (e.g.
@@ -1645,6 +1650,7 @@ async function updateGlobalLeaderboard(db) {
 
 module.exports = {
   recomputeUserStats,
+  emitShiftActivityIfNeeded,
   stripWrappingQuotes,
   sanitizeDisplayName,
   stripEmoji,
