@@ -148,7 +148,7 @@ struct HomeFriendsCardContent: View {
         let myName = UserDefaults.standard.string(forKey: "profile_display_name") ?? "You"
         let profile = store.gamificationProfile
         let currentCycle = store.currentPayCycle()
-        let myHours = PayCycleEngine.entries(store.entries, in: currentCycle)
+        let myHours = PayCycleEngine.entries(store.allEntriesIncludingArchive(), in: currentCycle)
             .reduce(0.0) { $0 + $1.paidHours }
         let myLevelLine = GamificationLevelCalculator.displayLevelLine(
             level: store.displayedLevel,

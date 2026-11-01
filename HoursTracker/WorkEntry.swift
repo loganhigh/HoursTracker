@@ -155,8 +155,10 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         try c.encode(isOffDay, forKey: .isOffDay)
         try c.encode(offDayReason, forKey: .offDayReason)
         try c.encode(isHoliday, forKey: .isHoliday)
-        try c.encodeIfPresent(holidayPayRule, forKey: .holidayPayRule)
-        if statPayHours > 0 { try c.encode(statPayHours, forKey: .statPayHours) }
+        // Same as the pin: a cleared stat-holiday rule must overwrite the
+        // cloud copy, or the merge keeps it and the listener restores it.
+        try c.encode(holidayPayRule, forKey: .holidayPayRule)
+        try c.encode(statPayHours, forKey: .statPayHours)
         try c.encodeIfPresent(createdAt, forKey: .createdAt)
         try c.encodeIfPresent(modifiedAt, forKey: .modifiedAt)
         try c.encodeIfPresent(weather, forKey: .weather)

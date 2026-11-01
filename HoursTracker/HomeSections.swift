@@ -279,7 +279,7 @@ struct HomeStatTriplet: View {
         var cal = Calendar.current
         cal.firstWeekday = store.paySettings.weekStartWeekday ?? 2
         guard let interval = cal.dateInterval(of: .weekOfYear, for: date) else { return 0 }
-        return store.entries
+        return store.allEntriesIncludingArchive()
             .filter { !$0.isOffDay && $0.date >= interval.start && $0.date < interval.end }
             .reduce(0) { $0 + $1.paidHours }
     }
@@ -291,7 +291,7 @@ struct HomeStatTriplet: View {
     /// Paid hours in the live pay period — the number the Today card used to
     /// lead with.
     private var chequeHours: Double {
-        PayCycleEngine.entries(store.entries, in: store.currentPayCycle())
+        PayCycleEngine.entries(store.allEntriesIncludingArchive(), in: store.currentPayCycle())
             .reduce(0) { $0 + $1.paidHours }
     }
 

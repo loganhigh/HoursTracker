@@ -29,7 +29,7 @@ struct PayCycleDetailView: View {
     }
 
     private var cycleEntries: [WorkEntry] {
-        PayCycleEngine.entries(store.entries, in: selectedCycle)
+        PayCycleEngine.entries(store.allEntriesIncludingArchive(), in: selectedCycle)
     }
 
     private var periodHours: Double {

@@ -37,7 +37,7 @@ struct MonthWrappedData {
             )
         }
 
-        let entries = store.entries.filter { $0.date >= start && $0.date < end && !$0.isOffDay }
+        let entries = store.allEntriesIncludingArchive().filter { $0.date >= start && $0.date < end && !$0.isOffDay }
         let workEntries = entries.filter { $0.paidHours > 0 }
 
         let totalHours = store.monthTotalHours(monthDate: monthDate)

@@ -283,6 +283,12 @@ exports.notifyFriendsOnShiftLogged = onDocumentCreated(
 
     const authorUid = event.params.authorUid;
     const eventId = event.params.eventId;
+    // The author's own switches decide what friends get, not the client
+    // that wrote the event: older builds put the hours in `body` even with
+    // "Show hours to friends" off.
+    const authorPrivacy = (await db.collection("users").doc(authorUid).get()).data()?.privacy || {};
+    if (authorPrivacy.shareActivity === false) return;
+    const hoursHidden = authorPrivacy.shareHours === false;
     // The event carries a copy of the author's name, but it can be empty (the
     // client writes whatever `profile_display_name` holds, which is unset until
     // the user sets one). Falling straight through to "A friend" is what made
@@ -291,7 +297,7 @@ exports.notifyFriendsOnShiftLogged = onDocumentCreated(
       sanitizeDisplayName(data.authorDisplayName, "") ||
       (await resolveDisplayName(authorUid)) ||
       "A friend";
-    const body = data.body || "logged a shift";
+    const body = hoursHidden ? "hours hidden" : data.body || "logged a shift";
     // Name goes in the title: on a lock screen or banner the title is the line
     // that always renders, and "who" is the whole point of the alert.
     const notificationTitle = `${authorName} logged a shift`;
@@ -1541,11 +1547,20 @@ exports.clientUploadTimeEntriesBatch = onCall(
     const timeRefs = candidates.map(({ entryId }) =>
       db.collection("users").doc(uid).collection("timeEntries").doc(entryId)
     );
-    const existingSnaps = await db.getAll(...timeRefs);
+    const tombstoneRefs = candidates.map(({ entryId }) =>
+      db.collection("users").doc(uid).collection("deletedEntries").doc(entryId)
+    );
+    const [existingSnaps, tombstoneSnaps] = await Promise.all([
+      db.getAll(...timeRefs),
+      db.getAll(...tombstoneRefs),
+    ]);
     const existingById = new Map();
     for (const snap of existingSnaps) {
       if (snap.exists) existingById.set(snap.id, snap.data());
     }
+    // A shift deleted on any device stays deleted: another phone (or the
+    // daily repair) still holding a copy used to re-create it here.
+    const deletedIds = new Set(tombstoneSnaps.filter((snap) => snap.exists).map((snap) => snap.id));
 
     let batch = db.batch();
     let ops = 0;
@@ -1562,7 +1577,12 @@ exports.clientUploadTimeEntriesBatch = onCall(
       ops = 0;
     };
 
+    let rejectedDeleted = 0;
     for (const { entryId, raw } of candidates) {
+      if (deletedIds.has(entryId)) {
+        rejectedDeleted += 1;
+        continue;
+      }
       const existing = existingById.get(entryId);
       if (entryUnchanged(existing, raw)) {
         skipped += 1;
@@ -1614,7 +1634,7 @@ exports.clientUploadTimeEntriesBatch = onCall(
     if (written > 0) {
       await recomputeUserStats(db, uid, { skipFence: true, skipLeaderboardUpdate: true });
     }
-    return { status: "ok", uploaded: written, skipped, stale };
+    return { status: "ok", uploaded: written, skipped, stale, deleted: rejectedDeleted };
   }
 );
 
@@ -1649,7 +1669,13 @@ exports.clientDeleteTimeEntriesBatch = onCall(
       if (!entryId) continue;
       batch.delete(db.collection("users").doc(uid).collection("timeEntries").doc(entryId));
       batch.delete(db.collection("users").doc(uid).collection("entries").doc(entryId));
-      ops += 2;
+      // Shared tombstone: the upload callable and the entry rules refuse this
+      // id from now on, and every device drops its copy (deletedEntries
+      // listener).
+      batch.set(db.collection("users").doc(uid).collection("deletedEntries").doc(entryId), {
+        deletedAt: FieldValue.serverTimestamp(),
+      });
+      ops += 3;
       deleted += 1;
       if (ops >= 400) {
         await batch.commit();

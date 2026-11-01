@@ -103,6 +103,18 @@ final class SocialPrivacyStore: ObservableObject {
         )
     }
 
+    /// Sign-in: the account's own switches from `users/{uid}.privacy`,
+    /// which are the source of truth over this device's local copy.
+    func adoptCloudFlags(_ cloud: SocialPrivacyFlags) {
+        update { $0 = cloud }
+    }
+
+    /// Account switch: back to defaults until the new account's cloud copy
+    /// is adopted.
+    func resetToDefaults() {
+        update { $0 = SocialPrivacyFlags.default }
+    }
+
     /// Mutates a single flag, persists it, and broadcasts the change so any
     /// observer (CloudSyncManager profile pusher, FriendsView, etc.) can react.
     func update(_ mutation: (inout SocialPrivacyFlags) -> Void) {

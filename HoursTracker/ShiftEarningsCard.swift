@@ -55,7 +55,7 @@ extension HoursStore {
         guard gross > 0 else { return nil }
         let ratio = TakeHomeEstimator.ratio(learned: learnedTakeHomeRatio())
         let cycle = PayCycleEngine.cycle(containing: work.map(\.date).min() ?? Date(), settings: paySettings)
-        let chequeGross = PayCycleEngine.entries(entries, in: cycle)
+        let chequeGross = PayCycleEngine.entries(allEntriesIncludingArchive(), in: cycle)
             .reduce(0) { $0 + payBreakdown(for: $1).pay }
         return ShiftEarnings(
             date: work.map(\.date).min() ?? Date(),
@@ -86,7 +86,7 @@ extension HoursStore {
         for _ in 0..<60 {
             cursor = PayCycleEngine.previousCycle(before: cursor, settings: paySettings)
             if let payout = actualPayout(for: cursor) {
-                let gross = PayCycleEngine.entries(entries, in: cursor)
+                let gross = PayCycleEngine.entries(allEntriesIncludingArchive(), in: cursor)
                     .reduce(0) { $0 + payBreakdown(for: $1).pay }
                 samples.append(.init(gross: gross, payout: payout))
                 if samples.count >= TakeHomeEstimator.maxSamples { break }

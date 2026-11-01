@@ -170,7 +170,7 @@ struct HistoryTabView: View {
     /// Shift count and hours — the detail the table's removed columns used
     /// to carry, folded under the cheque's date range.
     private func subtitle(for row: ChequeRow) -> String {
-        let entries = PayCycleEngine.entries(store.entries, in: row.cycle)
+        let entries = PayCycleEngine.entries(store.allEntriesIncludingArchive(), in: row.cycle)
         return "\(shiftsCaption(for: entries)) · \(AppTheme.Format.hours(cycleHours(row.cycle)))"
     }
 
@@ -235,7 +235,7 @@ struct HistoryTabView: View {
             let ascending = (byYear[year] ?? []).sorted { $0.start < $1.start }
             let rows: [ChequeRow] = ascending.enumerated().compactMap { index, cycle in
                 let isCurrent = cycle.start == current.start
-                let hasEntries = !PayCycleEngine.entries(store.entries, in: cycle).isEmpty
+                let hasEntries = !PayCycleEngine.entries(store.allEntriesIncludingArchive(), in: cycle).isEmpty
                 guard isCurrent || hasEntries else { return nil }
                 return ChequeRow(cycle: cycle, ordinal: index + 1, isCurrent: isCurrent)
             }
@@ -251,7 +251,7 @@ struct HistoryTabView: View {
     /// ordinal of the user's actual first cheque (e.g. "12th Cheque" for
     /// what is really their first).
     private func previousCycles(before current: PayCycle) -> [PayCycle] {
-        guard let earliest = store.entries.map(\.date).min() else { return [] }
+        guard let earliest = store.allEntriesIncludingArchive().map(\.date).min() else { return [] }
         var walked: [PayCycle] = []
         var cursor = current
         for _ in 0..<maxWalkedCycles {
@@ -291,7 +291,7 @@ struct HistoryTabView: View {
     }
 
     private func cycleHours(_ cycle: PayCycle) -> Double {
-        PayCycleEngine.entries(store.entries, in: cycle)
+        PayCycleEngine.entries(store.allEntriesIncludingArchive(), in: cycle)
             .filter { !$0.isOffDay }
             .reduce(0) { $0 + $1.paidHours }
     }

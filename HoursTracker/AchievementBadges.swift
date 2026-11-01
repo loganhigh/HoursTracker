@@ -38,7 +38,7 @@ struct BadgeStats {
         // unlogged day — and counting those as days worked turned months of
         // app use into "100 Days Straight Worked" / perfect-month badges for
         // people whose real best work streak was 16 days.
-        let entries = store.entries.filter { !$0.isOffDay && $0.paidHours > 0 }
+        let entries = store.allEntriesIncludingArchive().filter { !$0.isOffDay && $0.paidHours > 0 }
         let cal = Calendar.current
         let breakdowns = entries.map { store.payBreakdown(for: $0) }
 

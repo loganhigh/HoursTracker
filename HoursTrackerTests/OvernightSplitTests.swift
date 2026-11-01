@@ -145,3 +145,78 @@ final class ShiftPlaceTests: XCTestCase {
         XCTAssertEqual(place.displayText, "Old free-text site")
     }
 }
+
+/// Known bugs from the 2026-10-31 audit. Each test asserts the CORRECT
+/// behaviour inside XCTExpectFailure, so the suite stays green today and the
+/// test fails ("expected failure not seen") once the bug is fixed — remove
+/// the XCTExpectFailure wrapper then.
+final class AuditKnownBugTests: XCTestCase {
+
+    private var toronto: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "America/Toronto")!
+        return c
+    }
+
+    /// Wizard convention: start and end on the shift's day, end <= start means "ends tomorrow".
+    private func night(_ y: Int, _ m: Int, _ d: Int) -> (date: Date, start: Date, end: Date) {
+        let day = toronto.date(from: DateComponents(year: y, month: m, day: d))!
+        return (day,
+                toronto.date(bySettingHour: 22, minute: 0, second: 0, of: day)!,
+                toronto.date(bySettingHour: 6, minute: 0, second: 0, of: day)!)
+    }
+
+    func testOvernightShiftAcrossFallBackPaysRealElapsedHours() {
+        // 10 PM Oct 31 → 6 AM Nov 1 2026 in Toronto is 9 real hours.
+        let n = night(2026, 10, 31)
+        let entry = WorkEntry(date: n.date, start: n.start, end: n.end, breakMinutes: 0, notes: "")
+        XCTExpectFailure("paidHours wraps overnight shifts with a fixed +24h (WorkEntry.swift:55)") {
+            XCTAssertEqual(entry.paidHours, 9, accuracy: 0.001)
+        }
+    }
+
+    func testSplitFirstPortionOnFallBackDayIsTwoHours() {
+        // 10 PM Nov 1 → 6 AM Nov 2: the Nov 1 portion is 10 PM → midnight = 2h.
+        let n = night(2026, 11, 1)
+        guard let split = OvernightSplit.split(date: n.date, start: n.start, end: n.end,
+                                               breakMinutes: 0, calendar: toronto) else {
+            return XCTFail("expected a split")
+        }
+        let first = WorkEntry(date: split.first.date, start: split.first.start,
+                              end: split.first.end, breakMinutes: 0, notes: "")
+        XCTExpectFailure("first portion ends at the same day's midnight and relies on the +24h wrap (OvernightSplit.swift:68-73)") {
+            XCTAssertEqual(first.paidHours, 2, accuracy: 0.001)
+        }
+    }
+
+    func testClearedStatHolidayIsWrittenAsNullSoCloudMergeClearsIt() throws {
+        // Cloud saves use setData(merge: true); an absent key leaves the old
+        // holiday rule and stat hours in Firestore, and the listener restores them.
+        let entry = WorkEntry(date: Date(), start: Date(), end: Date(), breakMinutes: 0, notes: "")
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(entry)) as? [String: Any])
+        XCTAssertTrue(json["holidayPayRule"] is NSNull)
+        XCTAssertEqual(json["statPayHours"] as? Double, 0)
+    }
+
+    // MARK: Sync merge (audit #4)
+
+    private func stamped(_ entry: WorkEntry, _ seconds: TimeInterval) -> WorkEntry {
+        var copy = entry
+        copy.modifiedAt = Date(timeIntervalSince1970: seconds)
+        return copy
+    }
+
+    func testNewerLocalEditBeatsOlderCloudCopy() {
+        let base = WorkEntry(date: Date(), start: Date(), end: Date(), breakMinutes: 0, notes: "")
+        var edited = stamped(base, 2_000)
+        edited.notes = "edited offline"
+        XCTAssertTrue(HoursStore.localCopyWins(edited, over: stamped(base, 1_000), pending: []))
+        XCTAssertFalse(HoursStore.localCopyWins(stamped(base, 1_000), over: edited, pending: []))
+    }
+
+    func testQueuedUploadBeatsCloudCopyAndUnstampedFallsBackToCloud() {
+        let base = WorkEntry(date: Date(), start: Date(), end: Date(), breakMinutes: 0, notes: "")
+        XCTAssertTrue(HoursStore.localCopyWins(base, over: stamped(base, 9_000), pending: [base.id]))
+        XCTAssertFalse(HoursStore.localCopyWins(base, over: stamped(base, 9_000), pending: []))
+    }
+}

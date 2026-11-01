@@ -40,6 +40,11 @@ final class CloudSyncManager: ObservableObject {
     private var entriesListenerKey: String?
     private var settingsListener: ListenerRegistration?
     private var chequeTotalsListener: ListenerRegistration?
+    private var deletedEntriesListener: ListenerRegistration?
+    /// Ids in `users/{uid}/deletedEntries`, written by the delete callable on
+    /// whichever device deleted the shift. Shared by every device on the
+    /// account, unlike the per-device `pending_deletes` tombstones.
+    private(set) var serverDeletedIDs: Set<String> = []
     private var settingsListenerKey: String?
     private var gamificationListener: ListenerRegistration?
     private var gamificationListenerKey: String?
@@ -807,7 +812,7 @@ final class CloudSyncManager: ObservableObject {
     }
 
     func saveProfileSnapshot(store: HoursStore, completion: @escaping (Result<Void, Error>) -> Void = { _ in }) {
-        guard let uid = currentUID else {
+        guard let uid = currentUID, privacyAdoptedUID == uid else {
             UserDefaults.standard.set(true, forKey: pendingProfileSyncKey)
             checkPendingChanges()
             completion(.success(()))
@@ -830,8 +835,23 @@ final class CloudSyncManager: ObservableObject {
                 inputs.makePayload()
             }.value
 
+            // Every entries snapshot (including the echo of this device's own
+            // write) republishes the profile, and each publish asks the server
+            // for a recompute. Skip an identical one inside the hour; the hour
+            // bound keeps date-driven server fields (pay period, week) fresh.
+            let signature = Self.profileSignature(uid: uid, payload: payload)
+            if signature == self.lastProfileSignature,
+               let last = self.lastProfilePushAt, Date().timeIntervalSince(last) < 3600 {
+                UserDefaults.standard.set(false, forKey: self.pendingProfileSyncKey)
+                self.checkPendingChanges()
+                completion(.success(()))
+                return
+            }
+
             do {
                 try await self.db.collection("users").document(uid).setData(payload, merge: true)
+                self.lastProfileSignature = signature
+                self.lastProfilePushAt = Date()
                 UserDefaults.standard.set(false, forKey: self.pendingProfileSyncKey)
                 self.checkPendingChanges()
                 self.saveGamificationAnchors(store: store)
@@ -848,6 +868,21 @@ final class CloudSyncManager: ObservableObject {
                 completion(.failure(error))
             }
         }
+    }
+
+    private var lastProfileSignature: String?
+    private var lastProfilePushAt: Date?
+
+    /// Stable fingerprint of a profile payload's plain values (sentinels such
+    /// as server timestamps are left out).
+    static func profileSignature(uid: String, payload: [String: Any]) -> String {
+        let plain = payload.compactMapValues { value -> Any? in
+            if JSONSerialization.isValidJSONObject([value]) { return value }
+            if let stamp = value as? Timestamp { return stamp.seconds }
+            return nil
+        }
+        let data = (try? JSONSerialization.data(withJSONObject: plain, options: [.sortedKeys])) ?? Data()
+        return uid + ":" + (String(data: data, encoding: .utf8) ?? "")
     }
 
     /// Fire-and-forget request for the server to recompute this user's
@@ -1221,6 +1256,9 @@ final class CloudSyncManager: ObservableObject {
         // Before the profile push below can republish it: drop a cached avatar
         // that belongs to a different account than the one signing in.
         ProfilePhotoManager.shared.reconcileLocalPhoto(forSignedInUID: uid)
+        // Before anything can upload: local data still belonging to another
+        // account must not be merged into this one.
+        resetLocalDataIfOwnedByAnotherAccount(signingInUID: uid)
         migrateLocalDataIfNeeded(uid: uid)
         runDailyCloudRepairIfNeeded()
         Task { @MainActor in
@@ -1258,6 +1296,9 @@ final class CloudSyncManager: ObservableObject {
         settingsListener = nil
         chequeTotalsListener?.remove()
         chequeTotalsListener = nil
+        deletedEntriesListener?.remove()
+        deletedEntriesListener = nil
+        serverDeletedIDs = []
         settingsListenerKey = nil
         if let gamificationListenerKey {
             FirebaseListenerRegistry.shared.remove(key: gamificationListenerKey)
@@ -1269,6 +1310,7 @@ final class CloudSyncManager: ObservableObject {
             FirebaseListenerRegistry.shared.stopAll(for: uid)
         }
         currentUID = nil
+        privacyAdoptedUID = nil
         hasAppliedRemoteEntries = false
         isPulling = false
         isSyncing = false
@@ -1301,6 +1343,41 @@ final class CloudSyncManager: ObservableObject {
         }
     }
 
+    static let localDataOwnerKey = "local_data_owner_uid"
+
+    /// The account whose cloud privacy switches this device has adopted.
+    /// Profile snapshots wait for it: a fresh install or new phone starts
+    /// with every switch on, and publishing that first would overwrite the
+    /// "Show hours to friends = off" the user chose on their other device.
+    private var privacyAdoptedUID: String?
+
+    /// Signing out keeps this device's shifts, settings and profile so the
+    /// same account can sign back in offline. When a *different* account
+    /// signs in, that data belongs to the previous account (its cloud copy is
+    /// intact): `migrateLocalDataIfNeeded` and the daily repair would
+    /// otherwise upload every one of its shifts, its name, company and pay
+    /// settings into the new account. Devices from before this key existed
+    /// adopt the first account that signs in.
+    private func resetLocalDataIfOwnedByAnotherAccount(signingInUID uid: String) {
+        let defaults = UserDefaults.standard
+        defer { defaults.set(uid, forKey: Self.localDataOwnerKey) }
+        guard let owner = defaults.string(forKey: Self.localDataOwnerKey), owner != uid else { return }
+        AppLogger.db.info("Account switch: clearing local data left by the previous account")
+        hoursStore?.resetForAccountSwitch()
+        for key in [
+            "pending_entries", "pending_entries_count", "pending_deletes",
+            "confirmed_delete_tombstones", "pending_settings_sync", pendingProfileSyncKey,
+            "account_lookup_email", "profile_display_name", "company_name",
+            "company_occupation", "company_employee_id", "company_hourly_rate",
+            "company_start_date_ts",
+        ] {
+            defaults.removeObject(forKey: key)
+        }
+        SocialPrivacyStore.shared.resetToDefaults()
+        SupporterRegistry.shared.resetSelf()
+        checkPendingChanges()
+    }
+
     /// Ensures whatever this device holds locally always ends up in the cloud
     /// on sign-in — never left stranded on-device. This is always safe to do
     /// automatically without asking the user, because entries are keyed by
@@ -1310,6 +1387,21 @@ final class CloudSyncManager: ObservableObject {
     /// that can silently discard a shift, regardless of whether the account
     /// already has cloud data from another device or a previous install.
     private func migrateLocalDataIfNeeded(uid: String) {
+        db.collection("users").document(uid).getDocument { [weak self] snap, _ in
+            DispatchQueue.main.async {
+                guard let self, self.currentUID == uid else { return }
+                if let privacy = snap?.data()?["privacy"] as? [String: Any] {
+                    SocialPrivacyStore.shared.adoptCloudFlags(SocialPrivacyFlags.from(firestore: privacy))
+                }
+                // A failed read falls back to this device's own switches,
+                // as before.
+                self.privacyAdoptedUID = uid
+                self.continueMigrateLocalDataIfNeeded(uid: uid)
+            }
+        }
+    }
+
+    private func continueMigrateLocalDataIfNeeded(uid: String) {
         let entriesRef = db.collection("users").document(uid).collection("entries")
         let timeEntriesRef = db.collection("users").document(uid).collection("timeEntries")
 
@@ -1358,6 +1450,7 @@ final class CloudSyncManager: ObservableObject {
     }
 
     private func startCloudListeners(uid: String) {
+        startDeletedEntriesListener(uid: uid)
         startEntriesListener(uid: uid)
         startSettingsListener(uid: uid)
         startGamificationListener(uid: uid)
@@ -1486,6 +1579,25 @@ final class CloudSyncManager: ObservableObject {
             uid: uid,
             registration: registration
         )
+    }
+
+    private func startDeletedEntriesListener(uid: String) {
+        deletedEntriesListener?.remove()
+        deletedEntriesListener = db.collection("users").document(uid).collection("deletedEntries")
+            .addSnapshotListener { [weak self] snapshot, error in
+                DispatchQueue.main.async {
+                    guard let self, self.currentUID == uid else { return }
+                    if let error {
+                        FirestoreOperationLog.listenerError(owner: .cloudSync, purpose: "deletedEntries", uid: uid, error: error)
+                        return
+                    }
+                    let ids = Set(snapshot?.documents.map(\.documentID) ?? [])
+                    guard ids != self.serverDeletedIDs else { return }
+                    self.serverDeletedIDs = ids
+                    self.markEntriesAsSynced(ids)
+                    self.hoursStore?.applyServerDeletions(ids)
+                }
+            }
     }
 
     private func startSettingsListener(uid: String) {
@@ -1743,13 +1855,51 @@ final class CloudSyncManager: ObservableObject {
         savePendingEntries(pending)
     }
 
+    private func markEntriesAsSynced(_ ids: Set<String>) {
+        let pending = getPendingEntries()
+        let kept = pending.filter { !ids.contains($0.id.uuidString) }
+        if kept.count != pending.count { savePendingEntries(kept) }
+    }
+
+    /// Entries saved on this device whose upload hasn't been confirmed.
+    func pendingEntryIDs() -> Set<UUID> {
+        Set(getPendingEntries().map(\.id))
+    }
+
+    /// Pushes entries through the guarded batch callable, which writes both
+    /// collections, skips unchanged docs and rejects stale or deleted ids.
+    /// Failures stay queued in `pending_entries` for the next online tick.
+    func uploadEntriesViaCallable(_ entries: [WorkEntry], reason: String) {
+        guard !entries.isEmpty else { return }
+        guard let uid = currentUID, networkMonitor.isConnected else {
+            entries.forEach(queueEntryForSync)
+            return
+        }
+        uploadEntriesInBatches(entries, uid: uid, uploaded: 0) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success:
+                StatsListenerService.shared.markEntryWritePending()
+                self.scheduleStatsRecomputeDebounced()
+            case .failure(let error):
+                entries.forEach(self.queueEntryForSync)
+                AppLogger.db.warning("batch upload (\(reason, privacy: .public)) failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
     private func syncWhenOnline() {
         guard currentUID != nil, networkMonitor.isConnected, let store = hoursStore else { return }
         let pendingProfile = UserDefaults.standard.bool(forKey: pendingProfileSyncKey)
         syncPendingDeletes()
-        if pendingChanges > 0 {
-            syncAll(entries: store.allEntriesIncludingArchive(), settings: store.paySettings) { _ in }
-        } else if pendingProfile {
+        // Only what this device actually changed while offline. Re-saving the
+        // whole history here wrote every shift straight to `entries`, so a
+        // stale copy on this phone could revert an edit made on another one.
+        uploadEntriesViaCallable(getPendingEntries(), reason: "reconnect replay")
+        if UserDefaults.standard.bool(forKey: "pending_settings_sync") {
+            saveSettings(store.paySettings)
+        }
+        if pendingProfile {
             saveProfileSnapshot(store: store) { _ in }
         }
     }
@@ -1826,7 +1976,7 @@ private struct ProfileSnapshotInputs {
         // which then survived the override being removed.
         let publishedEquippedTitle = equippedTitle
         let currentCycle = store.currentPayCycle()
-        let cycleEntries = PayCycleEngine.entries(store.entries, in: currentCycle)
+        let cycleEntries = PayCycleEngine.entries(store.allEntriesIncludingArchive(), in: currentCycle)
 
         let isoFormatter: DateFormatter = {
             let f = DateFormatter()

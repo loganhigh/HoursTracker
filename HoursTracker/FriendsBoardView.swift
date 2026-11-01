@@ -33,7 +33,7 @@ struct FriendsBoardView: View {
     }
 
     private var weeklyHours: Double {
-        WeeklyStatsCalculator.weeklyHours(store.entries)
+        WeeklyStatsCalculator.weeklyHours(store.allEntriesIncludingArchive())
     }
 
     private var equippedTitle: String {
