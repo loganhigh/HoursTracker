@@ -50,20 +50,86 @@ struct ShiftPlace: Equatable, Hashable {
 }
 
 extension HoursStore {
-    /// Distinct pinned places from recent shifts, newest first. Places within
-    /// ~150 m of one already listed count as the same spot.
-    func recentShiftPlaces(limit: Int = 6) -> [ShiftPlace] {
+    func recentShiftPlaces(limit: Int = 12) -> [ShiftPlace] {
+        Self.recentPlaces(from: allEntriesIncludingArchive(), legacyNames: LegacyPlaceNames.load(), limit: limit)
+    }
+
+    /// Distinct places from past shifts, newest first: pinned spots plus the
+    /// names typed before pins existed, then old saved job-site names. Pins
+    /// within ~150 m of one already listed, or names already listed (any case),
+    /// count as the same place; a name-only place picks up a later pin for it.
+    static func recentPlaces(from entries: [WorkEntry], legacyNames: [String], limit: Int) -> [ShiftPlace] {
         var result: [ShiftPlace] = []
+        func nameIndex(_ name: String) -> Int? {
+            guard !name.isEmpty else { return nil }
+            return result.firstIndex { $0.trimmedName.caseInsensitiveCompare(name) == .orderedSame }
+        }
         for entry in entries.sorted(by: { $0.date > $1.date }) {
-            guard let lat = entry.latitude, let lon = entry.longitude else { continue }
-            let here = CLLocation(latitude: lat, longitude: lon)
-            let duplicate = result.contains {
-                CLLocation(latitude: $0.latitude ?? 0, longitude: $0.longitude ?? 0).distance(from: here) < 150
+            let place = ShiftPlace(entry: entry)
+            if let here = place.coordinate.map({ CLLocation(latitude: $0.latitude, longitude: $0.longitude) }) {
+                let nearby = result.contains {
+                    guard let c = $0.coordinate else { return false }
+                    return CLLocation(latitude: c.latitude, longitude: c.longitude).distance(from: here) < 150
+                }
+                if nearby { continue }
+                if let i = nameIndex(place.trimmedName) {
+                    if result[i].coordinate == nil { result[i] = place }
+                    continue
+                }
+            } else if place.trimmedName.isEmpty || nameIndex(place.trimmedName) != nil {
+                continue
             }
-            if !duplicate { result.append(ShiftPlace(entry: entry)) }
-            if result.count == limit { break }
+            if result.count < limit { result.append(place) }
+        }
+        for name in legacyNames where result.count < limit {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, nameIndex(trimmed) == nil { result.append(ShiftPlace(name: trimmed)) }
         }
         return result
+    }
+}
+
+/// Names from the retired saved job-site list (on-device only, never synced),
+/// kept as place suggestions so nobody loses the places they wrote down.
+enum LegacyPlaceNames {
+    static let key = "legacy_place_names_v1"
+
+    private struct OldJobSite: Decodable {
+        var name: String
+        var createdAt: Date?
+        var lastUsedAt: Date?
+    }
+
+    /// Converts the old `job_sites_v1` list (most recently used first) and
+    /// removes it; an unreadable list is left alone. Safe on every launch.
+    static func importJobSites(from oldKey: String, defaults: UserDefaults = .standard) {
+        guard let data = defaults.data(forKey: oldKey) else { return }
+        let dec = JSONDecoder()
+        dec.dateDecodingStrategy = .iso8601
+        if let sites = try? dec.decode([OldJobSite].self, from: data) {
+            func lastTouched(_ site: OldJobSite) -> Date { site.lastUsedAt ?? site.createdAt ?? .distantPast }
+            let names: [String] = sites
+                .sorted { lastTouched($0) > lastTouched($1) }
+                .map { site in
+                    let trimmed = site.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return String(trimmed.prefix(ShiftTemplate.locationNameLimit))
+                }
+                .filter { !$0.isEmpty }
+            var merged = load(defaults: defaults)
+            for name in names where !merged.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
+                merged.append(name)
+            }
+            defaults.set(merged, forKey: key)
+            defaults.removeObject(forKey: oldKey)
+        }
+    }
+
+    static func load(defaults: UserDefaults = .standard) -> [String] {
+        defaults.stringArray(forKey: key) ?? []
+    }
+
+    static func clear(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key)
     }
 }
 
@@ -274,6 +340,17 @@ struct ShiftLocationPickerSheet: View {
             .buttonStyle(PrimaryButtonStyle())
             .disabled(center == nil || isDragging)
 
+            if !trimmedName.isEmpty {
+                Button("Save name only, no pin") {
+                    Haptics.lightTap()
+                    place = ShiftPlace(name: trimmedName)
+                    dismiss()
+                }
+                .font(.system(.subheadline, weight: .semibold))
+                .foregroundStyle(AppColors.accent)
+                .frame(maxWidth: .infinity)
+            }
+
             if !place.isEmpty {
                 Button("Remove location", role: .destructive) {
                     Haptics.lightTap()
@@ -305,6 +382,8 @@ struct ShiftLocationPickerSheet: View {
             locator.requestIfNeeded()
         }
     }
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private func suggestName(_ suggestion: String) {
         guard name.trimmingCharacters(in: .whitespaces).isEmpty || name == autoName else { return }
@@ -383,7 +462,7 @@ struct ShiftLocationRow: View {
                 }
                 HStack(spacing: AppSpacing.xs) {
                     Image(systemName: "mappin.and.ellipse").foregroundStyle(AppColors.accent)
-                    Text(place.displayText ?? "Drop a pin for where you worked")
+                    Text(place.displayText ?? "Add where you worked")
                         .appText(.body)
                         .foregroundStyle(place.isEmpty ? AppColors.subtext : AppColors.text)
                         .lineLimit(2)

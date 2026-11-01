@@ -106,7 +106,7 @@ final class HoursStore: ObservableObject {
     private let payHistoryKey = "pay_history_v1"
     private let certificatesKey = "certificate_entries_v2"
     private let awardsKey = "award_entries_v1"
-    /// Retired (shifts use map pins); kept only to clear the old data.
+    /// Retired (shifts use map pins); read once to import names, then cleared.
     private let jobSitesKey = "job_sites_v1"
     private let shiftTemplatesKey = "shift_templates_v1"
     private let yearArchivesKey = "year_archives_v1"
@@ -145,8 +145,9 @@ final class HoursStore: ObservableObject {
            let profile = try? dec.decode(GamificationProfile.self, from: data) {
             gamificationProfile = profile
         }
-        // Job sites were retired for map pins; drop the old local list.
-        UserDefaults.standard.removeObject(forKey: jobSitesKey)
+        // Job sites were retired for map pins; keep their names as place
+        // suggestions, then drop the old local list.
+        LegacyPlaceNames.importJobSites(from: jobSitesKey)
         loadShiftTemplates()
         // NOTE: the legacy admin-level/prestige floor is deliberately NOT
         // restored from UserDefaults anymore. Nothing reads those overrides for
@@ -988,6 +989,7 @@ final class HoursStore: ObservableObject {
         UserDefaults.standard.removeObject(forKey: certificatesKey)
         UserDefaults.standard.removeObject(forKey: awardsKey)
         UserDefaults.standard.removeObject(forKey: jobSitesKey)
+        LegacyPlaceNames.clear()
         UserDefaults.standard.removeObject(forKey: yearArchivesKey)
         UserDefaults.standard.removeObject(forKey: gamificationKey)
         if let dir = certificatesDirectoryURL() {

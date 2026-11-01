@@ -144,4 +144,51 @@ final class ShiftPlaceTests: XCTestCase {
         XCTAssertFalse(place.isEmpty)
         XCTAssertEqual(place.displayText, "Old free-text site")
     }
+
+    private func entry(daysAgo: Double, name: String, lat: Double? = nil, lon: Double? = nil) -> WorkEntry {
+        let day = Date().addingTimeInterval(-daysAgo * 86_400)
+        return WorkEntry(date: day, start: day, end: day, breakMinutes: 0, notes: "",
+                         locationName: name, latitude: lat, longitude: lon)
+    }
+
+    func testRecentPlacesIncludeTypedNamesFromBeforePins() {
+        let places = HoursStore.recentPlaces(from: [
+            entry(daysAgo: 1, name: "Main Yard", lat: 53.5, lon: -113.5),
+            entry(daysAgo: 2, name: "North Shop"),
+            entry(daysAgo: 3, name: "north shop "),
+            entry(daysAgo: 4, name: ""),
+            entry(daysAgo: 5, name: "Gate 4", lat: 53.5005, lon: -113.5)
+        ], legacyNames: [], limit: 12)
+        // Typed name kept, case-insensitive duplicate and blank dropped, pin
+        // within 150 m of Main Yard folded into it.
+        XCTAssertEqual(places.map(\.trimmedName), ["Main Yard", "North Shop"])
+        XCTAssertNil(places[1].coordinate)
+    }
+
+    func testNameOnlyPlacePicksUpALaterPinForTheSameName() {
+        let places = HoursStore.recentPlaces(from: [
+            entry(daysAgo: 1, name: "North Shop"),
+            entry(daysAgo: 9, name: "North Shop", lat: 51, lon: -114)
+        ], legacyNames: ["north shop", "Old Job Site"], limit: 12)
+        XCTAssertEqual(places.map(\.trimmedName), ["North Shop", "Old Job Site"])
+        XCTAssertEqual(places[0].latitude, 51)
+    }
+
+    func testOldJobSitesImportAsNamesThenOldListIsRemoved() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "LegacyPlaceNamesTests"))
+        defaults.removePersistentDomain(forName: "LegacyPlaceNamesTests")
+        let json = """
+        [{"id":"a","name":"Shop","detail":"","iconName":"hammer","createdAt":"2026-01-01T00:00:00Z"},
+         {"id":"b","name":" Tower Crane ","detail":"Unit 3","iconName":"building.2",
+          "createdAt":"2026-01-02T00:00:00Z","lastUsedAt":"2026-09-01T00:00:00Z"}]
+        """
+        defaults.set(Data(json.utf8), forKey: "job_sites_v1")
+        LegacyPlaceNames.importJobSites(from: "job_sites_v1", defaults: defaults)
+        XCTAssertEqual(LegacyPlaceNames.load(defaults: defaults), ["Tower Crane", "Shop"])
+        XCTAssertNil(defaults.data(forKey: "job_sites_v1"))
+        // A second launch has nothing left to import and keeps the names.
+        LegacyPlaceNames.importJobSites(from: "job_sites_v1", defaults: defaults)
+        XCTAssertEqual(LegacyPlaceNames.load(defaults: defaults), ["Tower Crane", "Shop"])
+        defaults.removePersistentDomain(forName: "LegacyPlaceNamesTests")
+    }
 }
