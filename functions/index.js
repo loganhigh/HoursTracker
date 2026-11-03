@@ -2606,12 +2606,18 @@ exports.adminPublishAnnouncement = onCall(
       throw new HttpsError("invalid-argument", "title and message are required.");
     }
     const kind = request.data?.kind === "update" ? "update" : "info";
+    // The version an update prompt asks for; clients already on it skip it.
+    const version = String(request.data?.version || "").trim();
+    if (kind === "update" && !/^\d+(\.\d+){0,3}$/.test(version)) {
+      throw new HttpsError("invalid-argument", "An update needs the latest version, like 3.4.");
+    }
     const id = `ann_${Date.now()}`;
     await db.collection("announcements").doc("current").set({
       id,
       title,
       message,
       kind,
+      ...(kind === "update" ? { version } : {}),
       buttonTitle: kind === "update" ? "Update Now" : "Got it",
       createdAt: FieldValue.serverTimestamp(),
     });

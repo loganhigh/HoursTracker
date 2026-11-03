@@ -8,8 +8,8 @@ import FirebaseFirestore
 // The admin publishes one live announcement (`announcements/current`, written
 // only by the adminPublishAnnouncement callable). Each client checks the doc
 // on app open and shows it ONCE per announcement id — an "update now" prompt
-// that meets every user the next time they use the app, then stays out of the
-// way. Dismissing and updating both count as seen; re-publishing with a fresh
+// that meets every out-of-date user the next time they use the app, then
+// stays out of the way (see Announcement.isRelevant for who is skipped). Dismissing and updating both count as seen; re-publishing with a fresh
 // id re-prompts everyone.
 
 struct Announcement: Equatable {
@@ -21,6 +21,40 @@ struct Announcement: Equatable {
     let buttonTitle: String
 
     var isUpdatePrompt: Bool { kind == "update" }
+
+    /// Who an announcement is for. An update prompt names the version it
+    /// asks for, so anyone already on it (or newer) is skipped. And an
+    /// account created after the announcement went out never sees it: it
+    /// signed up on a current build and the news is old. This is what keeps
+    /// a brand-new user from landing on a pop-up the moment they sign up.
+    static func isRelevant(
+        kind: String,
+        targetVersion: String?,
+        publishedAt: Date?,
+        installedVersion: String,
+        accountCreatedAt: Date?
+    ) -> Bool {
+        if let publishedAt, let accountCreatedAt, accountCreatedAt >= publishedAt {
+            return false
+        }
+        if kind == "update", let targetVersion, !targetVersion.isEmpty,
+           !isVersion(installedVersion, olderThan: targetVersion) {
+            return false
+        }
+        return true
+    }
+
+    /// Numeric dotted-version compare ("3.4" < "3.10"); missing parts are 0.
+    static func isVersion(_ lhs: String, olderThan rhs: String) -> Bool {
+        let a = lhs.split(separator: ".").map { Int($0) ?? 0 }
+        let b = rhs.split(separator: ".").map { Int($0) ?? 0 }
+        for i in 0..<max(a.count, b.count) {
+            let x = i < a.count ? a[i] : 0
+            let y = i < b.count ? b[i] : 0
+            if x != y { return x < y }
+        }
+        return false
+    }
 
     /// The admin composes one message for everyone; `{name}` (or `{username}`,
     /// any case) is filled in per device with the user's own username so it
@@ -79,6 +113,19 @@ final class AnnouncementService: ObservableObject {
                       let title = data["title"] as? String,
                       let message = data["message"] as? String else { return }
                 guard id != UserDefaults.standard.string(forKey: Self.seenKey) else { return }
+                let kind = data["kind"] as? String ?? "info"
+                let installed = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+                guard Announcement.isRelevant(
+                    kind: kind,
+                    targetVersion: data["version"] as? String,
+                    publishedAt: (data["createdAt"] as? Timestamp)?.dateValue(),
+                    installedVersion: installed,
+                    accountCreatedAt: Auth.auth().currentUser?.metadata.creationDate
+                ) else {
+                    // Not for this user — record it so it's never re-checked.
+                    UserDefaults.standard.set(id, forKey: Self.seenKey)
+                    return
+                }
                 // Same key the profile snapshot publishes as the user's name —
                 // it holds the claimed username on every build since usernames.
                 let name = UserDefaults.standard.string(forKey: "profile_display_name")
@@ -86,7 +133,7 @@ final class AnnouncementService: ObservableObject {
                     id: id,
                     title: Announcement.personalized(title, name: name),
                     message: Announcement.personalized(message, name: name),
-                    kind: data["kind"] as? String ?? "info",
+                    kind: kind,
                     buttonTitle: data["buttonTitle"] as? String ?? "Got it"
                 )
             } catch {
