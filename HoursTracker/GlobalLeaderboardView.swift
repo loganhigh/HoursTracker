@@ -11,7 +11,11 @@ import SwiftUI
 struct GlobalLeaderboardView: View {
     @ObservedObject private var topTrackers = TopTrackersService.shared
     @ObservedObject private var presence = PresenceService.shared
-    @EnvironmentObject private var authService: AuthService
+    /// Observed directly, not via @EnvironmentObject: 3.4 (46) crashed when
+    /// SwiftUI evaluated this board's body mid-push (a status-bar preference
+    /// query during the navigation transition) before the environment
+    /// reached it. The shared instance is the one the app injects anyway.
+    @ObservedObject private var authService = AuthService.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
