@@ -1533,6 +1533,10 @@ struct AdminAnnouncementView: View {
     @State private var title = "Update available!"
     @State private var message = "A new version of Hour Tracker is out with new features and fixes. Update now to get the latest."
     @State private var isUpdatePrompt = true
+    /// The version an update prompt asks for — users already on it or newer
+    /// never see the prompt. Defaults to this (admin's) build; change it when
+    /// you're on a TestFlight build that isn't live in the App Store yet.
+    @State private var targetVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     @State private var alsoSendPush = true
     @State private var isPublishing = false
     @State private var isClearing = false
@@ -1551,6 +1555,8 @@ struct AdminAnnouncementView: View {
                     Text("Update button (opens the App Store)")
                 }
                 if isUpdatePrompt {
+                    TextField("Latest App Store version (e.g. 3.4)", text: $targetVersion)
+                        .keyboardType(.decimalPad)
                     Toggle(isOn: $alsoSendPush) {
                         Text("Also push \"New Update Available!\"")
                     }
@@ -1558,7 +1564,7 @@ struct AdminAnnouncementView: View {
             } header: {
                 Text("Compose")
             } footer: {
-                Text("Only the latest announcement is ever shown: publishing replaces the previous one. It shows once to every user the next time they open the app — a card like the country-flag prompt, with \(isUpdatePrompt ? "an Update Now button that opens the App Store listing" : "a Got it button") and Not Now. Publishing again later re-prompts everyone. Write {name} anywhere in the title or message and each user sees their own username there.")
+                Text("Only the latest announcement is ever shown: publishing replaces the previous one. It shows once to every user the next time they open the app — except accounts created after you publish, and (for an update) anyone already on the latest version — a card like the country-flag prompt, with \(isUpdatePrompt ? "an Update Now button that opens the App Store listing" : "a Got it button") and Not Now. Publishing again later re-prompts everyone. Write {name} anywhere in the title or message and each user sees their own username there.")
             }
             .listRowBackground(AppTheme.Colors.card)
 
@@ -1574,7 +1580,8 @@ struct AdminAnnouncementView: View {
                 }
                 .disabled(isPublishing || isClearing
                           || title.trimmingCharacters(in: .whitespaces).isEmpty
-                          || message.trimmingCharacters(in: .whitespaces).isEmpty)
+                          || message.trimmingCharacters(in: .whitespaces).isEmpty
+                          || (isUpdatePrompt && targetVersion.trimmingCharacters(in: .whitespaces).isEmpty))
 
                 Button(role: .destructive) {
                     Task { await clear() }
@@ -1611,6 +1618,7 @@ struct AdminAnnouncementView: View {
                 "title": title.trimmingCharacters(in: .whitespaces),
                 "message": message.trimmingCharacters(in: .whitespaces),
                 "kind": isUpdatePrompt ? "update" : "info",
+                "version": isUpdatePrompt ? targetVersion.trimmingCharacters(in: .whitespaces) : "",
             ])
             var status = "Published. Every user sees it on their next app open."
             if isUpdatePrompt && alsoSendPush {
