@@ -92,66 +92,6 @@ struct GlobalLeaderboardHeader: View {
     }
 }
 
-// MARK: - Board chat preview
-
-/// The latest few chat lines on the board itself, opening the full chat.
-struct GlobalChatPreviewCard: View {
-    @ObservedObject private var chat = ChatService.shared
-    let onOpen: () -> Void
-
-    private var latest: [ChatMessage] { Array(chat.visibleGlobalMessages.suffix(3)) }
-
-    var body: some View {
-        Button {
-            Haptics.lightTap()
-            onOpen()
-        } label: {
-            VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                HStack {
-                    Label("Board Chat", systemImage: "bubble.left.and.bubble.right.fill")
-                        .font(AppTypography.headline)
-                        .foregroundStyle(AppColors.text)
-                    Spacer()
-                    Text("Join")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(AppColors.accent)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(AppColors.accent)
-                }
-                if latest.isEmpty {
-                    Text("Cheer each other on — tag anyone with their @username.")
-                        .font(AppTypography.subheadline)
-                        .foregroundStyle(AppColors.subtext)
-                } else {
-                    ForEach(latest) { message in
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text("@\(message.username)")
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(AppColors.text)
-                            Text(message.text)
-                                .font(.subheadline)
-                                .foregroundStyle(AppColors.subtext)
-                                .lineLimit(1)
-                        }
-                    }
-                }
-            }
-            .padding(AppSpacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                    .fill(AppColors.card)
-                    .overlay(RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                        .stroke(AppColors.accent.opacity(0.35), lineWidth: 1))
-            )
-        }
-        .buttonStyle(.plain)
-        .onAppear { chat.startGlobal() }
-        .onDisappear { chat.stopGlobal() }
-    }
-}
-
 // MARK: - Hero rank card
 
 struct GlobalRankHeroCard: View {

@@ -379,7 +379,7 @@ final class MascotScreenDumpTests: XCTestCase {
         }
     }
 
-    /// Board chat, the board's chat card and the DM inbox with stand-in messages.
+    /// Board chat and the DM inbox with stand-in messages.
     func testDumpChatScreens() throws {
         guard let dir = ProcessInfo.processInfo.environment["MASCOT_DUMP_DIR"] else {
             throw XCTSkip("Set MASCOT_DUMP_DIR to dump chat renders")
@@ -407,7 +407,6 @@ final class MascotScreenDumpTests: XCTestCase {
         ])
         let screens: [(String, AnyView)] = [
             ("chat", AnyView(NavigationStack { GlobalChatView() })),
-            ("chat-card", AnyView(ScrollView { GlobalChatPreviewCard {}.padding() }.background(AppColors.bg))),
             ("inbox", AnyView(NavigationStack { DirectInboxView() })),
         ]
         for (name, view) in screens {

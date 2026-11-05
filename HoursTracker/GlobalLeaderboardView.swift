@@ -172,9 +172,6 @@ struct GlobalLeaderboardView: View {
                     )
                     .cardAppear(index: 2, group: "globalBoard")
 
-                    GlobalChatPreviewCard { showingChat = true }
-                        .cardAppear(index: 3, group: "globalBoard")
-
                     if showsPodium {
                         GlobalPodiumRow(
                             entries: displayTrackers,
