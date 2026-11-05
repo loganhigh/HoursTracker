@@ -306,7 +306,7 @@ struct HomeStatTriplet: View {
                 JobPickerMenu(store: store, selection: store.chequeJobScope, includesAll: true, title: "Cheque") {
                     store.chequeJobScope = $0
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
             HStack(spacing: 10) {
                 HomeStatTile(icon: "clock", band: "WEEK", label: "This week", hours: weekHours, tone: 0)
