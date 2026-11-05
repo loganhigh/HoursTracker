@@ -63,7 +63,7 @@ struct GlobalChatView: View {
                         .padding(.horizontal, AppSpacing.md)
                         .transition(.opacity)
                 }
-                ChatComposer(text: $draft, placeholder: "Cheer someone on… use @ to tag",
+                ChatComposer(text: $draft, placeholder: "Network with others! Use @ to tag",
                              suggestions: tagSuggestions, isSending: isSending,
                              isFocused: $composerFocused, onSend: send)
             }
