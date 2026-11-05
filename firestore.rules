@@ -124,6 +124,50 @@ service cloud.firestore {
     // their own suggestion (shape-checked); nobody can read, edit or delete
     // them from a client — the developer reads them via the Admin SDK and
     // gets a push for each (notifyAdminOnSuggestion).
+    // Global board chat: everyone signed in reads; only the
+    // sendGlobalChatMessage callable writes. Authors (and the admin) may
+    // delete a message.
+    match /globalChat/{messageId} {
+      allow read: if isSignedIn();
+      allow create, update: if false;
+      allow delete: if isSignedIn()
+        && (resource.data.uid == request.auth.uid
+          || request.auth.uid == 'msUcdbAbaAaS4HDj52CMs0Vzw8j2');
+    }
+
+    // Direct messages: the two participants read. Messages come only from
+    // the sendDirectMessage callable; a participant may only zero their own
+    // unread count.
+    match /dmThreads/{threadId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create, delete: if false;
+      allow update: if isSignedIn()
+        && request.auth.uid in resource.data.participants
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unread'])
+        && request.resource.data.unread.diff(resource.data.unread).affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.unread[request.auth.uid] == 0;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/dmThreads/$(threadId)).data.participants;
+        allow write: if false;
+      }
+    }
+
+    // Reports of a chat message or person, reviewed by the developer
+    // (notifyAdminOnChatReport pushes each one).
+    match /chatReports/{reportId} {
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['reporterUid', 'reportedUid', 'reportedUsername', 'messageId', 'threadId', 'text', 'reason', 'createdAt'])
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.reportedUid is string
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 600
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() <= 100;
+      allow read: if isSignedIn() && request.auth.uid == 'msUcdbAbaAaS4HDj52CMs0Vzw8j2';
+    }
+
     match /featureSuggestions/{docId} {
       allow create: if isSignedIn()
         && request.resource.data.keys().hasOnly(['uid', 'username', 'text', 'appVersion', 'createdAt'])
@@ -212,6 +256,11 @@ service cloud.firestore {
       match /feed/{feedDoc} {
         allow read: if request.auth != null && request.auth.uid == uid;
         allow write: if false;
+      }
+
+      // People this user blocked in chat and DMs (read by the chat callables).
+      match /blockedUsers/{otherUid} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
       }
 
       match /deviceTokens/{deviceId} {

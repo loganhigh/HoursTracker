@@ -54,6 +54,21 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
                 NotificationRouter.shared.openGlobalLeaderboard = true
             }
         }
+        if let kind = userInfo["kind"] as? String, kind == "chatMention" || kind == "directMessage" {
+            let fromUid = userInfo["fromUid"] as? String
+            let title = response.notification.request.content.title
+            Task { @MainActor in
+                let router = NotificationRouter.shared
+                if kind == "chatMention" {
+                    router.openGlobalChat = true
+                } else if let fromUid {
+                    // The push title is the sender's "@handle".
+                    let handle = title.hasPrefix("@") ? String(title.dropFirst()) : title
+                    router.openDirectThread = DirectThreadTarget(otherUid: fromUid, otherUsername: handle)
+                }
+                router.openGlobalLeaderboard = true
+            }
+        }
         if let kind = userInfo["kind"] as? String, kind == "appUpdate" {
             // "New Update Available!" — straight to the App Store listing.
             Task { @MainActor in
@@ -74,6 +89,10 @@ final class NotificationRouter: ObservableObject {
     /// Raised by a leaderboard-rank push; HoursHomeView presents the global
     /// board and lowers it.
     @Published var openGlobalLeaderboard = false
+    /// Raised with the board by a chat-mention push; the board opens the chat.
+    @Published var openGlobalChat = false
+    /// Set with the board by a direct-message push; the board opens the thread.
+    @Published var openDirectThread: DirectThreadTarget?
     private init() {}
 }
 

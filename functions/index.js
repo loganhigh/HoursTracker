@@ -32,6 +32,7 @@ const {
 const rankMoves = require("./src/leaderboard/rankMoves");
 const { staleWriteDecision, stampToMillis } = require("./src/stats/entryWriteGuard");
 const usernames = require("./src/social/usernames");
+const chat = require("./src/social/chat");
 const adminAnalytics = require("./src/admin/analytics");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
@@ -2787,6 +2788,179 @@ exports.backfillFriendships = onCall(
     }
 
     return { ok: true, backfilled };
+  }
+);
+
+// MARK: - Board chat & direct messages
+//
+// globalChat/{id}: one room everyone on the global board shares. No push for
+// a plain message; tagging someone's @username pushes just them.
+// dmThreads/{a_b} (+ /messages): one private thread per pair, pushed to the
+// recipient. Both are written only here (rules deny client writes) so the
+// filter, rate limit and block checks can't be skipped. Blocks live at
+// users/{uid}/blockedUsers/{otherUid}, written by the blocker's own client.
+
+/** The sender's handle and board look, or an error when they have no username. */
+async function chatSender(uid) {
+  const [userSnap, profileSnap, banSnap] = await Promise.all([
+    db.collection("users").doc(uid).get(),
+    db.collection("publicProfiles").doc(uid).get(),
+    db.collection("chatBans").doc(uid).get(),
+  ]);
+  if (banSnap.exists) {
+    throw new HttpsError("permission-denied", "You can't send messages right now.");
+  }
+  const username = usernames.normalizeUsername(userSnap.data()?.username);
+  if (!username) {
+    throw new HttpsError("failed-precondition", "Pick a username first so people know who's talking.");
+  }
+  const profile = profileSnap.data() || {};
+  return {
+    username,
+    prestige: Number(profile.prestige) || 0,
+    photoURL: typeof profile.photoURL === "string" ? profile.photoURL : "",
+  };
+}
+
+/** Refuses a send within MIN_SECONDS_BETWEEN_MESSAGES of the previous one. */
+async function enforceChatRateLimit(uid) {
+  const ref = db.collection("chatRateLimits").doc(uid);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const last = snap.data()?.lastSentAt?.toMillis?.() || 0;
+    if (Date.now() - last < chat.MIN_SECONDS_BETWEEN_MESSAGES * 1000) {
+      throw new HttpsError("resource-exhausted", "You're sending messages too fast — wait a moment.");
+    }
+    tx.set(ref, { lastSentAt: FieldValue.serverTimestamp() });
+  });
+}
+
+async function hasBlocked(blockerUid, otherUid) {
+  const snap = await db.collection("users").doc(blockerUid)
+    .collection("blockedUsers").doc(otherUid).get();
+  return snap.exists;
+}
+
+function validatedChatText(raw) {
+  const text = chat.cleanMessage(raw);
+  const problem = chat.messageProblem(text);
+  if (problem) throw new HttpsError("invalid-argument", problem);
+  return text;
+}
+
+exports.sendGlobalChatMessage = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+    const uid = request.auth.uid;
+    const text = validatedChatText(request.data?.text);
+    const sender = await chatSender(uid);
+    await enforceChatRateLimit(uid);
+
+    // Resolve tags to people; unknown handles stay plain text.
+    const mentioned = [];
+    for (const name of chat.extractMentions(text)) {
+      const reservation = await db.collection("usernames").doc(name).get();
+      const mentionUid = reservation.data()?.uid;
+      if (mentionUid && mentionUid !== uid && !mentioned.includes(mentionUid)) mentioned.push(mentionUid);
+    }
+
+    const ref = await db.collection("globalChat").add({
+      uid,
+      username: sender.username,
+      prestige: sender.prestige,
+      photoURL: sender.photoURL,
+      text,
+      mentions: mentioned,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    await Promise.all(mentioned.map(async (targetUid) => {
+      if (await hasBlocked(targetUid, uid)) return;
+      const targetSnap = await db.collection("users").doc(targetUid).get();
+      await sendPushToUser(targetUid, targetSnap.data(), {
+        title: `@${sender.username} mentioned you`,
+        body: chat.pushPreview(text),
+        dataPayload: { type: "chat_mention", kind: "chatMention", messageId: ref.id },
+      });
+    }));
+
+    return { id: ref.id };
+  }
+);
+
+exports.sendDirectMessage = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+    const uid = request.auth.uid;
+    const text = validatedChatText(request.data?.text);
+
+    let toUid = typeof request.data?.toUid === "string" ? request.data.toUid : "";
+    if (!toUid) {
+      const name = usernames.normalizeUsername(request.data?.toUsername);
+      if (!name || usernames.usernameProblem(name)) {
+        throw new HttpsError("invalid-argument", "Enter a valid username.");
+      }
+      toUid = (await db.collection("usernames").doc(name).get()).data()?.uid || "";
+    }
+    if (!toUid) throw new HttpsError("not-found", "No one found with that username.");
+    if (toUid === uid) throw new HttpsError("invalid-argument", "You can't message yourself.");
+
+    const sender = await chatSender(uid);
+    const targetSnap = await db.collection("users").doc(toUid).get();
+    const targetUsername = usernames.normalizeUsername(targetSnap.data()?.username);
+    if (!targetSnap.exists || !targetUsername) {
+      throw new HttpsError("not-found", "No one found with that username.");
+    }
+    // Same answer either way, so a blocked person can't tell who blocked whom.
+    if (await hasBlocked(toUid, uid) || await hasBlocked(uid, toUid)) {
+      throw new HttpsError("permission-denied", "You can't message this person.");
+    }
+    await enforceChatRateLimit(uid);
+
+    const threadId = chat.directThreadId(uid, toUid);
+    const threadRef = db.collection("dmThreads").doc(threadId);
+    const messageRef = threadRef.collection("messages").doc();
+    const batch = db.batch();
+    batch.set(messageRef, {
+      uid,
+      text,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    batch.set(threadRef, {
+      participants: [uid, toUid].sort(),
+      usernames: { [uid]: sender.username, [toUid]: targetUsername },
+      lastText: chat.pushPreview(text, 120),
+      lastSenderUid: uid,
+      lastAt: FieldValue.serverTimestamp(),
+      unread: { [toUid]: FieldValue.increment(1), [uid]: 0 },
+    }, { merge: true });
+    await batch.commit();
+
+    await sendPushToUser(toUid, targetSnap.data(), {
+      title: `@${sender.username}`,
+      body: chat.pushPreview(text),
+      dataPayload: { type: "direct_message", kind: "directMessage", threadId, fromUid: uid },
+    });
+
+    return { threadId, id: messageRef.id };
+  }
+);
+
+/** Push each chat report to the developer so it can be reviewed quickly. */
+exports.notifyAdminOnChatReport = onDocumentCreated(
+  { document: "chatReports/{reportId}", region: "us-central1" },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    const adminSnap = await db.collection("users").doc(ADMIN_UID).get();
+    const who = data.reportedUsername ? `@${data.reportedUsername}` : "a message";
+    await sendPushToUser(ADMIN_UID, adminSnap.data(), {
+      title: `🚩 Chat report: ${who}`,
+      body: chat.pushPreview(data.text || data.reason || ""),
+      dataPayload: { type: "admin_chat_report", reportId: event.params.reportId },
+    });
   }
 );
 

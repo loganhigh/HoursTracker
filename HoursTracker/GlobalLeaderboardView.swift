@@ -22,6 +22,11 @@ struct GlobalLeaderboardView: View {
     @ObservedObject private var verified = VerifiedStatusService.shared
 
     @State private var showingProofSheet = false
+    @ObservedObject private var chat = ChatService.shared
+    @ObservedObject private var notificationRouter = NotificationRouter.shared
+    @State private var showingChat = false
+    @State private var showingInbox = false
+    @State private var dmTarget: DirectThreadTarget?
     /// Tracker whose public glimpse sheet is open (any row or podium slot).
     @State private var selectedTracker: TopTracker?
 
@@ -71,7 +76,12 @@ struct GlobalLeaderboardView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            GlobalLeaderboardHeader(onBack: { dismiss() })
+            GlobalLeaderboardHeader(
+                onBack: { dismiss() },
+                unreadMessages: chat.unreadDirectCount,
+                onChat: { showingChat = true },
+                onMessages: { showingInbox = true }
+            )
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.bottom, AppSpacing.sm)
 
@@ -87,9 +97,21 @@ struct GlobalLeaderboardView: View {
             )
         }
         .sheet(item: $selectedTracker) { tracker in
-            PublicProfileSheet(tracker: tracker, currentUid: myUid)
-                .environmentObject(authService)
+            PublicProfileSheet(tracker: tracker, currentUid: myUid) { other in
+                selectedTracker = nil
+                dmTarget = DirectThreadTarget(otherUid: other.uid, otherUsername: Username.normalize(other.name))
+            }
+            .environmentObject(authService)
         }
+        .navigationDestination(isPresented: $showingChat) { GlobalChatView() }
+        .navigationDestination(isPresented: $showingInbox) { DirectInboxView() }
+        .navigationDestination(item: $dmTarget) { DirectThreadView(target: $0) }
+        .onAppear {
+            chat.startInbox()
+            consumeChatRoute()
+        }
+        .onChange(of: notificationRouter.openGlobalChat) { _, _ in consumeChatRoute() }
+        .onChange(of: notificationRouter.openDirectThread) { _, _ in consumeChatRoute() }
         .task {
             await topTrackers.ensureFullLeaderboardLoaded()
         }
@@ -103,6 +125,19 @@ struct GlobalLeaderboardView: View {
                 await presence.refreshLastActive()
                 try? await Task.sleep(nanoseconds: 45_000_000_000)
             }
+        }
+    }
+
+    /// A tapped mention or message push lands here (the router opened the
+    /// board first); open the chat or the thread on top.
+    private func consumeChatRoute() {
+        if notificationRouter.openGlobalChat {
+            notificationRouter.openGlobalChat = false
+            showingChat = true
+        }
+        if let target = notificationRouter.openDirectThread {
+            notificationRouter.openDirectThread = nil
+            dmTarget = target
         }
     }
 
@@ -136,6 +171,9 @@ struct GlobalLeaderboardView: View {
                         activeNow: presence.activeNowCount
                     )
                     .cardAppear(index: 2, group: "globalBoard")
+
+                    GlobalChatPreviewCard { showingChat = true }
+                        .cardAppear(index: 3, group: "globalBoard")
 
                     if showsPodium {
                         GlobalPodiumRow(

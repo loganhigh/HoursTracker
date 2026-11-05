@@ -379,6 +379,44 @@ final class MascotScreenDumpTests: XCTestCase {
         }
     }
 
+    /// Board chat, the board's chat card and the DM inbox with stand-in messages.
+    func testDumpChatScreens() throws {
+        guard let dir = ProcessInfo.processInfo.environment["MASCOT_DUMP_DIR"] else {
+            throw XCTSkip("Set MASCOT_DUMP_DIR to dump chat renders")
+        }
+        let now = Date()
+        func message(_ id: String, _ name: String, _ prestige: Int, _ text: String, minutesAgo: Double, mentions: [String] = []) -> ChatMessage {
+            ChatMessage(id: id, uid: "u-\(name)", username: name, prestige: prestige, photoURL: "", text: text,
+                        mentions: mentions, createdAt: now.addingTimeInterval(-minutesAgo * 60))
+        }
+        let savedUsername = FriendsService.shared.myUsername
+        FriendsService.shared.myUsername = "logan"
+        defer { FriendsService.shared.myUsername = savedUsername }
+        ChatService.shared.seedForPreview(messages: [
+            message("1", "jacob", 3, "Just closed out a 12 hour shift 💪 who else is grinding today?", minutesAgo: 95),
+            message("2", "mariusz", 1, "Same here, 6am start. Coffee is carrying me", minutesAgo: 80),
+            message("3", "sarah_k", 0, "@jacob absolute machine. Keep it up!", minutesAgo: 62),
+            message("4", "joey", 2, "Hit 1,000 hours lifetime today 🎉", minutesAgo: 30),
+            message("5", "mariusz", 1, "@joey huge! Congrats man", minutesAgo: 24),
+            message("6", "jacob", 3, "@logan you coming for #1 this month or what 😂", minutesAgo: 6, mentions: [AuthService.shared.user?.uid ?? ""]),
+        ], threads: [
+            DirectThread(id: "t1", otherUid: "u-jacob", otherUsername: "jacob", lastText: "See you on site tomorrow",
+                         lastSenderUid: "u-jacob", lastAt: now.addingTimeInterval(-600), unread: 2),
+            DirectThread(id: "t2", otherUid: "u-joey", otherUsername: "joey", lastText: "Thanks!",
+                         lastSenderUid: "me", lastAt: now.addingTimeInterval(-86_400), unread: 0),
+        ])
+        let screens: [(String, AnyView)] = [
+            ("chat", AnyView(NavigationStack { GlobalChatView() })),
+            ("chat-card", AnyView(ScrollView { GlobalChatPreviewCard {}.padding() }.background(AppColors.bg))),
+            ("inbox", AnyView(NavigationStack { DirectInboxView() })),
+        ]
+        for (name, view) in screens {
+            let data = Self.windowSnapshot(view.environmentObject(AuthService.shared),
+                                           size: CGSize(width: 390, height: 844), settle: 2)
+            try data?.write(to: URL(fileURLWithPath: "\(dir)/chat-\(name).png"))
+        }
+    }
+
     /// Home across prestige tiers and at an accessibility text size.
     func testDumpHomeVariants() throws {
         guard let dir = ProcessInfo.processInfo.environment["MASCOT_DUMP_DIR"] else {

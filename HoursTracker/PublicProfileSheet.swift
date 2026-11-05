@@ -71,6 +71,8 @@ struct PublicProfileGlimpse: Equatable {
 struct PublicProfileSheet: View {
     let tracker: TopTracker
     let currentUid: String?
+    /// Opens a direct message thread with them (nil hides the button).
+    var onMessage: ((TopTracker) -> Void)? = nil
 
     @ObservedObject private var friendsService = FriendsService.shared
     @State private var glimpse: PublicProfileGlimpse?
@@ -104,6 +106,15 @@ struct PublicProfileSheet: View {
                         badgesCard(glimpse.topBadges)
                     }
                     relationshipFooter
+                    if !isMe, let onMessage {
+                        Button {
+                            Haptics.lightTap()
+                            onMessage(tracker)
+                        } label: {
+                            Label("Message \(handle)", systemImage: "paperplane.fill")
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                    }
                 }
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.top, AppSpacing.lg)

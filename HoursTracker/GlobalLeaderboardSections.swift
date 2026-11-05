@@ -36,6 +36,9 @@ enum GlobalHoursFormat {
 
 struct GlobalLeaderboardHeader: View {
     let onBack: () -> Void
+    var unreadMessages: Int = 0
+    var onChat: (() -> Void)? = nil
+    var onMessages: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .center, spacing: AppSpacing.sm) {
@@ -57,7 +60,95 @@ struct GlobalLeaderboardHeader: View {
             .accessibilityLabel("Back")
 
             Spacer(minLength: 0)
+
+            if let onChat {
+                headerIcon("bubble.left.and.bubble.right.fill", label: "Board chat", action: onChat)
+            }
+            if let onMessages {
+                headerIcon("paperplane.fill", label: unreadMessages > 0 ? "Messages, \(unreadMessages) unread" : "Messages",
+                           badge: unreadMessages, action: onMessages)
+            }
         }
+    }
+
+    private func headerIcon(_ icon: String, label: String, badge: Int = 0, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.lightTap()
+            action()
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(AppColors.text)
+                .frame(width: 40, height: 40)
+                .background(
+                    Circle()
+                        .fill(AppColors.card.opacity(0.7))
+                        .overlay(Circle().stroke(AppColors.stroke, lineWidth: 0.5))
+                )
+                .overlay(alignment: .topTrailing) { UnreadBadge(count: badge) }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+}
+
+// MARK: - Board chat preview
+
+/// The latest few chat lines on the board itself, opening the full chat.
+struct GlobalChatPreviewCard: View {
+    @ObservedObject private var chat = ChatService.shared
+    let onOpen: () -> Void
+
+    private var latest: [ChatMessage] { Array(chat.visibleGlobalMessages.suffix(3)) }
+
+    var body: some View {
+        Button {
+            Haptics.lightTap()
+            onOpen()
+        } label: {
+            VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                HStack {
+                    Label("Board Chat", systemImage: "bubble.left.and.bubble.right.fill")
+                        .font(AppTypography.headline)
+                        .foregroundStyle(AppColors.text)
+                    Spacer()
+                    Text("Join")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(AppColors.accent)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(AppColors.accent)
+                }
+                if latest.isEmpty {
+                    Text("Cheer each other on — tag anyone with their @username.")
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(AppColors.subtext)
+                } else {
+                    ForEach(latest) { message in
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text("@\(message.username)")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(AppColors.text)
+                            Text(message.text)
+                                .font(.subheadline)
+                                .foregroundStyle(AppColors.subtext)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            }
+            .padding(AppSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                    .fill(AppColors.card)
+                    .overlay(RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                        .stroke(AppColors.accent.opacity(0.35), lineWidth: 1))
+            )
+        }
+        .buttonStyle(.plain)
+        .onAppear { chat.startGlobal() }
+        .onDisappear { chat.stopGlobal() }
     }
 }
 
