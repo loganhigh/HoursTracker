@@ -44,6 +44,10 @@ struct CompanyProfileView: View {
 
                     field(title: "Occupation", text: $occupation, placeholder: "e.g. Asphalt / Concrete / Foreman")
 
+                    if !jobTitles.isEmpty {
+                        jobTitlePicker
+                    }
+
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Hourly Rate (optional)")
                             .font(AppTypography.subheadline.weight(.semibold))
@@ -156,6 +160,54 @@ struct CompanyProfileView: View {
                     startDate: start
                 )
             }
+        }
+    }
+
+    /// Named jobs from Settings → Jobs (an unrenamed "Main job" isn't a title).
+    private var jobTitles: [String] {
+        guard let store else { return [] }
+        var seen = Set<String>()
+        return store.jobs
+            .filter { $0.id != JobProfile.primaryID || !store.paySettings.primaryJobName.trimmingCharacters(in: .whitespaces).isEmpty }
+            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+    }
+
+    /// One tap to show one of your jobs as the title on the global board.
+    private var jobTitlePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Show one of your jobs")
+                .font(AppTypography.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.Colors.faint)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(jobTitles, id: \.self) { title in
+                        let selected = occupation.trimmingCharacters(in: .whitespacesAndNewlines)
+                            .caseInsensitiveCompare(title) == .orderedSame
+                        Button {
+                            Haptics.lightTap()
+                            occupation = String(title.prefix(80))
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: selected ? "checkmark" : "briefcase.fill")
+                                    .font(.system(size: 11, weight: .bold))
+                                Text(title)
+                                    .font(AppTypography.subheadline.weight(.semibold))
+                                    .lineLimit(1)
+                            }
+                            .foregroundStyle(selected ? AppColors.textOnAccent : AppColors.accent)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Capsule().fill(selected ? AppColors.accent : AppColors.accentMuted))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(selected ? .isSelected : [])
+                    }
+                }
+            }
+            Text("This is the title under your name on the global leaderboard.")
+                .font(AppTypography.caption.weight(.medium))
+                .foregroundStyle(AppTheme.Colors.faint)
         }
     }
 
