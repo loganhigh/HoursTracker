@@ -35,12 +35,14 @@
 		7A0001D52F31000100000022 /* MascotAssetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001D42F31000100000022 /* MascotAssetTests.swift */; };
 		7A0001D72F31000100000022 /* MascotScreenDumpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001D62F31000100000022 /* MascotScreenDumpTests.swift */; };
 		7A0001D92F31000100000023 /* WatchMessagesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001D82F31000100000023 /* WatchMessagesTests.swift */; };
+		7A0001DB2F31000100000024 /* JobsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001DA2F31000100000024 /* JobsTests.swift */; };
 		FB004MSG2F90000100000004B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = FB004MSG2F90000100000004 /* FirebaseMessaging */; };
 		FB005STG2F90000100000005B /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = FB005STG2F90000100000005 /* FirebaseStorage */; };
 		FB006FUN2F90000100000006B /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = FB006FUN2F90000100000006 /* FirebaseFunctions */; };
 		GID001SIG2F90000100000005B /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = GID001SIG2F90000100000005 /* GoogleSignIn */; };
 		RIV001RT2FA0000100000001B /* RiveRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = RIV001RT2FA0000100000001 /* RiveRuntime */; };
 		7B0001AD2F4000010000000D /* HoursTrackerWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 7B0001A12F40000100000001 /* HoursTrackerWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7C0001AD2F5000010000000D /* HoursTrackerWatchWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7C0001A12F50000100000001 /* HoursTrackerWatchWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -65,6 +67,13 @@
 			remoteGlobalIDString = 7B0001A72F40000100000007;
 			remoteInfo = HoursTrackerWatch;
 		};
+		7C0001AB2F5000010000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 39EC399D2F20CA7D00130B56 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7C0001A72F50000100000007;
+			remoteInfo = HoursTrackerWatchWidgetExtension;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -88,6 +97,17 @@
 				7B0001AD2F4000010000000D /* HoursTrackerWatch.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7C0001AE2F5000010000000E /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				7C0001AD2F5000010000000D /* HoursTrackerWatchWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -121,7 +141,9 @@
 		7A0001D42F31000100000022 /* MascotAssetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotAssetTests.swift; sourceTree = "<group>"; };
 		7A0001D62F31000100000022 /* MascotScreenDumpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotScreenDumpTests.swift; sourceTree = "<group>"; };
 		7A0001D82F31000100000023 /* WatchMessagesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchMessagesTests.swift; sourceTree = "<group>"; };
+		7A0001DA2F31000100000024 /* JobsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobsTests.swift; sourceTree = "<group>"; };
 		7B0001A12F40000100000001 /* HoursTrackerWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HoursTrackerWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7C0001A12F50000100000001 /* HoursTrackerWatchWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HoursTrackerWatchWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -139,6 +161,13 @@
 				Info.plist,
 			);
 			target = 39EC39A42F20CA7D00130B56 /* HoursTracker */;
+		};
+		7C0001A32F50000100000003 /* Exceptions for "HoursTrackerWatchWidget" folder in "HoursTrackerWatchWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 7C0001A72F50000100000007 /* HoursTrackerWatchWidgetExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -172,6 +201,14 @@
 		7B0001A32F40000100000003 /* WatchShared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = WatchShared;
+			sourceTree = "<group>";
+		};
+		7C0001A22F50000100000002 /* HoursTrackerWatchWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7C0001A32F50000100000003 /* Exceptions for "HoursTrackerWatchWidget" folder in "HoursTrackerWatchWidgetExtension" target */,
+			);
+			path = HoursTrackerWatchWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -214,6 +251,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7C0001A52F50000100000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -236,6 +280,7 @@
 				399C69222F71C97F00AE7851 /* HoursTrackerWidget */,
 				7B0001A22F40000100000002 /* HoursTrackerWatch */,
 				7B0001A32F40000100000003 /* WatchShared */,
+				7C0001A22F50000100000002 /* HoursTrackerWatchWidget */,
 				395F9ED52F34701900F3AB21 /* Frameworks */,
 				39EC39A62F20CA7D00130B56 /* Products */,
 			);
@@ -248,6 +293,7 @@
 				7A0001A32F30000100000001 /* HoursTrackerTests.xctest */,
 				399C691F2F71C97F00AE7851 /* HoursTrackerWidgetExtension.appex */,
 				7B0001A12F40000100000001 /* HoursTrackerWatch.app */,
+				7C0001A12F50000100000001 /* HoursTrackerWatchWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -276,6 +322,7 @@
 				7A0001D42F31000100000022 /* MascotAssetTests.swift */,
 				7A0001D62F31000100000022 /* MascotScreenDumpTests.swift */,
 				7A0001D82F31000100000023 /* WatchMessagesTests.swift */,
+				7A0001DA2F31000100000024 /* JobsTests.swift */,
 				7A0001C22F30000100000010 /* WrappedEntryDump.swift */,
 			);
 			path = HoursTrackerTests;
@@ -365,10 +412,12 @@
 				7B0001A42F40000100000004 /* Sources */,
 				7B0001A52F40000100000005 /* Frameworks */,
 				7B0001A62F40000100000006 /* Resources */,
+				7C0001AE2F5000010000000E /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				7C0001AC2F5000010000000C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				7B0001A22F40000100000002 /* HoursTrackerWatch */,
@@ -380,6 +429,29 @@
 			productName = HoursTrackerWatch;
 			productReference = 7B0001A12F40000100000001 /* HoursTrackerWatch.app */;
 			productType = "com.apple.product-type.application";
+		};
+		7C0001A72F50000100000007 /* HoursTrackerWatchWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7C0001AA2F5000010000000A /* Build configuration list for PBXNativeTarget "HoursTrackerWatchWidgetExtension" */;
+			buildPhases = (
+				7C0001A42F50000100000004 /* Sources */,
+				7C0001A52F50000100000005 /* Frameworks */,
+				7C0001A62F50000100000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7C0001A22F50000100000002 /* HoursTrackerWatchWidget */,
+				7B0001A32F40000100000003 /* WatchShared */,
+			);
+			name = HoursTrackerWatchWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = HoursTrackerWatchWidgetExtension;
+			productReference = 7C0001A12F50000100000001 /* HoursTrackerWatchWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -401,6 +473,9 @@
 						CreatedOnToolsVersion = 26.2;
 					};
 					7B0001A72F40000100000007 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					7C0001A72F50000100000007 = {
 						CreatedOnToolsVersion = 26.6;
 					};
 				};
@@ -430,6 +505,7 @@
 				7A0001A22F30000100000001 /* HoursTrackerTests */,
 				399C691E2F71C97F00AE7851 /* HoursTrackerWidgetExtension */,
 				7B0001A72F40000100000007 /* HoursTrackerWatch */,
+				7C0001A72F50000100000007 /* HoursTrackerWatchWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -457,6 +533,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7B0001A62F40000100000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7C0001A62F50000100000006 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -506,11 +589,19 @@
 				7A0001D52F31000100000022 /* MascotAssetTests.swift in Sources */,
 				7A0001D72F31000100000022 /* MascotScreenDumpTests.swift in Sources */,
 				7A0001D92F31000100000023 /* WatchMessagesTests.swift in Sources */,
+				7A0001DB2F31000100000024 /* JobsTests.swift in Sources */,
 				7A0001C32F30000100000010 /* WrappedEntryDump.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7B0001A42F40000100000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7C0001A42F50000100000004 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -534,6 +625,11 @@
 			isa = PBXTargetDependency;
 			target = 7B0001A72F40000100000007 /* HoursTrackerWatch */;
 			targetProxy = 7B0001AB2F4000010000000B /* PBXContainerItemProxy */;
+		};
+		7C0001AC2F5000010000000C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7C0001A72F50000100000007 /* HoursTrackerWatchWidgetExtension */;
+			targetProxy = 7C0001AB2F5000010000000B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -874,6 +970,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Hour Tracker";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				CODE_SIGN_ENTITLEMENTS = HoursTrackerWatch/HoursTrackerWatch.entitlements;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.app.HourTracker;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -907,6 +1004,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Hour Tracker";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				CODE_SIGN_ENTITLEMENTS = HoursTrackerWatch/HoursTrackerWatch.entitlements;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.app.HourTracker;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -919,6 +1017,65 @@
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		7C0001A82F50000100000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = HoursTrackerWatchWidget/HoursTrackerWatchWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 48;
+				DEVELOPMENT_TEAM = 3649Y4UC9W;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HoursTrackerWatchWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Hour Tracker";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 3.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.app.HourTracker.watchkitapp.complications;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		7C0001A92F50000100000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = HoursTrackerWatchWidget/HoursTrackerWatchWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 48;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 3649Y4UC9W;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HoursTrackerWatchWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Hour Tracker";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 3.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.app.HourTracker.watchkitapp.complications;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -971,6 +1128,15 @@
 			buildConfigurations = (
 				7B0001A82F40000100000008 /* Debug */,
 				7B0001A92F40000100000009 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7C0001AA2F5000010000000A /* Build configuration list for PBXNativeTarget "HoursTrackerWatchWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7C0001A82F50000100000008 /* Debug */,
+				7C0001A92F50000100000009 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

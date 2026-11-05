@@ -18,6 +18,9 @@ struct BreakInterval: Codable, Equatable {
 struct LiveShift: Codable, Equatable {
     var startDate: Date
     var breaks: [BreakInterval] = []
+    /// The job this shift is for (nil = main job). Chosen at clock-in from
+    /// Home's cheque job and changeable while the shift runs.
+    var jobID: String? = nil
 
     /// True while a break has been started but not ended.
     var isOnBreak: Bool {
@@ -93,7 +96,16 @@ final class LiveShiftManager: ObservableObject {
     /// Starts a shift. Ignored when one is already active.
     func clockIn(at date: Date = Date()) {
         guard activeShift == nil else { return }
-        activeShift = LiveShift(startDate: date, breaks: [])
+        activeShift = LiveShift(startDate: date, breaks: [], jobID: HoursStore.current?.defaultJobID)
+        persist()
+        syncActivity()
+    }
+
+    /// Moves the running shift to another job.
+    func setJob(_ jobID: String) {
+        guard var shift = activeShift, shift.jobID != jobID else { return }
+        shift.jobID = jobID
+        activeShift = shift
         persist()
         syncActivity()
     }
@@ -169,7 +181,7 @@ final class LiveShiftManager: ObservableObject {
         let start = merge(day: day, with: shift.startDate, calendar: cal)
         let end = merge(day: day, with: date, calendar: cal)
 
-        let entry = WorkEntry(
+        var entry = WorkEntry(
             date: day,
             start: start,
             end: end,
@@ -179,6 +191,7 @@ final class LiveShiftManager: ObservableObject {
             offDayReason: "",
             isHoliday: false
         )
+        entry.jobID = shift.jobID
 
         // Mirror the editor's validation: a shift that rounds down to zero
         // paid hours is not worth saving.
@@ -284,19 +297,21 @@ final class LiveShiftManager: ObservableObject {
     /// app's own pay rules (overtime and weekend premiums included). nil
     /// until the user has set a wage — the placeholder rate isn't theirs.
     private func earningsSoFar(_ shift: LiveShift, at now: Date) -> (earned: Double, rate: Double)? {
-        guard let store = HoursStore.current,
-              store.paySettings.hourlyRateSet, store.paySettings.hourlyWage > 0 else { return nil }
+        guard let store = HoursStore.current else { return nil }
         let cal = Calendar.current
-        let draft = WorkEntry(
+        var draft = WorkEntry(
             date: cal.startOfDay(for: shift.startDate),
             start: shift.startDate,
             end: now,
             breakMinutes: shift.totalBreakMinutes(at: now),
             notes: ""
         )
+        draft.jobID = shift.jobID
+        let job = store.settings(for: draft)
+        guard job.hourlyRateSet, job.hourlyWage > 0 else { return nil }
         let breakdown = store.payBreakdown(for: draft)
         let earned = draft.paidHours > 0 ? breakdown.pay : 0
-        return (earned, store.paySettings.hourlyWage * breakdown.multiplierUsed)
+        return (earned, job.hourlyWage * breakdown.multiplierUsed)
     }
 
     /// The money figure can't tick on its own (only timers do), so while the

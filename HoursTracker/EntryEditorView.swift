@@ -52,6 +52,10 @@ struct EntryEditorView: View {
     @State private var showToast = false
     @State private var toastMessage = ""
     @State private var showSaveSuccess = false
+    /// Which job the shift is for (shown when there's more than one).
+    @State private var jobID: String
+
+    private var jobSettings: PaySettings { store.job(id: jobID).settings }
 
     private let yesterdayPreset: EntryShiftPreset?
     private let usualPreset: EntryShiftPreset?
@@ -81,6 +85,11 @@ struct EntryEditorView: View {
     init(store: HoursStore, mode: Mode) {
         self.store = store
         self.mode = mode
+        if case .edit(let entry) = mode {
+            _jobID = State(initialValue: store.jobID(of: entry))
+        } else {
+            _jobID = State(initialValue: store.defaultJobID)
+        }
 
         let now = Date()
         let cal = Calendar.current
@@ -159,6 +168,10 @@ struct EntryEditorView: View {
                 ScrollView {
                     VStack(spacing: AppSpacing.md) {
                         if !isEditing { presetsRow }
+                        if store.hasMultipleJobs {
+                            JobPickerMenu(store: store, selection: jobID) { jobID = $0 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                         dateCard
                         if needsTimes {
                             timesCard
@@ -167,16 +180,16 @@ struct EntryEditorView: View {
                         EntryShiftTypeSection(kind: $shiftKind, offDayReason: $offDayReason,
                                               reasons: Self.reasonOptions(including: offDayReason),
                                               holidayRule: $holidayRule,
-                                              statHours: store.paySettings.statHolidayPaidHours,
-                                              showsStatHoliday: store.paySettings.statHolidayOptionsEnabled)
+                                              statHours: jobSettings.statHolidayPaidHours,
+                                              showsStatHoliday: jobSettings.statHolidayOptionsEnabled)
                         if needsTimes { summarySection }
                         if let rule = holidayRule, shiftKind == .work {
                             AddShiftHolidayPayPanel(
                                 rule: rule,
                                 workedHours: rule.isWorked ? paidHours : 0,
-                                statHours: store.paySettings.statHolidayPaidHours,
-                                wage: store.paySettings.hourlyRateSet ? store.paySettings.hourlyWage : nil,
-                                currencyCode: store.paySettings.currencyCode
+                                statHours: jobSettings.statHolidayPaidHours,
+                                wage: jobSettings.hourlyRateSet ? jobSettings.hourlyWage : nil,
+                                currencyCode: jobSettings.currencyCode
                             )
                         }
                         EntryDetailsSection(
@@ -476,7 +489,7 @@ struct EntryEditorView: View {
         case .holiday: reason = Self.holidayReason
         }
         let isHolidayWorked = rule?.isWorked ?? false
-        let statHours = (rule?.includesStatPay ?? false) ? store.paySettings.statHolidayPaidHours : 0
+        let statHours = (rule?.includesStatPay ?? false) ? jobSettings.statHolidayPaidHours : 0
 
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -486,6 +499,7 @@ struct EntryEditorView: View {
                                   isOffDay: isOffKind, offDayReason: reason, isHoliday: isHolidayWorked)
             entry.holidayPayRule = rule
             entry.statPayHours = statHours
+            entry.jobID = jobID
             (isOffKind ? ShiftPlace() : place).apply(to: &entry)
             withAnimation(AppMotion.Spring.smooth) { store.add(entry) }
         case .edit(let old):
@@ -500,6 +514,9 @@ struct EntryEditorView: View {
             updated.offDayReason = reason
             updated.isHoliday = isHolidayWorked
             updated.holidayPayRule = rule
+            // Only write the job when it changed, so untouched legacy shifts
+            // stay byte-identical for sync.
+            if jobID != store.jobID(of: old) { updated.jobID = jobID }
             // Keep the stat hours the day was saved with unless the rule changed.
             updated.statPayHours = (rule == old.holidayPayRule && old.statPayHours > 0) ? old.statPayHours : statHours
             withAnimation(AppMotion.Spring.smooth) { store.update(updated) }

@@ -70,6 +70,10 @@ struct AddShiftWizardView: View {
     /// card can be built once a wage comes in.
     @State private var savedForPrompt: [WorkEntry] = []
     @State private var showWagePrompt = false
+    /// The job this shift is for (only asked when there's more than one).
+    @State private var jobID: String
+
+    private var jobSettings: PaySettings { store.job(id: jobID).settings }
 
     // MARK: - Init (defaults mirror EntryEditorView's add mode)
 
@@ -77,6 +81,7 @@ struct AddShiftWizardView: View {
     /// most-recent-shift defaults, placed on that day).
     init(store: HoursStore, initialDate: Date? = nil) {
         self.store = store
+        _jobID = State(initialValue: store.defaultJobID)
 
         let cal = Calendar.current
         let today = Date()
@@ -207,6 +212,11 @@ struct AddShiftWizardView: View {
 
     @ViewBuilder
     private var whenStep: some View {
+        if store.hasMultipleJobs, shiftKind != .holiday {
+            JobPickerMenu(store: store, selection: jobID) { jobID = $0 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
         if shiftKind == .work, !store.shiftTemplates.isEmpty {
             templateStrip
         }
@@ -279,8 +289,8 @@ struct AddShiftWizardView: View {
             offDayReason: $offDayReason,
             reasons: EntryEditorView.offDayReasons,
             holidayRule: $holidayRule,
-            statHours: store.paySettings.statHolidayPaidHours,
-            showsStatHoliday: store.paySettings.statHolidayOptionsEnabled
+            statHours: jobSettings.statHolidayPaidHours,
+            showsStatHoliday: jobSettings.statHolidayOptionsEnabled
         )
 
         if needsTimes {
@@ -507,9 +517,9 @@ struct AddShiftWizardView: View {
         AddShiftHolidayPayPanel(
             rule: rule,
             workedHours: rule.isWorked ? paidHours : 0,
-            statHours: store.paySettings.statHolidayPaidHours,
-            wage: store.paySettings.hourlyRateSet ? store.paySettings.hourlyWage : nil,
-            currencyCode: store.paySettings.currencyCode
+            statHours: jobSettings.statHolidayPaidHours,
+            wage: jobSettings.hourlyRateSet ? jobSettings.hourlyWage : nil,
+            currencyCode: jobSettings.currencyCode
         )
     }
 
@@ -606,7 +616,7 @@ struct AddShiftWizardView: View {
             let n = holidayDays.count
             return n == 0 ? "Pick at least one day" : "\(n) holiday \(n == 1 ? "day" : "days") — no hours logged"
         case .work where holidayRule == .statPayOnly:
-            return "Stat holiday — \(HolidayPayRule.hoursText(store.paySettings.statHolidayPaidHours)) stat pay, no hours worked"
+            return "Stat holiday — \(HolidayPayRule.hoursText(jobSettings.statHolidayPaidHours)) stat pay, no hours worked"
         case .work:
             if paidHours > 48 { return "Shift too long (max 48 hours)" }
             if paidHours <= 0 {
@@ -683,6 +693,7 @@ struct AddShiftWizardView: View {
                 var entry = WorkEntry(date: portion.date, start: portion.start, end: portion.end,
                                       breakMinutes: portion.breakMinutes, notes: sharedNotes,
                                       isOffDay: false, offDayReason: "", isHoliday: false)
+                entry.jobID = jobID
                 place.apply(to: &entry)
                 attachWeatherIfToday(to: &entry)
                 withAnimation(AppMotion.Spring.smooth) { store.add(entry) }
@@ -696,9 +707,10 @@ struct AddShiftWizardView: View {
                               notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
                               isOffDay: isOffKind, offDayReason: reason,
                               isHoliday: shiftKind == .work && (holidayRule?.isWorked ?? false))
+        entry.jobID = jobID
         if shiftKind == .work, let rule = holidayRule {
             entry.holidayPayRule = rule
-            entry.statPayHours = rule.includesStatPay ? store.paySettings.statHolidayPaidHours : 0
+            entry.statPayHours = rule.includesStatPay ? jobSettings.statHolidayPaidHours : 0
         }
         (isOffKind ? ShiftPlace() : place).apply(to: &entry)
         // Only attach weather for same-day work shifts — a cached "now"

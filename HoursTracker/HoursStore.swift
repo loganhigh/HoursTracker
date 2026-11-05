@@ -1510,27 +1510,35 @@ final class HoursStore: ObservableObject {
     /// `weekEntries(for:)` previously re-filtered the entire entries array on
     /// every call, and it's called once per entry from `payBreakdown`, itself
     /// called per entry on every render and every add/update — into O(n).
-    private var weekEntriesCache: [Date: [WorkEntry]]?
+    private var weekEntriesCache: [WeekBucket: [WorkEntry]]?
+
+    private struct WeekBucket: Hashable {
+        let job: String
+        let start: Date
+    }
 
     /// The week's entries with `entry` guaranteed present: a draft that
     /// isn't saved yet (the editor's live summary, a running live shift) is
     /// treated as the week's latest, so it's paid at the rate it would get
     /// once saved rather than dropping to zero.
     private func weekEntries(including entry: WorkEntry) -> [WorkEntry] {
-        let week = weekEntries(for: entry.date)
+        let week = weekEntries(for: entry.date, jobID: jobID(of: entry))
         return week.contains { $0.id == entry.id } ? week : week + [entry]
     }
 
-    private func weekEntries(for date: Date) -> [WorkEntry] {
+    /// One job's week: weekly overtime is earned per employer, so a second
+    /// job's hours never push the first into overtime.
+    private func weekEntries(for date: Date, jobID: String) -> [WorkEntry] {
         let cal = payWeekCalendar
         guard let ws = cal.dateInterval(of: .weekOfYear, for: date)?.start else { return [] }
+        let key = WeekBucket(job: jobID, start: ws)
         if let cache = weekEntriesCache {
-            return cache[ws] ?? []
+            return cache[key] ?? []
         }
-        var buckets: [Date: [WorkEntry]] = [:]
+        var buckets: [WeekBucket: [WorkEntry]] = [:]
         for entry in entries where !entry.isOffDay && entry.holidayPayRule == nil {
             guard let start = cal.dateInterval(of: .weekOfYear, for: entry.date)?.start else { continue }
-            buckets[start, default: []].append(entry)
+            buckets[WeekBucket(job: self.jobID(of: entry), start: start), default: []].append(entry)
         }
         for key in buckets.keys {
             // Same-day entries fall in the order they were worked, so the
@@ -1538,21 +1546,23 @@ final class HoursStore: ObservableObject {
             buckets[key]?.sort { $0.date == $1.date ? $0.start < $1.start : $0.date < $1.date }
         }
         weekEntriesCache = buckets
-        return buckets[ws] ?? []
+        return buckets[key] ?? []
     }
 
     func payBreakdown(for entry: WorkEntry) -> PayBreakdown {
+        // Each shift is paid by its own job's wage and overtime rules.
+        let ps = settings(for: entry)
         let cal = Calendar.current
         let weekday = cal.component(.weekday, from: entry.date) // 1=Sun, 7=Sat
         let raw = entry.paidHours
-        let wage = paySettings.hourlyWage
-        let sat = paySettings.saturdayOvertimeAfterHours
-        let satMult = paySettings.saturdayMultiplier
-        let sunMult = paySettings.sundayMultiplier
-        let wdAfter = paySettings.weekdayOvertimeAfterHours
-        let wdMult = paySettings.weekdayOvertimeMultiplier
-        let weeklyThreshold = paySettings.weeklyOvertimeThreshold
-        let dtAfter = paySettings.doubleTimeAfterHours
+        let wage = ps.hourlyWage
+        let sat = ps.saturdayOvertimeAfterHours
+        let satMult = ps.saturdayMultiplier
+        let sunMult = ps.sundayMultiplier
+        let wdAfter = ps.weekdayOvertimeAfterHours
+        let wdMult = ps.weekdayOvertimeMultiplier
+        let weeklyThreshold = ps.weeklyOvertimeThreshold
+        let dtAfter = ps.doubleTimeAfterHours
         let statPay = entry.statPay(wage: wage)
 
         // Stat holiday: the rule on the entry replaces every other rate.
@@ -1560,8 +1570,8 @@ final class HoursStore: ObservableObject {
             let worked = rule.isWorked ? raw : 0
             let mult = rule.workedMultiplier
             var pay = worked * wage * mult + statPay
-            if paySettings.vacationPayEnabled {
-                pay += pay * (paySettings.vacationPayPercentage / 100.0)
+            if ps.vacationPayEnabled {
+                pay += pay * (ps.vacationPayPercentage / 100.0)
             }
             return PayBreakdown(
                 dayType: .holiday,
@@ -1575,8 +1585,8 @@ final class HoursStore: ObservableObject {
             )
         }
 
-        let effectiveWage: Double = (paySettings.holidayPayEnabled && entry.isHoliday)
-            ? wage * paySettings.holidayPayMultiplier
+        let effectiveWage: Double = (ps.holidayPayEnabled && entry.isHoliday)
+            ? wage * ps.holidayPayMultiplier
             : wage
 
         let b: OvertimeRules.Breakout
@@ -1585,7 +1595,7 @@ final class HoursStore: ObservableObject {
 
         // With weekend premiums on, Saturday and Sunday use their own per-day
         // rules regardless of overtimeType. Off, they're ordinary work days.
-        if paySettings.weekendPremiumsEnabled && (weekday == 7 || weekday == 1) {
+        if ps.weekendPremiumsEnabled && (weekday == 7 || weekday == 1) {
             b = OvertimeRules.breakdown(
                 weekday: weekday,
                 rawHours: raw,
@@ -1605,7 +1615,7 @@ final class HoursStore: ObservableObject {
             }
         } else {
             dayType = .weekday
-            switch paySettings.overtimeType {
+            switch ps.overtimeType {
 
             case .daily:
                 b = OvertimeRules.breakdown(
@@ -1650,8 +1660,8 @@ final class HoursStore: ObservableObject {
         }
 
         var totalPay = b.pay
-        if paySettings.vacationPayEnabled {
-            totalPay += b.pay * (paySettings.vacationPayPercentage / 100.0)
+        if ps.vacationPayEnabled {
+            totalPay += b.pay * (ps.vacationPayPercentage / 100.0)
         }
 
         return PayBreakdown(
@@ -1764,33 +1774,13 @@ final class HoursStore: ObservableObject {
     /// Advances nextPayday (and nextCutoff when set) while they're in the past.
     /// Call on app/dashboard load.
     func advanceNextPaydayIfNeeded() {
-        guard let payday = paySettings.nextPayday else { return }
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        var current = cal.startOfDay(for: payday)
-        let step = PayCycleEngine.spanDays(for: paySettings.payPeriodType)
-        var advances = 0
-        // Advance while nextPayday is on or before today: the cycle engine already
-        // rolls over to the new period the moment today == payday, so nextPayday
-        // must also move forward on payday day itself to stay in sync.
-        while current <= today {
-            guard let next = cal.date(byAdding: .day, value: step, to: current) else { break }
-            current = next
-            advances += 1
+        var settings = paySettings
+        var changed = settings.rollPayDatesForward()
+        for index in settings.additionalJobs.indices {
+            if settings.additionalJobs[index].settings.rollPayDatesForward() { changed = true }
         }
-        guard advances > 0, current != cal.startOfDay(for: payday) else { return }
-
-        paySettings.nextPayday = current
-
-        if PayCycleEngine.usesSavedCutoff(paySettings), let cutoff = paySettings.nextCutoff {
-            var currentCutoff = cal.startOfDay(for: cutoff)
-            for _ in 0..<advances {
-                guard let next = cal.date(byAdding: .day, value: step, to: currentCutoff) else { break }
-                currentCutoff = next
-            }
-            paySettings.nextCutoff = currentCutoff
-        }
-
+        guard changed else { return }
+        paySettings = settings
         save()
     }
 
@@ -1893,7 +1883,15 @@ final class HoursStore: ObservableObject {
         }
     }
 
+    /// The cheque Home shows: the chosen job's current pay period (see
+    /// `chequeJobScope`), the main job's when showing every job.
     func currentPayCycle(calendar: Calendar = .current) -> PayCycle {
+        PayCycleEngine.currentCycle(settings: scopedPaySettings, asOf: Date(), calendar: calendar)
+    }
+
+    /// The main job's current pay period, whatever Home is showing — what the
+    /// server's cheque window and friends' views are built on.
+    func primaryPayCycle(calendar: Calendar = .current) -> PayCycle {
         PayCycleEngine.currentCycle(settings: paySettings, asOf: Date(), calendar: calendar)
     }
 
@@ -1917,13 +1915,31 @@ final class HoursStore: ObservableObject {
         return f.string(from: cycle.start)
     }
 
-    func actualPayout(for cycle: PayCycle) -> Double? {
-        actualPayouts[Self.payoutKey(for: cycle)]
+    /// Recorded cheques are per job: the main job keeps the original
+    /// date-only key, other jobs prefix it with their id.
+    private func scopedPayoutKey(for cycle: PayCycle) -> String {
+        let scope = chequeJobScope
+        let base = Self.payoutKey(for: cycle)
+        return scope == JobProfile.primaryID ? base : "\(scope)|\(base)"
     }
 
-    /// nil (or a non-positive amount) clears the record.
+    func actualPayout(for cycle: PayCycle) -> Double? {
+        if chequeJobScope == Self.allJobsScope {
+            // Every job's recorded cheque for periods starting that day.
+            let base = Self.payoutKey(for: cycle)
+            let total = jobs.compactMap { job in
+                actualPayouts[job.id == JobProfile.primaryID ? base : "\(job.id)|\(base)"]
+            }.reduce(0, +)
+            return total > 0 ? total : nil
+        }
+        return actualPayouts[scopedPayoutKey(for: cycle)]
+    }
+
+    /// nil (or a non-positive amount) clears the record. Recording needs one
+    /// job chosen; the all-jobs view is read-only.
     func setActualPayout(_ amount: Double?, for cycle: PayCycle) {
-        let key = Self.payoutKey(for: cycle)
+        guard chequeJobScope != Self.allJobsScope else { return }
+        let key = scopedPayoutKey(for: cycle)
         if let amount, amount > 0, amount.isFinite {
             actualPayouts[key] = amount
         } else {
@@ -1946,6 +1962,10 @@ final class HoursStore: ObservableObject {
     /// recorded yet — the projection used to vanish the moment the next
     /// cheque started, exactly when the user wants to see what's coming.
     func chequeProjection(for current: PayCycle) -> AdvancedPayPredictor.Prediction? {
+        // Cheques from different employers can't train one prediction.
+        guard chequeJobScope != Self.allJobsScope else { return nil }
+        let entries = scopedEntries
+        let paySettings = scopedPaySettings
         guard !actualPayouts.isEmpty, let earliest = entries.map(\.date).min() else { return nil }
         func hours(in cycle: PayCycle) -> Double {
             PayCycleEngine.entries(entries, in: cycle)
@@ -1978,11 +1998,11 @@ final class HoursStore: ObservableObject {
     }
 
     func payCycle(containing date: Date, calendar: Calendar = .current) -> PayCycle {
-        PayCycleEngine.cycle(containing: date, settings: paySettings, calendar: calendar)
+        PayCycleEngine.cycle(containing: date, settings: scopedPaySettings, calendar: calendar)
     }
 
     func recentPayCycles(count: Int = 8, calendar: Calendar = .current) -> [PayCycle] {
-        PayCycleEngine.recentCyclesEndingBeforeNow(settings: paySettings, count: count, calendar: calendar)
+        PayCycleEngine.recentCyclesEndingBeforeNow(settings: scopedPaySettings, count: count, calendar: calendar)
     }
 
     func save(syncProfile: Bool = true) {

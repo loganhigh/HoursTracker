@@ -1,6 +1,7 @@
 import Foundation
 import WatchConnectivity
 import WatchKit
+import WidgetKit
 
 // MARK: - Watch side of the phone bridge
 //
@@ -35,6 +36,8 @@ final class WatchSession: NSObject, ObservableObject {
         snapshot = WatchCoding.decode(WatchSnapshot.self, from: defaults.data(forKey: Self.snapshotKey)) ?? .empty
         monthShifts = WatchCoding.decode([Date: [WatchRecentShift]].self, from: defaults.data(forKey: Self.monthShiftsKey)) ?? [:]
         super.init()
+        // Builds before complications existed never saved the face's copy.
+        if WatchComplicationStore.load() == nil { WatchComplicationStore.save(snapshot) }
     }
 
     func activate() {
@@ -126,8 +129,14 @@ final class WatchSession: NSObject, ObservableObject {
     }
 
     private func store(_ new: WatchSnapshot) {
+        let faceChanged = new.liveShift != snapshot.liveShift || new.chequeHours != snapshot.chequeHours
+            || new.monthHours != snapshot.monthHours || new.signedIn != snapshot.signedIn
         snapshot = new
         UserDefaults.standard.set(WatchCoding.encode(new), forKey: Self.snapshotKey)
+        WatchComplicationStore.save(new)
+        // Complications have a refresh budget; only spend it when what they
+        // show actually changed.
+        if faceChanged { WidgetCenter.shared.reloadAllTimelines() }
     }
 
     /// Optimistic copy of what the phone will do, so the screen updates now.
@@ -181,6 +190,14 @@ extension WatchSession: WCSessionDelegate {
         Task { @MainActor in
             self.isReachable = reachable
             if reachable { self.refresh() }
+        }
+    }
+
+    /// Complication pushes from the phone (they can wake the app in the background).
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        let snapshot = WatchCoding.decode(WatchSnapshot.self, from: userInfo[WatchKeys.snapshot])
+        Task { @MainActor in
+            if let snapshot, snapshot.generatedAt >= self.snapshot.generatedAt { self.store(snapshot) }
         }
     }
 

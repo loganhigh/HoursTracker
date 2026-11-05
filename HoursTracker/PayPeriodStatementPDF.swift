@@ -47,8 +47,8 @@ struct PayPeriodStatement {
 
     @MainActor
     static func make(cycle: PayCycle, store: HoursStore, employee: String?, company: String?, companyLogo: UIImage?) -> PayPeriodStatement {
-        let settings = store.paySettings
-        let rows = PayCycleEngine.entries(store.entries, in: cycle)
+        let settings = store.scopedPaySettings
+        let rows = PayCycleEngine.entries(store.scopedEntries, in: cycle)
             .sorted { $0.date == $1.date ? $0.start < $1.start : $0.date < $1.date }
             .map { entry -> Row in
                 let b = store.payBreakdown(for: entry)

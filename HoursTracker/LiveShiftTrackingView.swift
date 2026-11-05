@@ -115,6 +115,10 @@ struct LiveShiftTrackingView: View {
                 }
             }
 
+            if store.hasMultipleJobs {
+                JobPickerMenu(store: store, selection: store.job(id: shift.jobID).id) { liveShift.setJob($0) }
+            }
+
             if let clockOutMessage {
                 Text(clockOutMessage)
                     .appText(.caption)

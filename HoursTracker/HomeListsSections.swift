@@ -54,7 +54,8 @@ struct RecentShiftsSection: View {
                                 breakdown: store.payBreakdown(for: entry),
                                 currencyCode: store.paySettings.currencyCode,
                                 showPay: store.paySettings.showPayCalculations,
-                                paySettings: store.paySettings,
+                                paySettings: store.settings(for: entry),
+                                jobName: store.hasMultipleJobs ? store.job(id: entry.jobID).name : nil,
                                 leaf: true
                             )
                         }
@@ -148,7 +149,7 @@ struct HomeFriendsCardContent: View {
         let myName = UserDefaults.standard.string(forKey: "profile_display_name") ?? "You"
         let profile = store.gamificationProfile
         let currentCycle = store.currentPayCycle()
-        let myHours = PayCycleEngine.entries(store.entries, in: currentCycle)
+        let myHours = PayCycleEngine.entries(store.scopedEntries, in: currentCycle)
             .reduce(0.0) { $0 + $1.paidHours }
         let myLevelLine = GamificationLevelCalculator.displayLevelLine(
             level: store.displayedLevel,

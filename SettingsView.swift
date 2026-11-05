@@ -64,6 +64,29 @@ struct SettingsView: View {
             ZStack {
                 AppColors.bg.ignoresSafeArea()
                 Form {
+                // MARK: - Jobs
+                Section {
+                    NavigationLink {
+                        JobsSettingsView(store: store)
+                    } label: {
+                        SettingsValueRow(
+                            icon: "briefcase.fill",
+                            title: "Jobs",
+                            value: store.jobs.count == 1 ? store.jobs[0].name : "\(store.jobs.count) jobs"
+                        )
+                    }
+                } header: {
+                    SectionEyebrow("Jobs")
+                } footer: {
+                    if store.hasMultipleJobs {
+                        Text("The pay settings below are for \(store.jobs[0].name). Each other job's are under Jobs.")
+                            .appText(.caption)
+                            .foregroundStyle(AppColors.subtext)
+                    }
+                }
+                .listRowBackground(AppColors.card.opacity(0.55))
+                .listRowSeparatorTint(AppColors.stroke)
+
                 // MARK: - Payday
                 Section {
                     // The wage drives every pay figure in the app. Blank until

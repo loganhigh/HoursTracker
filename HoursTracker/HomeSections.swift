@@ -291,7 +291,7 @@ struct HomeStatTriplet: View {
     /// Paid hours in the live pay period — the number the Today card used to
     /// lead with.
     private var chequeHours: Double {
-        PayCycleEngine.entries(store.entries, in: store.currentPayCycle())
+        PayCycleEngine.entries(store.scopedEntries, in: store.currentPayCycle())
             .reduce(0) { $0 + $1.paidHours }
     }
 
@@ -300,10 +300,19 @@ struct HomeStatTriplet: View {
     private var monthHours: Double { store.monthTotalHours(monthDate: Date()) }
 
     var body: some View {
-        HStack(spacing: 10) {
-            HomeStatTile(icon: "clock", band: "WEEK", label: "This week", hours: weekHours, tone: 0)
-            HomeStatTile(icon: "banknote", band: "CHEQUE", label: "This cheque", hours: chequeHours, tone: 1)
-            HomeStatTile(icon: "calendar", band: "MONTH", label: "This month", hours: monthHours, tone: 2)
+        VStack(spacing: 8) {
+            // With more than one job, choose whose cheque Home shows (or all).
+            if store.hasMultipleJobs {
+                JobPickerMenu(store: store, selection: store.chequeJobScope, includesAll: true, title: "Cheque") {
+                    store.chequeJobScope = $0
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack(spacing: 10) {
+                HomeStatTile(icon: "clock", band: "WEEK", label: "This week", hours: weekHours, tone: 0)
+                HomeStatTile(icon: "banknote", band: "CHEQUE", label: "This cheque", hours: chequeHours, tone: 1)
+                HomeStatTile(icon: "calendar", band: "MONTH", label: "This month", hours: monthHours, tone: 2)
+            }
         }
     }
 }

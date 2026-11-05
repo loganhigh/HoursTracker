@@ -8,6 +8,8 @@ struct EntryRowView: View {
 
     /// When set, shows **PayDay** / **Cutoff** under the hours when the entry falls on those cheque dates.
     var paySettings: PaySettings? = nil
+    /// The shift's job, shown only when someone has more than one.
+    var jobName: String? = nil
     /// Home's calendar-leaf row (see `leafContent`). History keeps the
     /// original quiet card.
     var leaf: Bool = false
@@ -55,6 +57,12 @@ struct EntryRowView: View {
                     Text(timeRangeText)
                         .font(.system(.subheadline, design: .rounded, weight: .semibold))
                         .foregroundStyle(AppTheme.Colors.subtext)
+                }
+                if let jobName {
+                    Label(jobName, systemImage: "briefcase.fill")
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                        .foregroundStyle(AppColors.accent)
+                        .lineLimit(1)
                 }
             }
 
@@ -162,8 +170,10 @@ struct EntryRowView: View {
 
     /// Time range, with the pay appended when pay is shown.
     private var leafSubtitle: String {
-        guard showPay, !entry.isOffDay else { return timeRangeText }
-        return "\(timeRangeText) · \(currency(payValue))"
+        var parts = [timeRangeText]
+        if showPay, !entry.isOffDay { parts.append(currency(payValue)) }
+        if let jobName { parts.append(jobName) }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Pay period markers

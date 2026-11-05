@@ -29,7 +29,7 @@ struct PayCycleDetailView: View {
     }
 
     private var cycleEntries: [WorkEntry] {
-        PayCycleEngine.entries(store.entries, in: selectedCycle)
+        PayCycleEngine.entries(store.scopedEntries, in: selectedCycle)
     }
 
     private var periodHours: Double {
@@ -65,7 +65,7 @@ struct PayCycleDetailView: View {
         let cal = Calendar.current
         let total = max(1, selectedCycle.spanDays)
         let today = cal.startOfDay(for: Date())
-        let accrualEnd = PayCycleEngine.usesCutoffAnchoring(store.paySettings)
+        let accrualEnd = PayCycleEngine.usesCutoffAnchoring(store.scopedPaySettings)
             ? selectedCycle.cutoff
             : cal.date(byAdding: .day, value: -1, to: selectedCycle.end) ?? selectedCycle.cutoff
         let endCap = min(today, accrualEnd)
@@ -159,7 +159,8 @@ struct PayCycleDetailView: View {
                                         breakdown: store.payBreakdown(for: entry),
                                         currencyCode: store.paySettings.currencyCode,
                                         showPay: store.paySettings.showPayCalculations,
-                                        paySettings: store.paySettings
+                                        paySettings: store.settings(for: entry),
+                                        jobName: store.hasMultipleJobs ? store.job(id: entry.jobID).name : nil
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -356,7 +357,7 @@ struct PayCycleDetailView: View {
     }
 
     private var subtitleLine: String {
-        selectedCycle.chequeRangeText(settings: store.paySettings)
+        selectedCycle.chequeRangeText(settings: store.scopedPaySettings)
     }
 
     private var payBreakdownSection: some View {

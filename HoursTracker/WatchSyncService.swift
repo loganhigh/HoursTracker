@@ -17,6 +17,7 @@ final class WatchSyncService: NSObject {
 
     private var cancellables = Set<AnyCancellable>()
     private var pushWork: DispatchWorkItem?
+    private var lastFace: FaceState?
     /// Draft ids already saved, so a command delivered twice (live message
     /// that timed out, then its queued copy) logs one shift, not two.
     private static let handledDraftsKey = "watch_handled_draft_ids_v1"
@@ -58,13 +59,14 @@ final class WatchSyncService: NSObject {
         }
 
         let cal = Calendar.current
-        // Same pay period as Home's cheque card.
+        // Same pay period and job(s) as Home's cheque card.
         let cycle = store.currentPayCycle()
+        let chequeIDs = Set(PayCycleEngine.entries(store.scopedEntries, in: cycle).map(\.id))
         let thisMonth = cal.dateInterval(of: .month, for: now)
         var cheque = 0.0, month = 0.0
         var byMonth: [Date: (hours: Double, shifts: Int)] = [:]
         for entry in store.entries where !entry.isOffDay {
-            if entry.date >= cycle.start, entry.date < cycle.end { cheque += entry.paidHours }
+            if chequeIDs.contains(entry.id) { cheque += entry.paidHours }
             if let thisMonth, thisMonth.contains(entry.date) { month += entry.paidHours }
             if let key = cal.dateInterval(of: .month, for: entry.date)?.start {
                 byMonth[key, default: (0, 0)].hours += entry.paidHours
@@ -124,9 +126,31 @@ final class WatchSyncService: NSObject {
     private func pushContext() {
         let session = WCSession.default
         guard WCSession.isSupported(), session.activationState == .activated,
-              session.isPaired, session.isWatchAppInstalled,
-              let data = WatchCoding.encode(makeSnapshot()) else { return }
+              session.isPaired, session.isWatchAppInstalled else { return }
+        let snapshot = makeSnapshot()
+        guard let data = WatchCoding.encode(snapshot) else { return }
         try? session.updateApplicationContext([WatchKeys.snapshot: data])
+
+        // With Hour Tracker on the watch face, this wakes the watch app in the
+        // background so the complication updates without opening it. Apple
+        // budgets these (about 50 a day), so only send when the face changes.
+        let face = FaceState(snapshot)
+        if session.isComplicationEnabled, face != lastFace, session.remainingComplicationUserInfoTransfers > 0 {
+            session.transferCurrentComplicationUserInfo([WatchKeys.snapshot: data])
+            lastFace = face
+        }
+    }
+
+    /// What the watch face shows; a new value is worth a complication push.
+    private struct FaceState: Equatable {
+        let live: WatchLiveShift?
+        let cheque: Double
+        let month: Double
+        init(_ s: WatchSnapshot) {
+            live = s.liveShift
+            cheque = (s.chequeHours * 10).rounded() / 10
+            month = (s.monthHours * 10).rounded() / 10
+        }
     }
 
     // MARK: Commands
@@ -172,8 +196,10 @@ final class WatchSyncService: NSObject {
         let start = time(draft.startMinutes, on: day)
         let end = time(draft.endMinutes, on: day)
 
-        let base = WorkEntry(date: day, start: start, end: end, breakMinutes: max(0, draft.breakMinutes),
+        var base = WorkEntry(date: day, start: start, end: end, breakMinutes: max(0, draft.breakMinutes),
                              notes: "", isOffDay: false, offDayReason: "", isHoliday: false)
+        // The job Home's cheque is showing, like a clock-in.
+        base.jobID = store.defaultJobID
         guard base.paidHours > 0, base.paidHours <= 48 else { return "Those times don't add up to a shift." }
 
         // Reuse a past pin for the same place name, like the phone's picker.
@@ -189,6 +215,7 @@ final class WatchSyncService: NSObject {
                 var entry = WorkEntry(date: portion.date, start: portion.start, end: portion.end,
                                       breakMinutes: portion.breakMinutes, notes: "",
                                       isOffDay: false, offDayReason: "", isHoliday: false)
+                entry.jobID = store.defaultJobID
                 place.apply(to: &entry)
                 store.add(entry)
             }

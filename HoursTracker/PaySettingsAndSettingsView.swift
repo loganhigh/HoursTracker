@@ -104,6 +104,12 @@ struct PaySettings: Codable, Equatable {
     var goalTarget: Double = 1200.0
     var goalSaved: Double = 0.0
 
+    // Multiple jobs. These top-level settings are the main job's; every other
+    // job carries its own full copy (wage, schedule, overtime) here, so jobs
+    // sync and back up with pay settings. See Jobs.swift.
+    var primaryJobName: String = ""
+    var additionalJobs: [JobProfile] = []
+
     init() {}
 
     enum CodingKeys: String, CodingKey {
@@ -119,6 +125,7 @@ struct PaySettings: Codable, Equatable {
         case holidayPayEnabled, holidayPayMultiplier
         case vacationPayEnabled, vacationPayPercentage
         case goalName, goalTarget, goalSaved
+        case primaryJobName, additionalJobs
     }
 
     /// Tolerant decoder: every field is optional with a fallback to its default.
@@ -185,6 +192,8 @@ struct PaySettings: Codable, Equatable {
         goalName = req(.goalName, fallback.goalName)
         goalTarget = req(.goalTarget, fallback.goalTarget)
         goalSaved = req(.goalSaved, fallback.goalSaved)
+        primaryJobName = req(.primaryJobName, fallback.primaryJobName)
+        additionalJobs = req(.additionalJobs, fallback.additionalJobs)
     }
 }
 

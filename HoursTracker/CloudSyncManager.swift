@@ -1825,7 +1825,9 @@ private struct ProfileSnapshotInputs {
         // folding it in here wrote it into the user's own `equippedTitle`,
         // which then survived the override being removed.
         let publishedEquippedTitle = equippedTitle
-        let currentCycle = store.currentPayCycle()
+        // The main job's pay window, whatever job Home is showing — the same
+        // window the server derives from the synced pay settings.
+        let currentCycle = store.primaryPayCycle()
         let cycleEntries = PayCycleEngine.entries(store.entries, in: currentCycle)
 
         let isoFormatter: DateFormatter = {

@@ -41,6 +41,11 @@ struct WorkEntry: Identifiable, Codable, Equatable {
     /// entries saved by builds that predate the field.
     var modifiedAt: Date? = nil
 
+    /// Which job this shift was for (`JobProfile.id`, or `JobProfile.primaryID`
+    /// for the main job). nil on shifts logged before jobs existed, which
+    /// belong to the main job.
+    var jobID: String? = nil
+
     /// Weather at the user's location when the shift was logged. Only
     /// captured for same-day entries where a recent reading exists — nil
     /// for backdated entries or when location permission isn't granted.
@@ -93,6 +98,7 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         case createdAt
         case modifiedAt
         case weather
+        case jobID
     }
 
     init(id: UUID = UUID(), date: Date, start: Date, end: Date, breakMinutes: Int, notes: String,
@@ -136,6 +142,7 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
         modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt)
         weather = try c.decodeIfPresent(WeatherSnapshot.self, forKey: .weather)
+        jobID = try c.decodeIfPresent(String.self, forKey: .jobID)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -160,5 +167,8 @@ struct WorkEntry: Identifiable, Codable, Equatable {
         try c.encodeIfPresent(createdAt, forKey: .createdAt)
         try c.encodeIfPresent(modifiedAt, forKey: .modifiedAt)
         try c.encodeIfPresent(weather, forKey: .weather)
+        // Omitted when never set (legacy = main job) so old shifts upload
+        // unchanged; moving a shift back to the main job writes "primary".
+        try c.encodeIfPresent(jobID, forKey: .jobID)
     }
 }

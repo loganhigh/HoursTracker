@@ -54,7 +54,7 @@ struct FriendsView: View {
             myUid: authService.user?.uid,
             myName: myName,
             myProfile: store.displayedGamificationProfile(),
-            myPayPeriodHours: PayCycleEngine.entries(store.entries, in: payCycle)
+            myPayPeriodHours: PayCycleEngine.entries(store.scopedEntries, in: payCycle)
                 .reduce(0) { $0 + $1.paidHours },
             myPhotoURL: ProfilePhotoManager.shared.remotePhotoURL,
             myIsVerified: verifiedStatus.isVerified,

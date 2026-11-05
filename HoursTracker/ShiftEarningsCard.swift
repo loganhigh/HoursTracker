@@ -49,13 +49,17 @@ extension HoursStore {
     func shiftEarnings(for shifts: [WorkEntry]) -> ShiftEarnings? {
         // A stat holiday that wasn't worked is an off day, but it's paid.
         let work = shifts.filter { ($0.isOffDay ? $0.statPayHours : $0.paidHours) > 0 }
-        guard !work.isEmpty, paySettings.hourlyRateSet, paySettings.hourlyWage > 0 else { return nil }
+        // The shift's own job: its wage, its cheque.
+        guard let first = work.first else { return nil }
+        let job = settings(for: first)
+        let jobID = jobID(of: first)
+        guard job.hourlyRateSet, job.hourlyWage > 0 else { return nil }
         let hours = work.reduce(0) { $0 + $1.paidHours }
         let gross = work.reduce(0) { $0 + payBreakdown(for: $1).pay }
         guard gross > 0 else { return nil }
         let ratio = TakeHomeEstimator.ratio(learned: learnedTakeHomeRatio())
-        let cycle = PayCycleEngine.cycle(containing: work.map(\.date).min() ?? Date(), settings: paySettings)
-        let chequeGross = PayCycleEngine.entries(entries, in: cycle)
+        let cycle = PayCycleEngine.cycle(containing: work.map(\.date).min() ?? Date(), settings: job)
+        let chequeGross = PayCycleEngine.entries(entries.filter { self.jobID(of: $0) == jobID }, in: cycle)
             .reduce(0) { $0 + payBreakdown(for: $1).pay }
         return ShiftEarnings(
             date: work.map(\.date).min() ?? Date(),
@@ -63,7 +67,7 @@ extension HoursStore {
             gross: gross,
             takeHome: gross * ratio.value,
             source: ratio.source,
-            currencyCode: paySettings.currencyCode,
+            currencyCode: job.currencyCode,
             entryIDs: work.map(\.id),
             locationName: work
                 .map { $0.locationName.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -80,6 +84,8 @@ extension HoursStore {
     /// Gross for each period is recomputed with the same pay rules the app
     /// uses everywhere else, so the ratio isolates deductions.
     func learnedTakeHomeRatio() -> TakeHomeEstimator.Ratio? {
+        let entries = scopedEntries
+        let paySettings = scopedPaySettings
         guard !actualPayouts.isEmpty, let earliest = entries.map(\.date).min() else { return nil }
         var samples: [TakeHomeEstimator.Sample] = []
         var cursor = currentPayCycle()

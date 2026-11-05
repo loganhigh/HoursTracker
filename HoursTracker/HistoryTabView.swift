@@ -25,7 +25,7 @@ struct HistoryTabView: View {
     /// a fixed 60 cut weekly-paid users off after ~14 months and numbered
     /// their oldest visible cheque "1st".
     private var maxWalkedCycles: Int {
-        let span = max(1, PayCycleEngine.spanDays(for: store.paySettings.payPeriodType))
+        let span = max(1, PayCycleEngine.spanDays(for: store.scopedPaySettings.payPeriodType))
         return max(60, Int((Double(5 * 366) / Double(span)).rounded(.up)))
     }
 
@@ -170,7 +170,7 @@ struct HistoryTabView: View {
     /// Shift count and hours — the detail the table's removed columns used
     /// to carry, folded under the cheque's date range.
     private func subtitle(for row: ChequeRow) -> String {
-        let entries = PayCycleEngine.entries(store.entries, in: row.cycle)
+        let entries = PayCycleEngine.entries(store.scopedEntries, in: row.cycle)
         return "\(shiftsCaption(for: entries)) · \(AppTheme.Format.hours(cycleHours(row.cycle)))"
     }
 
@@ -235,7 +235,7 @@ struct HistoryTabView: View {
             let ascending = (byYear[year] ?? []).sorted { $0.start < $1.start }
             let rows: [ChequeRow] = ascending.enumerated().compactMap { index, cycle in
                 let isCurrent = cycle.start == current.start
-                let hasEntries = !PayCycleEngine.entries(store.entries, in: cycle).isEmpty
+                let hasEntries = !PayCycleEngine.entries(store.scopedEntries, in: cycle).isEmpty
                 guard isCurrent || hasEntries else { return nil }
                 return ChequeRow(cycle: cycle, ordinal: index + 1, isCurrent: isCurrent)
             }
@@ -255,7 +255,7 @@ struct HistoryTabView: View {
         var walked: [PayCycle] = []
         var cursor = current
         for _ in 0..<maxWalkedCycles {
-            cursor = PayCycleEngine.previousCycle(before: cursor, settings: store.paySettings)
+            cursor = PayCycleEngine.previousCycle(before: cursor, settings: store.scopedPaySettings)
             walked.append(cursor)
             // This cycle's start is on/before the earliest entry, so — since
             // cycles are contiguous and non-overlapping — it necessarily
@@ -291,7 +291,7 @@ struct HistoryTabView: View {
     }
 
     private func cycleHours(_ cycle: PayCycle) -> Double {
-        PayCycleEngine.entries(store.entries, in: cycle)
+        PayCycleEngine.entries(store.scopedEntries, in: cycle)
             .filter { !$0.isOffDay }
             .reduce(0) { $0 + $1.paidHours }
     }
