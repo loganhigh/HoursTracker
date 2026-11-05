@@ -74,6 +74,22 @@ final class WatchSession: NSObject, ObservableObject {
         return true
     }
 
+    /// Asks the phone and waits for its answer: the result line and the
+    /// decoded payload. Nil when the phone can't be reached.
+    func request<T: Decodable>(_ command: WatchCommand, as type: T.Type) async -> (result: String, value: T?)? {
+        let session = WCSession.default
+        guard session.activationState == .activated, session.isReachable,
+              let data = WatchCoding.encode(command) else { return nil }
+        return await withCheckedContinuation { continuation in
+            session.sendMessage([WatchKeys.command: data], replyHandler: { reply in
+                let result = reply[WatchKeys.result] as? String ?? ""
+                continuation.resume(returning: (result, WatchCoding.decode(T.self, from: reply[WatchKeys.payload])))
+            }, errorHandler: { _ in
+                continuation.resume(returning: nil)
+            })
+        }
+    }
+
     func send(_ command: WatchCommand) {
         applyLocally(command)
         guard let data = WatchCoding.encode(command) else { return }
@@ -118,7 +134,8 @@ final class WatchSession: NSObject, ObservableObject {
     private func applyLocally(_ command: WatchCommand) {
         var s = snapshot
         switch command {
-        case .requestSnapshot, .requestMonth:
+        case .requestSnapshot, .requestMonth, .requestBoard, .requestChat, .sendChat,
+             .requestInbox, .requestThread, .sendDirect:
             return
         case .clockIn(let at):
             guard s.liveShift == nil else { return }

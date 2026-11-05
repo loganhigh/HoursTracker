@@ -236,7 +236,7 @@ async function getMutualFriendUids(uid) {
 
 const NUDGE_EMOJIS = new Set(["👍", "💪", "🔥", "😅", "🙏", "✅"]);
 
-async function sendPushToUser(targetUid, friendData, { title, body, dataPayload }) {
+async function sendPushToUser(targetUid, friendData, { title, body, dataPayload, category, threadId }) {
   const tokens = await tokensForUser(targetUid, friendData);
   if (tokens.length === 0) return;
 
@@ -250,7 +250,9 @@ async function sendPushToUser(targetUid, friendData, { title, body, dataPayload 
           payload: {
             aps: {
               sound: "default",
-              "thread-id": "friend_nudge",
+              "thread-id": threadId || "friend_nudge",
+              // Notification actions (e.g. CHAT_REPLY's inline Reply).
+              ...(category ? { category } : {}),
             },
           },
         },
@@ -2881,7 +2883,12 @@ exports.sendGlobalChatMessage = onCall(
       await sendPushToUser(targetUid, targetSnap.data(), {
         title: `@${sender.username} mentioned you`,
         body: chat.pushPreview(text),
-        dataPayload: { type: "chat_mention", kind: "chatMention", messageId: ref.id },
+        dataPayload: {
+          type: "chat_mention", kind: "chatMention", messageId: ref.id,
+          fromUid: uid, fromUsername: sender.username,
+        },
+        category: "CHAT_REPLY",
+        threadId: "board_chat",
       });
     }));
 
@@ -2941,7 +2948,12 @@ exports.sendDirectMessage = onCall(
     await sendPushToUser(toUid, targetSnap.data(), {
       title: `@${sender.username}`,
       body: chat.pushPreview(text),
-      dataPayload: { type: "direct_message", kind: "directMessage", threadId, fromUid: uid },
+      dataPayload: {
+        type: "direct_message", kind: "directMessage", threadId, fromUid: uid,
+        fromUsername: sender.username,
+      },
+      category: "CHAT_REPLY",
+      threadId: `dm_${threadId}`,
     });
 
     return { threadId, id: messageRef.id };

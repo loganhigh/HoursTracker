@@ -253,6 +253,49 @@ final class ChatService: ObservableObject {
         db.collection("dmThreads").document(threadId).updateData(["unread.\(uid)": 0])
     }
 
+    // MARK: One-off reads (Apple Watch)
+
+    /// The block list right now, without waiting for the listener.
+    func refreshBlocked() async {
+        guard let uid = myUid,
+              let snap = try? await db.collection("users").document(uid).collection("blockedUsers").getDocuments()
+        else { return }
+        blockedUids = Set(snap.documents.map(\.documentID))
+    }
+
+    /// The latest Board Chat messages, oldest first, blocked people removed.
+    func fetchRecentGlobal(limit: Int) async -> [ChatMessage] {
+        guard let snap = try? await db.collection("globalChat")
+            .order(by: "createdAt", descending: true).limit(to: limit).getDocuments() else { return [] }
+        return snap.documents.compactMap(ChatMessage.parse).reversed().filter { !blockedUids.contains($0.uid) }
+    }
+
+    func fetchThreads() async -> [DirectThread] {
+        guard let uid = myUid,
+              let snap = try? await db.collection("dmThreads").whereField("participants", arrayContains: uid).getDocuments()
+        else { return visibleThreads }
+        return snap.documents.compactMap { DirectThread.parse($0, myUid: uid) }
+            .filter { !blockedUids.contains($0.otherUid) }
+            .sorted { $0.lastAt > $1.lastAt }
+    }
+
+    func fetchThreadMessages(_ threadId: String, limit: Int) async -> [DirectMessage] {
+        guard let snap = try? await db.collection("dmThreads").document(threadId).collection("messages")
+            .order(by: "createdAt", descending: true).limit(to: limit).getDocuments() else { return [] }
+        return snap.documents.compactMap { doc -> DirectMessage? in
+            let data = doc.data()
+            guard let uid = data["uid"] as? String, let text = data["text"] as? String else { return nil }
+            return DirectMessage(id: doc.documentID, uid: uid, text: text,
+                                 createdAt: (data["createdAt"] as? Timestamp)?.dateValue() ?? Date())
+        }.reversed()
+    }
+
+    /// Zeroes the viewer's unread count whether or not the inbox is loaded.
+    func markReadNow(_ threadId: String) async {
+        guard let uid = myUid else { return }
+        try? await db.collection("dmThreads").document(threadId).updateData(["unread.\(uid)": 0])
+    }
+
     // MARK: Safety
 
     func isBlocked(_ uid: String) -> Bool { blockedUids.contains(uid) }

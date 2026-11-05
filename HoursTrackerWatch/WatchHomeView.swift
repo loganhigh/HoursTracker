@@ -51,6 +51,10 @@ struct WatchHomeView: View {
                     }
                     .disabled(!snapshot.signedIn)
 
+                    if snapshot.signedIn {
+                        social
+                    }
+
                     if !snapshot.recentShifts.isEmpty {
                         recent
                     }
@@ -163,6 +167,30 @@ struct WatchHomeView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// The global board and Board Chat, answered by the phone.
+    private var social: some View {
+        HStack(spacing: 8) {
+            NavigationLink {
+                WatchBoardView()
+            } label: {
+                VStack(spacing: 2) {
+                    Image(systemName: "trophy.fill")
+                    Text("Board").font(.caption2.weight(.semibold))
+                }
+                .frame(maxWidth: .infinity)
+            }
+            NavigationLink {
+                WatchChatView()
+            } label: {
+                VStack(spacing: 2) {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                    Text("Chat").font(.caption2.weight(.semibold))
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
     }
 
     private var recent: some View {

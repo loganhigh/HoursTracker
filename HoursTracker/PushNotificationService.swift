@@ -15,8 +15,22 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         Messaging.messaging().delegate = self
+        UNUserNotificationCenter.current().setNotificationCategories([Self.chatReplyCategory])
         return true
     }
+
+    /// "Reply" on @mention and direct-message pushes (the server sets the
+    /// category). Answering doesn't open the app — and works from the Apple
+    /// Watch too, since it mirrors the phone's notifications.
+    static let chatReplyCategoryID = "CHAT_REPLY"
+    static let chatReplyActionID = "CHAT_REPLY_ACTION"
+    private static let chatReplyCategory = UNNotificationCategory(
+        identifier: chatReplyCategoryID,
+        actions: [UNTextInputNotificationAction(identifier: chatReplyActionID, title: "Reply",
+                                                options: [], textInputButtonTitle: "Send",
+                                                textInputPlaceholder: "Message")],
+        intentIdentifiers: []
+    )
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Messaging.messaging().apnsToken = deviceToken
@@ -49,6 +63,26 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
+        if response.actionIdentifier == Self.chatReplyActionID,
+           let reply = (response as? UNTextInputNotificationResponse)?.userText {
+            let kind = userInfo["kind"] as? String
+            let fromUid = userInfo["fromUid"] as? String
+            let fromUsername = userInfo["fromUsername"] as? String ?? ""
+            Task { @MainActor in
+                let text = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty {
+                    if kind == "directMessage", let fromUid {
+                        _ = try? await ChatService.shared.sendDirect(text, toUid: fromUid, toUsername: fromUsername)
+                    } else if kind == "chatMention" {
+                        // Replying to a tag tags them back so they hear about it.
+                        let tagged = fromUsername.isEmpty ? text : "@\(fromUsername) \(text)"
+                        try? await ChatService.shared.sendGlobal(tagged)
+                    }
+                }
+                completionHandler()
+            }
+            return
+        }
         if let kind = userInfo["kind"] as? String, kind == "leaderboardRank" {
             Task { @MainActor in
                 NotificationRouter.shared.openGlobalLeaderboard = true

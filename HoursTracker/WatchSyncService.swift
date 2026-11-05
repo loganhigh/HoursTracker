@@ -136,7 +136,8 @@ final class WatchSyncService: NSObject {
         guard AuthService.shared.user != nil else { return "Sign in on your iPhone first." }
         let live = LiveShiftManager.shared
         switch command {
-        case .requestSnapshot, .requestMonth:
+        case .requestSnapshot, .requestMonth, .requestBoard, .requestChat, .sendChat,
+             .requestInbox, .requestThread, .sendDirect:
             return ""
         case .clockIn(let at):
             guard live.activeShift == nil else { return "Already clocked in." }
@@ -225,6 +226,115 @@ final class WatchSyncService: NSObject {
     }
 }
 
+// MARK: - Leaderboard, Board Chat and messages
+
+extension WatchSyncService {
+    /// Answers the board / chat / messages commands, or nil for any other
+    /// command. Sends go through ChatService, so the server's filter, rate
+    /// limit and blocks apply exactly as on the phone.
+    func socialReply(for command: WatchCommand) async -> [String: Any]? {
+        guard AuthService.shared.user != nil else {
+            switch command {
+            case .requestBoard, .requestChat, .sendChat, .requestInbox, .requestThread, .sendDirect:
+                return [WatchKeys.result: "Sign in on your iPhone first."]
+            default:
+                return nil
+            }
+        }
+        let chat = ChatService.shared
+        var result = ""
+        let payload: Data?
+        switch command {
+        case .requestBoard:
+            payload = WatchCoding.encode(await makeBoard())
+        case .requestChat:
+            await chat.refreshBlocked()
+            payload = WatchCoding.encode(await makeChat())
+        case .sendChat(let text):
+            do {
+                try await chat.sendGlobal(text)
+                result = "Sent"
+            } catch {
+                result = error.localizedDescription
+            }
+            payload = WatchCoding.encode(await makeChat())
+        case .requestInbox:
+            await chat.refreshBlocked()
+            payload = WatchCoding.encode(await makeInbox())
+        case .requestThread(let otherUid):
+            payload = WatchCoding.encode(await makeThread(with: otherUid))
+        case .sendDirect(let otherUid, let otherUsername, let text):
+            do {
+                try await chat.sendDirect(text, toUid: otherUid, toUsername: otherUsername)
+                result = "Sent"
+            } catch {
+                result = error.localizedDescription
+            }
+            payload = WatchCoding.encode(await makeThread(with: otherUid))
+        default:
+            return nil
+        }
+        var reply: [String: Any] = [WatchKeys.result: result]
+        if let payload { reply[WatchKeys.payload] = payload }
+        return reply
+    }
+
+    private func makeBoard() async -> WatchBoard {
+        let board = TopTrackersService.shared
+        board.startListening()
+        // A cold launch (the watch woke the phone) needs a moment for the
+        // board doc to arrive.
+        for _ in 0..<20 where !board.hasLoaded {
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+        let myUid = AuthService.shared.user?.uid
+        let rows = board.allTrackers.map { tracker in
+            WatchBoardRow(uid: tracker.uid, rank: tracker.rank, username: Username.normalize(tracker.name),
+                          hours: tracker.hours, hoursHidden: tracker.hoursHidden,
+                          prestige: tracker.prestige, isMe: tracker.uid == myUid)
+        }
+        let top = Array(rows.prefix(10))
+        var around: [WatchBoardRow] = []
+        if let index = rows.firstIndex(where: \.isMe), index >= 10 {
+            around = Array(rows[max(10, index - 2)...min(rows.count - 1, index + 2)])
+        }
+        let me = rows.first(where: \.isMe)
+        return WatchBoard(myRank: me?.rank, myHours: me?.hours ?? 0, totalRanked: rows.count,
+                          top: top, aroundMe: around)
+    }
+
+    private func makeChat() async -> WatchChat {
+        let chat = ChatService.shared
+        let myUid = AuthService.shared.user?.uid
+        let lines = await chat.fetchRecentGlobal(limit: 25).map { message in
+            WatchChatLine(id: message.id, uid: message.uid, username: message.username, text: message.text,
+                          createdAt: message.createdAt, isMine: message.uid == myUid,
+                          mentionsMe: myUid.map { message.mentions.contains($0) } ?? false)
+        }
+        let unread = await chat.fetchThreads().reduce(0) { $0 + $1.unread }
+        return WatchChat(lines: lines, myUsername: FriendsService.shared.myUsername, unreadMessages: unread)
+    }
+
+    private func makeInbox() async -> [WatchThreadSummary] {
+        await ChatService.shared.fetchThreads().prefix(20).map {
+            WatchThreadSummary(id: $0.id, otherUid: $0.otherUid, otherUsername: $0.otherUsername,
+                               lastText: $0.lastText, lastAt: $0.lastAt, unread: $0.unread)
+        }
+    }
+
+    private func makeThread(with otherUid: String) async -> WatchThreadMessages? {
+        let chat = ChatService.shared
+        guard let threadId = chat.threadId(with: otherUid) else { return nil }
+        let myUid = AuthService.shared.user?.uid
+        let lines = await chat.fetchThreadMessages(threadId, limit: 30).map {
+            WatchChatLine(id: $0.id, uid: $0.uid, username: "", text: $0.text, createdAt: $0.createdAt,
+                          isMine: $0.uid == myUid, mentionsMe: false)
+        }
+        await chat.markReadNow(threadId)
+        return WatchThreadMessages(threadId: threadId, lines: lines)
+    }
+}
+
 // MARK: - WCSessionDelegate
 
 extension WatchSyncService: WCSessionDelegate {
@@ -247,7 +357,14 @@ extension WatchSyncService: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any],
                              replyHandler: @escaping ([String: Any]) -> Void) {
         let data = message[WatchKeys.command] as? Data
-        Task { @MainActor in replyHandler(self.reply(for: data)) }
+        Task { @MainActor in
+            if let command = WatchCoding.decode(WatchCommand.self, from: data),
+               let social = await self.socialReply(for: command) {
+                replyHandler(social)
+            } else {
+                replyHandler(self.reply(for: data))
+            }
+        }
     }
 
     /// Queued path: sent while the phone was out of reach, delivered later.

@@ -13,6 +13,8 @@ enum WatchKeys {
     static let snapshot = "snapshot"
     static let result = "result"
     static let monthShifts = "monthShifts"
+    /// A board / chat / messages reply (see WatchSocial.swift).
+    static let payload = "payload"
 }
 
 /// One break during a live shift. `end == nil` while it's still running.
@@ -124,6 +126,14 @@ enum WatchCommand: Codable, Equatable {
     /// Every shift in the month starting on this date; the reply carries
     /// them under `WatchKeys.monthShifts`.
     case requestMonth(Date)
+    case requestBoard
+    case requestChat
+    /// Posts to Board Chat; the reply carries the refreshed chat.
+    case sendChat(text: String)
+    case requestInbox
+    case requestThread(otherUid: String)
+    /// Sends a direct message; the reply carries the refreshed thread.
+    case sendDirect(otherUid: String, otherUsername: String, text: String)
 }
 
 enum WatchCoding {
