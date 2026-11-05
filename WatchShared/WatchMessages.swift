@@ -12,6 +12,7 @@ enum WatchKeys {
     static let command = "cmd"
     static let snapshot = "snapshot"
     static let result = "result"
+    static let monthShifts = "monthShifts"
 }
 
 /// One break during a live shift. `end == nil` while it's still running.
@@ -57,21 +58,36 @@ struct WatchRecentShift: Codable, Equatable, Identifiable, Hashable {
     var locationName: String
 }
 
+/// One calendar month of logged work, for the watch's history list.
+struct WatchMonth: Codable, Equatable, Identifiable, Hashable {
+    /// First day of the month.
+    var id: Date
+    var hours: Double
+    var shiftCount: Int
+}
+
 /// Everything the watch needs to draw itself, pushed by the phone.
 struct WatchSnapshot: Codable, Equatable {
     var signedIn: Bool
     var liveShift: WatchLiveShift?
     /// Logged hours, not counting the live shift (the watch adds that itself).
-    var todayHours: Double
-    var weekHours: Double
+    var chequeHours: Double
+    var monthHours: Double
+    /// The current pay period's work window, `[start, end)`.
+    var chequeStart: Date
+    var chequeEnd: Date
     var templates: [WatchTemplate]
     var places: [String]
     var recentShifts: [WatchRecentShift]
+    /// Every month with work in it, newest first. Each month's shifts are
+    /// fetched on demand with `.requestMonth` to keep the snapshot small.
+    var months: [WatchMonth]
     var generatedAt: Date
 
     static let empty = WatchSnapshot(
-        signedIn: false, liveShift: nil, todayHours: 0, weekHours: 0,
-        templates: [], places: [], recentShifts: [], generatedAt: .distantPast
+        signedIn: false, liveShift: nil, chequeHours: 0, monthHours: 0,
+        chequeStart: .distantPast, chequeEnd: .distantPast,
+        templates: [], places: [], recentShifts: [], months: [], generatedAt: .distantPast
     )
 }
 
@@ -105,6 +121,9 @@ enum WatchCommand: Codable, Equatable {
     case endBreak(at: Date)
     case clockOut(at: Date)
     case addShift(WatchShiftDraft)
+    /// Every shift in the month starting on this date; the reply carries
+    /// them under `WatchKeys.monthShifts`.
+    case requestMonth(Date)
 }
 
 enum WatchCoding {

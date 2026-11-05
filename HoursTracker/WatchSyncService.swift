@@ -58,27 +58,28 @@ final class WatchSyncService: NSObject {
         }
 
         let cal = Calendar.current
-        var weekCal = cal
-        // Same week as Home, the widget and Siri ("Week starts on", Monday when unset).
-        weekCal.firstWeekday = store.paySettings.weekStartWeekday ?? 2
-        let week = weekCal.dateInterval(of: .weekOfYear, for: now)
-        var today = 0.0, weekTotal = 0.0
-        for entry in store.entries {
-            if cal.isDate(entry.date, inSameDayAs: now) { today += entry.paidHours }
-            if let week, entry.date >= week.start, entry.date < week.end { weekTotal += entry.paidHours }
+        // Same pay period as Home's cheque card.
+        let cycle = store.currentPayCycle()
+        let thisMonth = cal.dateInterval(of: .month, for: now)
+        var cheque = 0.0, month = 0.0
+        var byMonth: [Date: (hours: Double, shifts: Int)] = [:]
+        for entry in store.entries where !entry.isOffDay {
+            if entry.date >= cycle.start, entry.date < cycle.end { cheque += entry.paidHours }
+            if let thisMonth, thisMonth.contains(entry.date) { month += entry.paidHours }
+            if let key = cal.dateInterval(of: .month, for: entry.date)?.start {
+                byMonth[key, default: (0, 0)].hours += entry.paidHours
+                byMonth[key, default: (0, 0)].shifts += 1
+            }
         }
+        let months = byMonth
+            .map { WatchMonth(id: $0.key, hours: $0.value.hours, shiftCount: $0.value.shifts) }
+            .sorted { $0.id > $1.id }
 
         let recent = store.entries
             .filter { !$0.isOffDay }
             .sorted { $0.start > $1.start }
             .prefix(6)
-            .map { entry in
-                WatchRecentShift(
-                    id: entry.id.uuidString, day: entry.date, start: entry.start, end: entry.end,
-                    breakMinutes: entry.breakMinutes, hours: entry.paidHours,
-                    locationName: entry.locationName
-                )
-            }
+            .map(watchShift)
 
         let templates = store.shiftTemplatesByRecency.map {
             WatchTemplate(id: $0.id, name: $0.name, startMinutes: $0.startMinutes,
@@ -88,8 +89,27 @@ final class WatchSyncService: NSObject {
         let places = store.recentShiftPlaces(limit: 8).map(\.trimmedName).filter { !$0.isEmpty }
 
         return WatchSnapshot(
-            signedIn: signedIn, liveShift: live, todayHours: today, weekHours: weekTotal,
-            templates: templates, places: places, recentShifts: Array(recent), generatedAt: now
+            signedIn: signedIn, liveShift: live, chequeHours: cheque, monthHours: month,
+            chequeStart: cycle.start, chequeEnd: cycle.end,
+            templates: templates, places: places, recentShifts: Array(recent),
+            months: months, generatedAt: now
+        )
+    }
+
+    /// Every worked shift in the month that starts on `monthStart`, newest first.
+    func shifts(inMonthStarting monthStart: Date) -> [WatchRecentShift] {
+        guard let store, let month = Calendar.current.dateInterval(of: .month, for: monthStart) else { return [] }
+        return store.entries
+            .filter { !$0.isOffDay && month.contains($0.date) }
+            .sorted { $0.start > $1.start }
+            .map(watchShift)
+    }
+
+    private func watchShift(_ entry: WorkEntry) -> WatchRecentShift {
+        WatchRecentShift(
+            id: entry.id.uuidString, day: entry.date, start: entry.start, end: entry.end,
+            breakMinutes: entry.breakMinutes, hours: entry.paidHours,
+            locationName: entry.locationName
         )
     }
 
@@ -116,7 +136,7 @@ final class WatchSyncService: NSObject {
         guard AuthService.shared.user != nil else { return "Sign in on your iPhone first." }
         let live = LiveShiftManager.shared
         switch command {
-        case .requestSnapshot:
+        case .requestSnapshot, .requestMonth:
             return ""
         case .clockIn(let at):
             guard live.activeShift == nil else { return "Already clocked in." }
@@ -191,10 +211,15 @@ final class WatchSyncService: NSObject {
 
     private func reply(for data: Any?) -> [String: Any] {
         var result = "Couldn't read that — update Hour Tracker on both devices."
+        var reply: [String: Any] = [:]
         if let command = WatchCoding.decode(WatchCommand.self, from: data) {
             result = handle(command)
+            if case .requestMonth(let monthStart) = command,
+               let shifts = WatchCoding.encode(shifts(inMonthStarting: monthStart)) {
+                reply[WatchKeys.monthShifts] = shifts
+            }
         }
-        var reply: [String: Any] = [WatchKeys.result: result]
+        reply[WatchKeys.result] = result
         if let snapshot = WatchCoding.encode(makeSnapshot()) { reply[WatchKeys.snapshot] = snapshot }
         return reply
     }

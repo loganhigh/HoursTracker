@@ -21,11 +21,19 @@ final class WatchSession: NSObject, ObservableObject {
     @Published private(set) var isReachable = false
     /// Short confirmation shown at the top of the screen.
     @Published var banner: String?
+    /// Shifts per month (keyed by the month's first day), kept so months
+    /// already opened still show with the phone out of reach.
+    @Published private(set) var monthShifts: [Date: [WatchRecentShift]]
+    /// Months whose last fetch failed, so the screen stops spinning.
+    @Published private(set) var failedMonths: Set<Date> = []
 
-    private static let snapshotKey = "watch_snapshot_v1"
+    private static let snapshotKey = "watch_snapshot_v2"
+    private static let monthShiftsKey = "watch_month_shifts_v1"
 
     private override init() {
-        snapshot = WatchCoding.decode(WatchSnapshot.self, from: UserDefaults.standard.data(forKey: Self.snapshotKey)) ?? .empty
+        let defaults = UserDefaults.standard
+        snapshot = WatchCoding.decode(WatchSnapshot.self, from: defaults.data(forKey: Self.snapshotKey)) ?? .empty
+        monthShifts = WatchCoding.decode([Date: [WatchRecentShift]].self, from: defaults.data(forKey: Self.monthShiftsKey)) ?? [:]
         super.init()
     }
 
@@ -43,6 +51,27 @@ final class WatchSession: NSObject, ObservableObject {
             let snapshot = WatchCoding.decode(WatchSnapshot.self, from: reply[WatchKeys.snapshot])
             Task { @MainActor in if let snapshot { self?.store(snapshot) } }
         }, errorHandler: nil)
+    }
+
+    /// Fetches one month's shifts from the phone. Returns false when the
+    /// phone can't be reached (the cached copy, if any, stays on screen).
+    @discardableResult
+    func loadMonth(_ monthStart: Date) -> Bool {
+        let session = WCSession.default
+        guard session.activationState == .activated, session.isReachable,
+              let data = WatchCoding.encode(WatchCommand.requestMonth(monthStart)) else { return false }
+        failedMonths.remove(monthStart)
+        session.sendMessage([WatchKeys.command: data], replyHandler: { [weak self] reply in
+            let shifts = WatchCoding.decode([WatchRecentShift].self, from: reply[WatchKeys.monthShifts])
+            Task { @MainActor in
+                guard let self, let shifts else { return }
+                self.monthShifts[monthStart] = shifts
+                UserDefaults.standard.set(WatchCoding.encode(self.monthShifts), forKey: Self.monthShiftsKey)
+            }
+        }, errorHandler: { [weak self] _ in
+            Task { @MainActor in self?.failedMonths.insert(monthStart) }
+        })
+        return true
     }
 
     func send(_ command: WatchCommand) {
@@ -89,7 +118,7 @@ final class WatchSession: NSObject, ObservableObject {
     private func applyLocally(_ command: WatchCommand) {
         var s = snapshot
         switch command {
-        case .requestSnapshot:
+        case .requestSnapshot, .requestMonth:
             return
         case .clockIn(let at):
             guard s.liveShift == nil else { return }
@@ -108,13 +137,11 @@ final class WatchSession: NSObject, ObservableObject {
         case .clockOut(let at):
             guard let live = s.liveShift else { return }
             let hours = live.workedSeconds(at: at) / 3600
-            s.todayHours += hours
-            s.weekHours += hours
+            s.add(hours, on: live.startDate)
             s.liveShift = nil
             WKInterfaceDevice.current().play(.stop)
         case .addShift(let draft):
-            if Calendar.current.isDateInToday(draft.day) { s.todayHours += draft.paidHours }
-            s.weekHours += draft.paidHours
+            s.add(draft.paidHours, on: draft.day)
             WKInterfaceDevice.current().play(.success)
         }
         store(s)
@@ -143,5 +170,13 @@ extension WatchSession: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
         let context = WatchCoding.decode(WatchSnapshot.self, from: applicationContext[WatchKeys.snapshot])
         Task { @MainActor in if let context { self.store(context) } }
+    }
+}
+
+private extension WatchSnapshot {
+    /// Counts new hours toward this cheque and this month, like the phone will.
+    mutating func add(_ hours: Double, on day: Date) {
+        if day >= chequeStart, day < chequeEnd { chequeHours += hours }
+        if Calendar.current.isDate(day, equalTo: Date(), toGranularity: .month) { monthHours += hours }
     }
 }

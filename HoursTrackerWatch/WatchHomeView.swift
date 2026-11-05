@@ -4,7 +4,8 @@ import SwiftUI
 //
 // One screen that answers "am I on the clock?": a running timer with Break
 // and Clock Out while a shift is live, a big Clock In button when it isn't,
-// today's and this week's hours, and the way into logging a past shift.
+// this cheque's and this month's hours, logging a past shift, and the way
+// into every month of history.
 
 struct WatchHomeView: View {
     @EnvironmentObject private var session: WatchSession
@@ -17,6 +18,13 @@ struct WatchHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 10) {
+                    Image("AppLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 46)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityLabel("Hour Tracker")
+
                     if let banner = session.banner {
                         Text(banner)
                             .font(.footnote.weight(.semibold))
@@ -49,7 +57,6 @@ struct WatchHomeView: View {
                 }
                 .animation(.easeOut(duration: 0.2), value: session.banner)
             }
-            .navigationTitle("Hour Tracker")
             .sheet(isPresented: $showingAddShift) {
                 WatchAddShiftView(isPresented: $showingAddShift)
             }
@@ -133,11 +140,14 @@ struct WatchHomeView: View {
 
     private var totals: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
-            let live = snapshot.liveShift.map { $0.workedSeconds(at: context.date) / 3600 } ?? 0
+            let live = snapshot.liveShift
+            let liveHours = live.map { $0.workedSeconds(at: context.date) / 3600 } ?? 0
+            let inCheque = live.map { $0.startDate >= snapshot.chequeStart && $0.startDate < snapshot.chequeEnd } ?? false
+            let inMonth = live.map { Calendar.current.isDate($0.startDate, equalTo: context.date, toGranularity: .month) } ?? false
             HStack {
-                stat("Today", WatchStyle.hours(snapshot.todayHours + live))
+                stat("This Cheque", WatchStyle.hours(snapshot.chequeHours + (inCheque ? liveHours : 0)))
                 Divider()
-                stat("Week", WatchStyle.hours(snapshot.weekHours + live))
+                stat("Month", WatchStyle.hours(snapshot.monthHours + (inMonth ? liveHours : 0)))
             }
             .padding(.vertical, 6)
         }
@@ -161,20 +171,17 @@ struct WatchHomeView: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
-            ForEach(snapshot.recentShifts.prefix(3)) { shift in
-                HStack {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(shift.day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
-                            .font(.footnote.weight(.semibold))
-                        Text("\(shift.start.formatted(date: .omitted, time: .shortened)) – \(shift.end.formatted(date: .omitted, time: .shortened))")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Text(WatchStyle.hours(shift.hours))
-                        .font(.footnote.weight(.semibold))
-                        .monospacedDigit()
+            ForEach(snapshot.recentShifts) { shift in
+                WatchShiftRow(shift: shift)
+            }
+            if !snapshot.months.isEmpty {
+                NavigationLink {
+                    WatchMonthsView()
+                } label: {
+                    Label("All months", systemImage: "calendar")
+                        .frame(maxWidth: .infinity)
                 }
+                .padding(.top, 4)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

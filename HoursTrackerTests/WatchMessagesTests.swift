@@ -35,6 +35,7 @@ final class WatchMessagesTests: XCTestCase {
             .requestSnapshot, .clockIn(at: at), .startBreak(at: at), .endBreak(at: at), .clockOut(at: at),
             .addShift(WatchShiftDraft(day: at, startMinutes: 360, endMinutes: 1110, breakMinutes: 30,
                                       locationName: "Main Yard", templateID: "t1")),
+            .requestMonth(at),
         ]
         for command in commands {
             let data = try XCTUnwrap(WatchCoding.encode(command))
