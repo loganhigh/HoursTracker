@@ -103,6 +103,12 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
                 router.openGlobalLeaderboard = true
             }
         }
+        if let kind = userInfo["kind"] as? String, kind == "prestigeReady" {
+            // "Level 25 complete" — the Prestige button is on the You tab.
+            Task { @MainActor in
+                NotificationRouter.shared.openYouTab = true
+            }
+        }
         if let kind = userInfo["kind"] as? String, kind == "appUpdate" {
             // "New Update Available!" — straight to the App Store listing.
             Task { @MainActor in
@@ -127,6 +133,9 @@ final class NotificationRouter: ObservableObject {
     @Published var openGlobalChat = false
     /// Set with the board by a direct-message push; the board opens the thread.
     @Published var openDirectThread: DirectThreadTarget?
+    /// Raised by a "you can Prestige" push; AppTabView selects the You tab
+    /// (where the Prestige button lives) and lowers it.
+    @Published var openYouTab = false
     private init() {}
 }
 

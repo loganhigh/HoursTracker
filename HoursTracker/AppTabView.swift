@@ -89,6 +89,11 @@ struct AppTabView: View {
         )
     }
 
+    private func openYouTabFromPush() {
+        tabRouter.selection = .you
+        notificationRouter.openYouTab = false
+    }
+
     var body: some View {
         TabView(selection: selection) {
             NavigationStack {
@@ -137,6 +142,14 @@ struct AppTabView: View {
         // forward before the router flag presents it.
         .onChange(of: notificationRouter.openGlobalLeaderboard) { _, isOpen in
             if isOpen { tabRouter.selection = .home }
+        }
+        // A cold launch from the push raises the flag before this view exists,
+        // so check on appear as well as on change.
+        .onChange(of: notificationRouter.openYouTab) { _, isOpen in
+            if isOpen { openYouTabFromPush() }
+        }
+        .onAppear {
+            if notificationRouter.openYouTab { openYouTabFromPush() }
         }
         .onChange(of: friendsEnabled) { _, isEnabled in
             // Friends can be the selected tab at the moment it's switched off
