@@ -543,6 +543,30 @@ function levelStateFromXP(totalXP, prestige = 0, snapshots = []) {
   return Math.min(level, maxLevel);
 }
 
+/**
+ * Matches iOS `levelState(...).canPrestige`: the current run's XP covers the
+ * WHOLE run (level 25 finished, not merely reached) and prestige isn't capped.
+ * Uses the same snapshot-aware run deduction as levelStateFromXP.
+ */
+function canPrestigeFromXP(totalXP, prestige = 0, snapshots = []) {
+  const p = Math.max(0, Math.floor(Number(prestige) || 0));
+  if (p >= MAX_PRESTIGE) return false;
+  let xpPool = Math.min(MAX_SANE_TOTAL_XP, Math.max(0, Number(totalXP) || 0));
+  const fullRun = totalXPForFullPrestigeRun();
+  for (let i = 0; i < p; i++) {
+    let runXP;
+    if (i < snapshots.length) {
+      const snap = Number(snapshots[i]) || 0;
+      const prev = i > 0 ? Number(snapshots[i - 1]) || 0 : 0;
+      runXP = Math.min(snap - prev, fullRun);
+    } else {
+      runXP = fullRun;
+    }
+    xpPool = Math.max(0, xpPool - runXP);
+  }
+  return xpPool >= fullRun;
+}
+
 function totalXPAtLevelStart(targetLevel, prestige = 0, snapshots = []) {
   const clampedLevel = Math.min(
     Math.max(1, Number(targetLevel) || 1),
@@ -1398,6 +1422,30 @@ async function recomputeUserStats(db, uid, options = {}) {
 
   await batch.commit();
 
+  // "You can Prestige" push — once per prestige run. The marker on the
+  // gamification doc (set by notifyOnPrestigeReady) skips the event write on
+  // every later recompute; the event doc's create() keeps it idempotent if a
+  // client stomps the marker. Never for a run the backstop just corrected.
+  if (
+    !prestigeCorrection &&
+    Number(gamification.prestigeReadyNotifiedFor) !== prestige &&
+    canPrestigeFromXP(totalXP, prestige, snapshots)
+  ) {
+    try {
+      await db.collection("_prestigeReady").doc(`${uid}_${prestige}`).create({
+        uid,
+        prestige,
+        totalXP,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    } catch (err) {
+      // 6 = ALREADY_EXISTS: this run was already announced.
+      if (err?.code !== 6) {
+        console.warn(`prestigeReady event write failed uid=${uid}:`, err?.message || err);
+      }
+    }
+  }
+
   // Observability: one line per persisted recompute so stale-level reports can
   // be traced end-to-end (client logs the matching stats.lifetime snapshot).
   console.log(
@@ -1668,6 +1716,7 @@ module.exports = {
   MAX_PRESTIGE,
   LEGACY_MAX_PRESTIGE,
   levelStateFromXP,
+  canPrestigeFromXP,
   paidHours,
   weeklyStats,
   currentPayCycle,

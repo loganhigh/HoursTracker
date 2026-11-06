@@ -709,6 +709,42 @@ exports.notifyOnFriendRequest = onDocumentCreated(
 );
 
 /**
+ * "You can Prestige" push. recomputeUserStats creates `_prestigeReady/{uid}_{p}`
+ * the first time it sees a finished Level 25 run at prestige p; this sends the
+ * push once and records the marker so later recomputes skip the event write.
+ */
+exports.notifyOnPrestigeReady = onDocumentCreated(
+  {
+    document: "_prestigeReady/{eventId}",
+    region: "us-central1",
+  },
+  async (event) => {
+    const data = event.data?.data();
+    const uid = data?.uid;
+    const prestige = Number(data?.prestige);
+    if (!uid || !Number.isFinite(prestige)) return;
+
+    const gamRef = db.collection("users").doc(uid).collection("gamification").doc("current");
+    const [userSnap, gamSnap] = await Promise.all([
+      db.collection("users").doc(uid).get(),
+      gamRef.get(),
+    ]);
+    // Already prestiged in the moments since the recompute — nothing to say.
+    const currentPrestige = Number(gamSnap.data()?.prestige) || 0;
+    if (currentPrestige !== prestige) return;
+
+    const next = prestige + 1;
+    await sendPushToUser(uid, userSnap.data(), {
+      title: "Level 25 complete 👑",
+      body: `You can Prestige to P${next} now. Open the You tab to claim it.`,
+      dataPayload: { kind: "prestigeReady", prestige: String(next) },
+      threadId: "prestige_ready",
+    });
+    await gamRef.set({ prestigeReadyNotifiedFor: prestige }, { merge: true });
+  }
+);
+
+/**
  * Daily at 09:00 UTC — finds users whose work start date anniversary falls
  * on today and pushes a notification to each of their mutual friends.
  */
