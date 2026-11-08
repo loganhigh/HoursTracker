@@ -44,6 +44,8 @@ struct AccountView: View {
     @State private var showingWrapped = false
     @State private var showingVerifiedProofSheet = false
     @ObservedObject private var photoManager = ProfilePhotoManager.shared
+    @ObservedObject private var chat = ChatService.shared
+    @State private var showingInbox = false
     #if DEBUG
     /// Temporary Stage-2 entry point for testing Wrapped. Not a real
     /// product surface — remove once Wrapped has a real launch point.
@@ -188,7 +190,9 @@ struct AccountView: View {
                 WrappedView(stats: wrappedStats, username: friendsService.myUsername, prestige: store.displayedGamificationProfile().prestige)
             }
         }
+        .navigationDestination(isPresented: $showingInbox) { DirectInboxView() }
         .onAppear {
+            chat.startInbox()
             resolveWrappedYear()
             // Same recovery hook as CareerView: guarantees the server-stats
             // listeners are attached whenever a level-displaying screen appears.
@@ -216,6 +220,23 @@ struct AccountView: View {
 
     private var settingsBar: some View {
         HStack {
+            // Direct messages, across from Settings, with the unread count.
+            if authService.isSignedIn {
+                Button {
+                    Haptics.lightTap()
+                    showingInbox = true
+                } label: {
+                    Image(systemName: "paperplane.fill")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(AppColors.subtext)
+                        .frame(width: 40, height: 40)
+                        .contentShape(Rectangle())
+                        .overlay(alignment: .topTrailing) { UnreadBadge(count: chat.unreadDirectCount) }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(chat.unreadDirectCount > 0 ? "Messages, \(chat.unreadDirectCount) unread" : "Messages")
+            }
+
             Spacer(minLength: 0)
 
             Button {
