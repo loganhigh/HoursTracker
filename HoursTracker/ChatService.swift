@@ -23,6 +23,8 @@ struct ChatMessage: Identifiable, Equatable {
     let text: String
     let mentions: [String]
     let createdAt: Date
+    /// `ChatReaction.rawValue` → uids who reacted with it.
+    var reactions: [String: [String]] = [:]
 
     static func parse(_ doc: QueryDocumentSnapshot) -> ChatMessage? {
         let data = doc.data()
@@ -35,8 +37,45 @@ struct ChatMessage: Identifiable, Equatable {
             photoURL: data["photoURL"] as? String ?? "",
             text: text,
             mentions: data["mentions"] as? [String] ?? [],
-            createdAt: (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+            createdAt: (data["createdAt"] as? Timestamp)?.dateValue() ?? Date(),
+            reactions: ChatReaction.parse(data["reactions"])
         )
+    }
+
+    /// Reactions with at least one person, in the picker's order.
+    var activeReactions: [(reaction: ChatReaction, uids: [String])] {
+        ChatReaction.allCases.compactMap { r in
+            guard let uids = reactions[r.rawValue], !uids.isEmpty else { return nil }
+            return (r, uids)
+        }
+    }
+}
+
+/// The fixed set of Board Chat reactions. The raw values are the Firestore
+/// map keys, and firestore.rules only accepts these six.
+enum ChatReaction: String, CaseIterable, Identifiable {
+    case like, heart, laugh, fire, strong, clap
+
+    var id: String { rawValue }
+
+    var emoji: String {
+        switch self {
+        case .like: return "👍"
+        case .heart: return "❤️"
+        case .laugh: return "😂"
+        case .fire: return "🔥"
+        case .strong: return "💪"
+        case .clap: return "👏"
+        }
+    }
+
+    static func parse(_ raw: Any?) -> [String: [String]] {
+        guard let map = raw as? [String: Any] else { return [:] }
+        var out: [String: [String]] = [:]
+        for r in allCases {
+            if let uids = map[r.rawValue] as? [String], !uids.isEmpty { out[r.rawValue] = uids }
+        }
+        return out
     }
 }
 
@@ -162,6 +201,25 @@ final class ChatService: ObservableObject {
 
     func delete(_ message: ChatMessage) async {
         try? await db.collection("globalChat").document(message.id).delete()
+    }
+
+    /// Adds or removes the viewer's reaction. Updates the list at once so
+    /// the chip responds before the listener catches up.
+    func toggleReaction(_ reaction: ChatReaction, on message: ChatMessage) {
+        guard let uid = myUid, let index = globalMessages.firstIndex(where: { $0.id == message.id }) else { return }
+        let key = reaction.rawValue
+        var uids = globalMessages[index].reactions[key] ?? []
+        let removing = uids.contains(uid)
+        if removing { uids.removeAll { $0 == uid } } else { uids.append(uid) }
+        globalMessages[index].reactions[key] = uids.isEmpty ? nil : uids
+        db.collection("globalChat").document(message.id).updateData([
+            FieldPath(["reactions", key]): removing ? FieldValue.arrayRemove([uid]) : FieldValue.arrayUnion([uid])
+        ])
+    }
+
+    func hasReacted(_ reaction: ChatReaction, to message: ChatMessage) -> Bool {
+        guard let uid = myUid else { return false }
+        return message.reactions[reaction.rawValue]?.contains(uid) ?? false
     }
 
     func canDelete(_ message: ChatMessage) -> Bool {

@@ -4,8 +4,8 @@ import SwiftUI
 //
 // The room everyone on the global board shares: cheer each other on, tag
 // someone with their @username (that pushes them — nothing else in here
-// does), or long-press a message to reply, message them privately, report
-// or block. Newest messages sit at the bottom, like any chat.
+// does), double-tap a message to react with an emoji, or long-press it to
+// reply, message them privately, report or block. Newest messages sit at the bottom, like any chat.
 
 struct GlobalChatView: View {
     @ObservedObject private var chat = ChatService.shared
@@ -20,6 +20,8 @@ struct GlobalChatView: View {
     @State private var blockTarget: ChatMessage?
     @State private var dmTarget: DirectThreadTarget?
     @State private var showingInbox = false
+    /// The message whose emoji picker is open (double-tap or long-press).
+    @State private var reactingTo: String?
     @FocusState private var composerFocused: Bool
     /// One-time agreement to the chat rules (App Review expects one for
     /// user-generated content).
@@ -151,9 +153,23 @@ struct GlobalChatView: View {
                     LazyVStack(alignment: .leading, spacing: AppSpacing.sm) {
                         ForEach(chat.visibleGlobalMessages) { message in
                             ChatMessageRow(message: message, isMine: message.uid == myUid, myUid: myUid,
-                                           myUsername: myUsername)
+                                           myUsername: myUsername,
+                                           hasReacted: { chat.hasReacted($0, to: message) },
+                                           onReact: { react($0, to: message) })
                                 .id(message.id)
+                                .contentShape(Rectangle())
+                                .onTapGesture(count: 2) { openPicker(for: message) }
                                 .contextMenu { menu(for: message) }
+                                .popover(isPresented: Binding(
+                                    get: { reactingTo == message.id },
+                                    set: { if !$0 { reactingTo = nil } }
+                                )) {
+                                    ChatReactionPicker(isChosen: { chat.hasReacted($0, to: message) }) { reaction in
+                                        reactingTo = nil
+                                        react(reaction, to: message)
+                                    }
+                                    .presentationCompactAdaptation(.popover)
+                                }
                         }
                     }
                     .padding(.horizontal, AppSpacing.md)
@@ -169,8 +185,33 @@ struct GlobalChatView: View {
         }
     }
 
+    private var canReact: Bool { myUsername != nil && acceptedRules }
+
+    private func openPicker(for message: ChatMessage) {
+        guard canReact else {
+            if myUsername != nil { showingRules = true }
+            return
+        }
+        Haptics.lightTap()
+        reactingTo = message.id
+    }
+
+    private func react(_ reaction: ChatReaction, to message: ChatMessage) {
+        guard canReact else { return }
+        Haptics.lightTap()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            chat.toggleReaction(reaction, on: message)
+        }
+    }
+
     @ViewBuilder
     private func menu(for message: ChatMessage) -> some View {
+        if canReact {
+            Button {
+                // Let the context menu finish closing before the popover opens.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { reactingTo = message.id }
+            } label: { Label("Add reaction", systemImage: "face.smiling") }
+        }
         if message.uid != myUid {
             Button {
                 draft = draft.isEmpty ? "@\(message.username) " : draft + " @\(message.username) "
@@ -223,6 +264,8 @@ struct ChatMessageRow: View {
     let isMine: Bool
     let myUid: String?
     let myUsername: String?
+    var hasReacted: (ChatReaction) -> Bool = { _ in false }
+    var onReact: (ChatReaction) -> Void = { _ in }
 
     private var mentionsMe: Bool { myUid.map { message.mentions.contains($0) } ?? false }
 
@@ -249,7 +292,11 @@ struct ChatMessageRow: View {
                     .font(.body)
                     .foregroundStyle(AppColors.text)
                     .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
+                // No .textSelection: it swallows the double-tap that opens
+                // reactions (Copy is in the long-press menu).
+                if !message.activeReactions.isEmpty {
+                    reactionChips
+                }
             }
             Spacer(minLength: 0)
         }
@@ -260,6 +307,59 @@ struct ChatMessageRow: View {
                 .overlay(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
                     .stroke(mentionsMe ? AppColors.gold.opacity(0.5) : AppColors.stroke, lineWidth: 0.5))
         )
+    }
+}
+
+extension ChatMessageRow {
+    /// One chip per emoji with its count; yours are tinted. Tap to toggle.
+    private var reactionChips: some View {
+        HStack(spacing: 6) {
+            ForEach(message.activeReactions, id: \.reaction) { item in
+                let mine = hasReacted(item.reaction)
+                Button { onReact(item.reaction) } label: {
+                    HStack(spacing: 4) {
+                        Text(item.reaction.emoji).font(.system(size: 14))
+                        Text("\(item.uids.count)")
+                            .font(.caption.weight(.bold).monospacedDigit())
+                            .foregroundStyle(mine ? AppColors.accent : AppColors.subtext)
+                            .contentTransition(.numericText())
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule().fill(mine ? AppColors.accentMuted : AppColors.card2)
+                            .overlay(Capsule().stroke(mine ? AppColors.accent.opacity(0.6) : AppColors.stroke, lineWidth: 1))
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(item.reaction.emoji) \(item.uids.count)\(mine ? ", you reacted" : "")")
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.top, 2)
+    }
+}
+
+/// The emoji bar a double-tap opens over a message.
+struct ChatReactionPicker: View {
+    let isChosen: (ChatReaction) -> Bool
+    let onPick: (ChatReaction) -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(ChatReaction.allCases) { reaction in
+                Button { onPick(reaction) } label: {
+                    Text(reaction.emoji)
+                        .font(.system(size: 28))
+                        .frame(width: 44, height: 44)
+                        .background(Circle().fill(isChosen(reaction) ? AppColors.accentMuted : .clear))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("React \(reaction.emoji)")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
     }
 }
 

@@ -127,9 +127,24 @@ service cloud.firestore {
     // Global board chat: everyone signed in reads; only the
     // sendGlobalChatMessage callable writes. Authors (and the admin) may
     // delete a message.
+    // Reactions: a signed-in user may add or remove only their OWN uid in
+    // `reactions.<key>`, for the six keys the app offers (ChatReaction).
+    function chatReactionKeyOK(k) {
+      let before = resource.data.get('reactions', {}).get(k, []);
+      let after = request.resource.data.get('reactions', {}).get(k, []);
+      return after == before
+        || (!(request.auth.uid in before) && after == before.concat([request.auth.uid]))
+        || ((request.auth.uid in before) && after == before.removeAll([request.auth.uid]));
+    }
+
     match /globalChat/{messageId} {
       allow read: if isSignedIn();
-      allow create, update: if false;
+      allow create: if false;
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+        && request.resource.data.reactions.keys().hasOnly(['like', 'heart', 'laugh', 'fire', 'strong', 'clap'])
+        && chatReactionKeyOK('like') && chatReactionKeyOK('heart') && chatReactionKeyOK('laugh')
+        && chatReactionKeyOK('fire') && chatReactionKeyOK('strong') && chatReactionKeyOK('clap');
       allow delete: if isSignedIn()
         && (resource.data.uid == request.auth.uid
           || request.auth.uid == 'msUcdbAbaAaS4HDj52CMs0Vzw8j2');
