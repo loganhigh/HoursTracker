@@ -56,7 +56,12 @@ struct JobPickerMenu: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .background(Capsule().fill(AppColors.accentMuted))
+            .fixedSize()
         }
+        // iOS keeps a Menu's label at the size it first laid out, so switching
+        // to a longer job name clipped the pill ("heque: Big Country…").
+        // A fresh identity per selection makes it re-measure.
+        .id(label)
         .accessibilityLabel("\(title), \(label)")
     }
 }
