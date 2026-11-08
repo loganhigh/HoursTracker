@@ -7,8 +7,12 @@ struct ProfileAvatarView: View {
     var photoURL: String? = nil
     var uid: String? = nil
     var showsAccentRing: Bool = false
+    /// Tapping a real photo opens it full screen (leaderboards, Friends).
+    /// Initials-only avatars ignore the tap so the row's own action runs.
+    var tapToExpand: Bool = false
 
     @State private var loadedImage: UIImage?
+    @State private var showingExpanded = false
     /// Observed so saving a new avatar redraws every one of these on screen at
     /// once. Copying `localImage` into `@State` inside the task below meant the
     /// new photo only appeared after a relaunch: the task is keyed on
@@ -55,6 +59,16 @@ struct ProfileAvatarView: View {
                     .stroke(AppTheme.Colors.accent.opacity(0.45), lineWidth: max(1, size * 0.02))
             }
         }
+        .contentShape(Circle())
+        .highPriorityGesture(TapGesture().onEnded {
+            Haptics.lightTap()
+            showingExpanded = true
+        }, including: tapToExpand && displayedImage != nil ? .all : .subviews)
+        .fullScreenCover(isPresented: $showingExpanded) {
+            ExpandedPhotoView(name: name, photoURL: photoURL, uid: uid ?? "")
+        }
+        .accessibilityAddTraits(tapToExpand && displayedImage != nil ? .isButton : [])
+        .accessibilityHint(tapToExpand && displayedImage != nil ? "Shows the photo full screen" : "")
         .task(id: loadKey) {
             let manager = ProfilePhotoManager.shared
             // Our own photo is read straight off the manager, so there is

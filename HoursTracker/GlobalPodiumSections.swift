@@ -44,7 +44,8 @@ struct GlobalPodiumRow: View {
                     name: entry.name,
                     size: avatarSize,
                     photoURL: entry.photoURL,
-                    uid: entry.uid
+                    uid: entry.uid,
+                    tapToExpand: true
                 )
                 .overlay(Circle().stroke(metal, lineWidth: isWinner ? 3 : 2))
                 // Ascended ring sits just outside the podium metal.
@@ -234,7 +235,8 @@ struct GlobalTrackerRow: View {
                 name: tracker.name,
                 size: GlobalLeaderboardMetrics.avatarSize,
                 photoURL: tracker.photoURL,
-                uid: tracker.uid
+                uid: tracker.uid,
+                tapToExpand: true
             )
             .ascendedAvatarRing(prestige: tracker.prestige, diameter: GlobalLeaderboardMetrics.avatarSize, inset: 1.5)
             .avatarOnlineDot(isOnline, avatarSize: GlobalLeaderboardMetrics.avatarSize)

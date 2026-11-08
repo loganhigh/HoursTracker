@@ -138,7 +138,8 @@ struct PublicProfileSheet: View {
                 size: 76,
                 photoURL: tracker.photoURL,
                 uid: tracker.uid,
-                showsAccentRing: false
+                showsAccentRing: false,
+                tapToExpand: true
             )
             .overlay(Circle().stroke(accent.opacity(tier.isLegend ? 0 : 0.75), lineWidth: 2).padding(-4))
             .ascendedAvatarRing(prestige: prestige, diameter: 76, inset: 4)

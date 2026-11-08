@@ -94,7 +94,8 @@ struct PayPeriodPodiumCard: View {
                         name: entry.name,
                         size: size,
                         photoURL: entry.photoURL,
-                        uid: entry.id
+                        uid: entry.id,
+                        tapToExpand: true
                     )
                     .overlay(Circle().stroke(color, lineWidth: isWinner ? 3 : 2))
                     .ascendedAvatarRing(prestige: entry.prestige, diameter: size, inset: isWinner ? 5 : 4)

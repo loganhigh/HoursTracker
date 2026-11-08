@@ -40,7 +40,8 @@ struct LeaderboardRankRow: View {
                 name: entry.name,
                 size: 42,
                 photoURL: entry.photoURL,
-                uid: entry.id
+                uid: entry.id,
+                tapToExpand: true
             )
             .ascendedAvatarRing(prestige: entry.prestige, diameter: 42, inset: 1.5)
             .avatarOnlineDot(isOnline, avatarSize: 42)

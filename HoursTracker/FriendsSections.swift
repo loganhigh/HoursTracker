@@ -183,7 +183,8 @@ struct FriendStatsRow: View {
                     name: friend.displayName,
                     size: 48,
                     photoURL: friend.profilePhotoURL,
-                    uid: friend.uid
+                    uid: friend.uid,
+                    tapToExpand: true
                 )
                 .ascendedAvatarRing(prestige: friend.prestige, diameter: 48, inset: 2)
                 Text("\(friend.level)")
