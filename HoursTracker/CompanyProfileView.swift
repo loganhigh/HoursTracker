@@ -204,7 +204,13 @@ struct CompanyProfileView: View {
                         .accessibilityAddTraits(selected ? .isSelected : [])
                     }
                 }
+                // Inset matches the card's padding so the first chip lines up
+                // with the fields above it...
+                .padding(.horizontal, 16)
             }
+            // ...while the scroll area itself runs out to the card's edges, so
+            // chips slide under the border instead of being sliced off inside it.
+            .padding(.horizontal, -16)
             Text("This is the title under your name on the global leaderboard.")
                 .font(AppTypography.caption.weight(.medium))
                 .foregroundStyle(AppTheme.Colors.faint)
