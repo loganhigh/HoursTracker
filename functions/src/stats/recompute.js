@@ -9,6 +9,7 @@
 // server's clock rather than the user's.
 const { makeCalendar, resolveUserTimeZone } = require("./localCalendar");
 const { sanitizeBadgeSummaries } = require("./badgeSanity");
+const { typicalGapDays } = require("../admin/winback");
 
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 
@@ -1104,6 +1105,14 @@ async function recomputeUserStats(db, uid, options = {}) {
   });
 
   const lifetimeRef = db.collection("users").doc(uid).collection("stats").doc("lifetime");
+  // Usual break between worked days — lets the admin at-risk list and the
+  // win-back pushes leave seasonal/rotational workers alone mid-break.
+  // Server-only field; written only when it changes.
+  const gapDays = typicalGapDays(workedStrings, now.getTime());
+  if ((userData.typicalGapDays ?? null) !== gapDays) {
+    batch.set(userRef, { typicalGapDays: gapDays }, { merge: true });
+  }
+
   batch.set(lifetimeRef, {
     totalHours,
     totalXP,

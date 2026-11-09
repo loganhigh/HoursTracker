@@ -52,9 +52,14 @@ function atRiskInfo(row, nowMs) {
   const lastTouchMs = Math.max(row.lastActiveAt || 0, row.lastShiftMs || 0, row.createdAt || 0);
   if (lastTouchMs <= 0) return null;
   const inactiveDays = Math.floor((nowMs - lastTouchMs) / DAY_MS);
-  if (inactiveDays < 3) return null;
+  // Seasonal / rotational workers routinely go quiet between jobs: a gap
+  // inside their usual break (typicalGapDays, the 90th-percentile gap
+  // between worked days over the last year) isn't a warning sign yet.
+  const usualGap = Number(row.typicalGapDays) || 0;
+  if (inactiveDays < Math.max(3, usualGap + 3)) return null;
 
   const reasons = [`No activity for ${inactiveDays} days`];
+  if (usualGap >= 7) reasons.push(`Usually back within ${usualGap} days`);
   if ((row.bestStreak || 0) >= 5 && (row.currentStreak || 0) === 0) {
     reasons.push(`${row.bestStreak}-day best streak ended`);
   }

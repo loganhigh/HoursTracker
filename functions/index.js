@@ -34,6 +34,7 @@ const { staleWriteDecision, stampToMillis } = require("./src/stats/entryWriteGua
 const usernames = require("./src/social/usernames");
 const chat = require("./src/social/chat");
 const adminAnalytics = require("./src/admin/analytics");
+const winback = require("./src/admin/winback");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
@@ -1070,6 +1071,11 @@ function buildAdminUserRow(uid, userData, profileData, authData, presenceData) {
     monthHours: Math.round((Number(p.currentMonthHours) || 0) * 100) / 100,
     photoURL: p.profilePhotoURL || null,
     lastShiftMs: p.lastShiftLoggedAt?.toMillis?.() ?? null,
+    // Usual break between worked days (recompute), for at-risk / win-back.
+    // undefined = not measured yet (no recompute since this shipped);
+    // null = measured, too little history to say.
+    typicalGapDays: u.typicalGapDays === undefined ? undefined
+      : (Number.isFinite(Number(u.typicalGapDays)) && u.typicalGapDays !== null ? Number(u.typicalGapDays) : null),
     profilePending: !hasPublicProfile,
   };
 }
@@ -2174,10 +2180,26 @@ exports.adminAnalytics = onCall(
       .sort((a, b) => b.score - a.score || b.weeklyHours - a.weeklyHours)
       .slice(0, 50);
 
+    // Win-back history so the At Risk list can show who was already nudged.
+    const winbackByUid = new Map();
+    try {
+      const wbSnap = await db.collection("_winback").get();
+      for (const d of wbSnap.docs) winbackByUid.set(d.id, d.data() || {});
+    } catch (err) {
+      console.warn("adminAnalytics: winback read failed:", err?.message || err);
+    }
     const atRisk = rows
       .map((r) => {
         const info = adminAnalytics.atRiskInfo(r, now);
-        return info ? { ...compactRow(r), ...info } : null;
+        if (!info) return null;
+        const wb = winbackByUid.get(r.uid) || {};
+        const lastNudgeMs = Math.max(Number(wb.lastAutoMs) || 0, Number(wb.lastManualMs) || 0) || null;
+        return {
+          ...compactRow(r),
+          ...info,
+          lastNudgeMs,
+          canNudge: winback.manualNudgeAllowed(wb, now),
+        };
       })
       .filter(Boolean)
       .sort((a, b) => a.inactiveDays - b.inactiveDays)
@@ -2679,6 +2701,81 @@ exports.adminClearAnnouncement = onCall(
  * it opens the App Store listing (the app routes on data.kind === "appUpdate").
  * A push can't open another app by itself — the tap is the "instantly" part.
  */
+// ── Win-back pushes for at-risk users ───────────────────────────────────────
+// Rules live in src/admin/winback.js. State per user in `_winback/{uid}`
+// (server-only): { quietSinceMs, stage, lastAutoMs, lastManualMs }.
+
+async function sendWinbackPush(uid, row, stage, override) {
+  const userSnap = await db.collection("users").doc(uid).get();
+  if (!userSnap.exists) return false;
+  const msg = override || winback.winbackMessage(row, stage);
+  await sendPushToUser(uid, userSnap.data(), {
+    title: msg.title,
+    body: msg.body,
+    dataPayload: { kind: "winback" },
+    threadId: "winback",
+  });
+  return true;
+}
+
+/**
+ * Daily 17:00 UTC (late morning across North America), after the 08:00 stats
+ * refresh has updated everyone's typicalGapDays. At most one push per user
+ * per run, and at most two per quiet stretch (see winbackDecision).
+ */
+exports.winbackDaily = onSchedule(
+  { schedule: "0 17 * * *", timeZone: "UTC", region: "us-central1", timeoutSeconds: 300, memory: "512MiB" },
+  async () => {
+    const now = Date.now();
+    const { rows } = await assembleAdminRows();
+    const stateSnap = await db.collection("_winback").get();
+    const stateByUid = new Map(stateSnap.docs.map((d) => [d.id, d.data() || {}]));
+    let sent = 0;
+    for (const row of rows) {
+      const state = stateByUid.get(row.uid) || null;
+      const decision = winback.winbackDecision(row, state, now);
+      if (!decision.send) continue;
+      try {
+        if (await sendWinbackPush(row.uid, row, decision.send)) sent++;
+        await db.collection("_winback").doc(row.uid).set({
+          quietSinceMs: decision.quietSinceMs,
+          stage: decision.send,
+          lastAutoMs: now,
+        }, { merge: true });
+      } catch (err) {
+        console.warn(`winback send failed uid=${row.uid}:`, err?.message || err);
+      }
+    }
+    console.log(`winbackDaily: sent=${sent} users=${rows.length}`);
+  }
+);
+
+/** Admin-only: nudge one at-risk user now (once a week per user). */
+exports.adminSendWinbackNudge = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE] },
+  async (request) => {
+    assertAdmin(request);
+    const uid = String(request.data?.uid || "");
+    if (!uid) throw new HttpsError("invalid-argument", "uid is required.");
+    const now = Date.now();
+    const stateRef = db.collection("_winback").doc(uid);
+    const state = (await stateRef.get()).data() || null;
+    if (!winback.manualNudgeAllowed(state, now)) {
+      throw new HttpsError("resource-exhausted", "Already nudged this week.");
+    }
+    const { rows } = await assembleAdminRows();
+    const row = rows.find((r) => r.uid === uid);
+    if (!row) throw new HttpsError("not-found", "User not found.");
+    const title = String(request.data?.title || "").trim().slice(0, 80);
+    const body = String(request.data?.body || "").trim().slice(0, 200);
+    const override = title && body ? { title, body } : null;
+    const ok = await sendWinbackPush(uid, row, 1, override);
+    if (!ok) throw new HttpsError("not-found", "User has no profile.");
+    await stateRef.set({ lastManualMs: now }, { merge: true });
+    return { status: "ok" };
+  }
+);
+
 exports.adminSendUpdatePush = onCall(
   { region: "us-central1", secrets: [ADMIN_PASSCODE], timeoutSeconds: 300, memory: "512MiB" },
   async (request) => {
