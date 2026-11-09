@@ -137,6 +137,16 @@ service cloud.firestore {
         || ((request.auth.uid in before) && after == before.removeAll([request.auth.uid]));
     }
 
+    // When each person last had Board Chat open ("Seen by N"). Own doc
+    // only, one server-stamped field.
+    match /globalChatReads/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['lastReadAt'])
+        && request.resource.data.lastReadAt == request.time;
+      allow delete: if false;
+    }
+
     match /globalChat/{messageId} {
       allow read: if isSignedIn();
       allow create: if false;
@@ -156,11 +166,18 @@ service cloud.firestore {
     match /dmThreads/{threadId} {
       allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
       allow create, delete: if false;
+      // A participant may zero their own unread count and stamp their own
+      // read receipt (lastReadAt.{uid} = server time) — nothing else.
       allow update: if isSignedIn()
         && request.auth.uid in resource.data.participants
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unread'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unread', 'lastReadAt'])
         && request.resource.data.unread.diff(resource.data.unread).affectedKeys().hasOnly([request.auth.uid])
-        && request.resource.data.unread[request.auth.uid] == 0;
+        && request.resource.data.unread[request.auth.uid] == 0
+        && request.resource.data.get('lastReadAt', {}).diff(resource.data.get('lastReadAt', {})).affectedKeys().hasOnly([request.auth.uid])
+        && (!('lastReadAt' in request.resource.data)
+            || !(request.auth.uid in request.resource.data.lastReadAt)
+            || request.resource.data.lastReadAt[request.auth.uid] == request.time
+            || request.resource.data.lastReadAt[request.auth.uid] == resource.data.get('lastReadAt', {}).get(request.auth.uid, null));
 
       match /messages/{messageId} {
         allow read: if isSignedIn()

@@ -154,6 +154,7 @@ struct GlobalChatView: View {
                         ForEach(chat.visibleGlobalMessages) { message in
                             ChatMessageRow(message: message, isMine: message.uid == myUid, myUid: myUid,
                                            myUsername: myUsername,
+                                           seenCount: chat.seenCount(message),
                                            hasReacted: { chat.hasReacted($0, to: message) },
                                            onReact: { react($0, to: message) })
                                 .id(message.id)
@@ -180,7 +181,9 @@ struct GlobalChatView: View {
                 .onChange(of: chat.visibleGlobalMessages.last?.id) { _, id in
                     guard let id else { return }
                     withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .bottom) }
+                    chat.markGlobalRead()
                 }
+                .onAppear { chat.markGlobalRead() }
             }
         }
     }
@@ -264,6 +267,8 @@ struct ChatMessageRow: View {
     let isMine: Bool
     let myUid: String?
     let myUsername: String?
+    /// Other people who've opened Board Chat since this was posted.
+    var seenCount: Int = 0
     var hasReacted: (ChatReaction) -> Bool = { _ in false }
     var onReact: (ChatReaction) -> Void = { _ in }
 
@@ -287,6 +292,17 @@ struct ChatMessageRow: View {
                     Text(ChatFormat.time(message.createdAt))
                         .font(.caption2)
                         .foregroundStyle(AppColors.faint)
+                    if seenCount > 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "eye")
+                            Text("\(seenCount)")
+                                .monospacedDigit()
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.faint)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Seen by \(seenCount)")
+                    }
                 }
                 Text(ChatFormat.attributed(message.text, myUsername: myUsername))
                     .font(.body)

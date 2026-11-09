@@ -160,6 +160,9 @@ struct DirectThreadView: View {
                         }
                         ForEach(messages) { message in
                             bubble(message).id(message.id)
+                            if message.id == lastMineID {
+                                receipt(for: message)
+                            }
                         }
                     }
                     .padding(AppSpacing.md)
@@ -279,6 +282,26 @@ struct DirectThreadView: View {
         }
         .padding(.horizontal, AppSpacing.md)
         .padding(.vertical, AppSpacing.xs)
+    }
+
+    /// Receipt goes under your newest message only, iMessage-style, and
+    /// only while it's the latest thing in the thread.
+    private var lastMineID: String? {
+        guard let last = messages.last, last.uid == myUid else { return nil }
+        return last.id
+    }
+
+    private func receipt(for message: DirectMessage) -> some View {
+        let seenAt = threadId.flatMap { chat.thread($0)?.otherLastReadAt }
+        let seen = seenAt.map { $0 >= message.createdAt } ?? false
+        return HStack {
+            Spacer(minLength: 0)
+            Text(seen ? "Seen \(ChatFormat.time(seenAt ?? message.createdAt))" : "Sent")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(seen ? AppColors.accent : AppColors.faint)
+                .accessibilityLabel(seen ? "Seen" : "Sent, not seen yet")
+        }
+        .padding(.top, -2)
     }
 
     private func bubble(_ message: DirectMessage) -> some View {

@@ -87,6 +87,9 @@ struct DirectThread: Identifiable, Equatable {
     let lastSenderUid: String
     let lastAt: Date
     let unread: Int
+    /// When each participant last had the thread open (read receipts).
+    var myLastReadAt: Date? = nil
+    var otherLastReadAt: Date? = nil
 
     static func parse(_ doc: QueryDocumentSnapshot, myUid: String) -> DirectThread? {
         let data = doc.data()
@@ -94,6 +97,7 @@ struct DirectThread: Identifiable, Equatable {
               let other = participants.first(where: { $0 != myUid }) else { return nil }
         let names = data["usernames"] as? [String: Any] ?? [:]
         let unread = data["unread"] as? [String: Any] ?? [:]
+        let reads = data["lastReadAt"] as? [String: Any] ?? [:]
         return DirectThread(
             id: doc.documentID,
             otherUid: other,
@@ -101,7 +105,9 @@ struct DirectThread: Identifiable, Equatable {
             lastText: data["lastText"] as? String ?? "",
             lastSenderUid: data["lastSenderUid"] as? String ?? "",
             lastAt: (data["lastAt"] as? Timestamp)?.dateValue() ?? Date(),
-            unread: (unread[myUid] as? NSNumber)?.intValue ?? 0
+            unread: (unread[myUid] as? NSNumber)?.intValue ?? 0,
+            myLastReadAt: (reads[myUid] as? Timestamp)?.dateValue(),
+            otherLastReadAt: (reads[other] as? Timestamp)?.dateValue()
         )
     }
 }
@@ -143,6 +149,8 @@ final class ChatService: ObservableObject {
     @Published private(set) var hasLoadedGlobal = false
     @Published private(set) var threads: [DirectThread] = []
     @Published private(set) var blockedUids: Set<String> = []
+    /// uid → when they last had Board Chat open; drives "Seen by N".
+    @Published private(set) var globalReadTimes: [String: Date] = [:]
 
     var unreadDirectCount: Int { threads.filter { !blockedUids.contains($0.otherUid) }.reduce(0) { $0 + $1.unread } }
 
@@ -153,6 +161,8 @@ final class ChatService: ObservableObject {
     private lazy var db = Firestore.firestore()
     private lazy var functions = Functions.functions(region: "us-central1")
     private var globalListener: ListenerRegistration?
+    private var globalReadsListener: ListenerRegistration?
+    private var lastGlobalReadWrite: Date?
     private var globalViewers = 0
     private var inboxListener: ListenerRegistration?
     private var blockedListener: ListenerRegistration?
@@ -182,6 +192,39 @@ final class ChatService: ObservableObject {
                     self?.hasLoadedGlobal = true
                 }
             }
+        globalReadsListener = db.collection("globalChatReads")
+            .order(by: "lastReadAt", descending: true)
+            .limit(to: 500)
+            .addSnapshotListener { [weak self] snapshot, _ in
+                guard let snapshot else { return }
+                var times: [String: Date] = [:]
+                for doc in snapshot.documents {
+                    if let t = (doc.data()["lastReadAt"] as? Timestamp)?.dateValue() {
+                        times[doc.documentID] = t
+                    }
+                }
+                Task { @MainActor in self?.globalReadTimes = times }
+            }
+    }
+
+    /// How many other people have opened Board Chat since `message` landed.
+    func seenCount(_ message: ChatMessage) -> Int {
+        globalReadTimes.reduce(0) { count, item in
+            item.key != message.uid && item.value >= message.createdAt ? count + 1 : count
+        }
+    }
+
+    /// Marks Board Chat read up to now. Called by the full chat screen only
+    /// (not the board's preview card), at most once every 15 seconds, and
+    /// only when something newer than the last mark has arrived.
+    func markGlobalRead() {
+        guard let uid = myUid, let newest = globalMessages.last?.createdAt else { return }
+        if let mine = globalReadTimes[uid], mine >= newest { return }
+        if let last = lastGlobalReadWrite, Date().timeIntervalSince(last) < 15 { return }
+        lastGlobalReadWrite = Date()
+        db.collection("globalChatReads").document(uid).setData([
+            "lastReadAt": FieldValue.serverTimestamp()
+        ])
     }
 
     func stopGlobal() {
@@ -189,6 +232,8 @@ final class ChatService: ObservableObject {
         guard globalViewers == 0 else { return }
         globalListener?.remove()
         globalListener = nil
+        globalReadsListener?.remove()
+        globalReadsListener = nil
     }
 
     func sendGlobal(_ text: String) async throws {
@@ -305,10 +350,21 @@ final class ChatService: ObservableObject {
             }
     }
 
+    /// Zeroes unread and stamps the read receipt the other person sees.
+    /// Writes only when there's something new from them since the last stamp.
     func markRead(_ threadId: String) {
-        guard let uid = myUid,
-              threads.first(where: { $0.id == threadId }).map({ $0.unread > 0 }) ?? false else { return }
-        db.collection("dmThreads").document(threadId).updateData(["unread.\(uid)": 0])
+        guard let uid = myUid, let thread = threads.first(where: { $0.id == threadId }) else { return }
+        let newFromThem = thread.lastSenderUid != uid
+            && (thread.myLastReadAt.map { $0 < thread.lastAt } ?? true)
+        guard thread.unread > 0 || newFromThem else { return }
+        db.collection("dmThreads").document(threadId).updateData([
+            "unread.\(uid)": 0,
+            "lastReadAt.\(uid)": FieldValue.serverTimestamp(),
+        ])
+    }
+
+    func thread(_ threadId: String) -> DirectThread? {
+        threads.first { $0.id == threadId }
     }
 
     // MARK: One-off reads (Apple Watch)
@@ -351,7 +407,10 @@ final class ChatService: ObservableObject {
     /// Zeroes the viewer's unread count whether or not the inbox is loaded.
     func markReadNow(_ threadId: String) async {
         guard let uid = myUid else { return }
-        try? await db.collection("dmThreads").document(threadId).updateData(["unread.\(uid)": 0])
+        try? await db.collection("dmThreads").document(threadId).updateData([
+            "unread.\(uid)": 0,
+            "lastReadAt.\(uid)": FieldValue.serverTimestamp(),
+        ])
     }
 
     // MARK: Safety
