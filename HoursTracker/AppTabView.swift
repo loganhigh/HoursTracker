@@ -89,6 +89,11 @@ struct AppTabView: View {
         )
     }
 
+    private func openAddShiftFromPush() {
+        notificationRouter.openAddShift = false
+        showingAddShift = true
+    }
+
     private func openYouTabFromPush() {
         tabRouter.selection = .you
         notificationRouter.openYouTab = false
@@ -148,8 +153,12 @@ struct AppTabView: View {
         .onChange(of: notificationRouter.openYouTab) { _, isOpen in
             if isOpen { openYouTabFromPush() }
         }
+        .onChange(of: notificationRouter.openAddShift) { _, isOpen in
+            if isOpen { openAddShiftFromPush() }
+        }
         .onAppear {
             if notificationRouter.openYouTab { openYouTabFromPush() }
+            if notificationRouter.openAddShift { openAddShiftFromPush() }
         }
         .onChange(of: friendsEnabled) { _, isEnabled in
             // Friends can be the selected tab at the moment it's switched off

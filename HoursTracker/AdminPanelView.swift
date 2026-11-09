@@ -325,7 +325,7 @@ struct AdminPanelView: View {
                                 AdminNewUsersView(analytics: analytics)
                             }
                             insightLink("person.fill.questionmark", "At Risk Users") {
-                                AdminAtRiskView(analytics: analytics)
+                                AdminAtRiskView(analytics: analytics, passcode: passcode)
                             }
                         } header: {
                             Text("User Insights")

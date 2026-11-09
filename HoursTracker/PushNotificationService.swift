@@ -103,6 +103,12 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
                 router.openGlobalLeaderboard = true
             }
         }
+        if let kind = userInfo["kind"] as? String, kind == "winback" {
+            // "Add your recent shifts" — straight to Add Shift.
+            Task { @MainActor in
+                NotificationRouter.shared.openAddShift = true
+            }
+        }
         if let kind = userInfo["kind"] as? String, kind == "prestigeReady" {
             // "Level 25 complete" — the Prestige button is on the You tab.
             Task { @MainActor in
@@ -136,6 +142,8 @@ final class NotificationRouter: ObservableObject {
     /// Raised by a "you can Prestige" push; AppTabView selects the You tab
     /// (where the Prestige button lives) and lowers it.
     @Published var openYouTab = false
+    /// Raised by a win-back push; AppTabView opens Add Shift and lowers it.
+    @Published var openAddShift = false
     private init() {}
 }
 

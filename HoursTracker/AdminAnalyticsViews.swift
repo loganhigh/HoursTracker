@@ -76,6 +76,10 @@ struct AdminInsightUser: Identifiable {
     /// At-risk extras.
     var inactiveDays: Int?
     var reasons: [String] = []
+    /// Last win-back push (automatic or manual), and whether a manual nudge
+    /// is allowed now (once a week per user).
+    var lastNudgeAt: Date?
+    var canNudge = true
 
     var id: String { uid }
 
@@ -110,6 +114,8 @@ struct AdminInsightUser: Identifiable {
         user.score = int("score")
         if dict["inactiveDays"] != nil { user.inactiveDays = int("inactiveDays") }
         user.reasons = dict["reasons"] as? [String] ?? []
+        user.lastNudgeAt = date("lastNudgeMs")
+        user.canNudge = dict["canNudge"] as? Bool ?? true
         return user
     }
 }
@@ -568,6 +574,11 @@ struct AdminNewUsersView: View {
 
 struct AdminAtRiskView: View {
     let analytics: AdminAnalyticsPayload
+    var passcode = ""
+
+    @State private var nudgedNow: Set<String> = []
+    @State private var nudging: String?
+    @State private var nudgeError: String?
 
     enum Threshold: String, CaseIterable {
         case d3 = "3+ days", d7 = "7+ days", d14 = "14+ days", d30 = "30+ days"
@@ -598,16 +609,19 @@ struct AdminAtRiskView: View {
                         .listRowBackground(AppTheme.Colors.card)
                 }
                 ForEach(filtered) { user in
-                    AdminInsightUserRow(
-                        user: user,
-                        detail: "Previously active • \(AppTheme.Format.hours(user.totalHours)) lifetime",
-                        subDetail: user.reasons.joined(separator: " • "),
-                        trailing: user.inactiveDays.map { ("\($0)d", AppTheme.Colors.warning) }
-                    )
+                    HStack(spacing: 8) {
+                        AdminInsightUserRow(
+                            user: user,
+                            detail: "Previously active • \(AppTheme.Format.hours(user.totalHours)) lifetime",
+                            subDetail: subDetail(for: user),
+                            trailing: user.inactiveDays.map { ("\($0)d", AppTheme.Colors.warning) }
+                        )
+                        nudgeButton(for: user)
+                    }
                     .listRowBackground(AppTheme.Colors.card)
                 }
             } footer: {
-                Text("Users with real history (10+ hours or a 3+ day best streak) who have gone quiet. Reasons come from recorded behaviour only.")
+                Text("Users with real history (10+ hours or a 3+ day best streak) who have gone quiet longer than their usual break. Win-back pushes go out automatically at about 7 and 21 days quiet; Nudge sends one now (once a week per person).")
             }
         }
         .listStyle(.insetGrouped)
@@ -615,5 +629,58 @@ struct AdminAtRiskView: View {
         .background(AppTheme.Colors.bg.ignoresSafeArea())
         .navigationTitle("At Risk Users")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Couldn't nudge", isPresented: Binding(
+            get: { nudgeError != nil }, set: { if !$0 { nudgeError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(nudgeError ?? "") }
+    }
+
+    private func subDetail(for user: AdminInsightUser) -> String {
+        var parts = user.reasons
+        if nudgedNow.contains(user.uid) {
+            parts.append("Nudged just now")
+        } else if let last = user.lastNudgeAt {
+            parts.append("Nudged \(last.formatted(.relative(presentation: .named)))")
+        }
+        return parts.joined(separator: " • ")
+    }
+
+    @ViewBuilder
+    private func nudgeButton(for user: AdminInsightUser) -> some View {
+        let done = nudgedNow.contains(user.uid) || !user.canNudge
+        Button {
+            Task { await nudge(user) }
+        } label: {
+            Group {
+                if nudging == user.uid {
+                    ProgressView()
+                } else {
+                    Image(systemName: done ? "checkmark" : "bell.badge")
+                        .font(.system(size: 14, weight: .bold))
+                }
+            }
+            .frame(width: 36, height: 36)
+            .foregroundStyle(done ? AppTheme.Colors.faint : AppTheme.Colors.accent)
+            .background(Circle().fill(AppTheme.Colors.card2))
+        }
+        .buttonStyle(.plain)
+        .disabled(done || nudging != nil)
+        .accessibilityLabel(done ? "Nudged this week" : "Nudge \(user.displayName)")
+    }
+
+    private func nudge(_ user: AdminInsightUser) async {
+        nudging = user.uid
+        defer { nudging = nil }
+        do {
+            _ = try await Functions.functions(region: "us-central1")
+                .httpsCallable("adminSendWinbackNudge")
+                .call(["passcode": passcode, "uid": user.uid])
+            nudgedNow.insert(user.uid)
+            Haptics.success()
+        } catch {
+            nudgeError = error.localizedDescription
+            Haptics.error()
+        }
     }
 }
