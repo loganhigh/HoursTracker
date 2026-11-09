@@ -556,7 +556,7 @@ final class HoursStore: ObservableObject {
 
     /// Level shown in UI — prefers server-computed level when available.
     var displayedLevel: Int {
-        if FirebaseMigrationFlags.useServerStats {
+        if FirebaseMigrationFlags.useServerStats, !serverProgressLagging {
             if let serverLevel = StatsListenerService.shared.lifetimeStats?.level {
                 return serverLevel
             }
@@ -569,6 +569,21 @@ final class HoursStore: ObservableObject {
             }
         }
         return gamificationProfile.level
+    }
+
+    /// True while the server hasn't caught up with something this device
+    /// just did: a Prestige tap (server still on the old run) or a shift /
+    /// edit whose recompute hasn't landed. Showing the server then made the
+    /// bar jump down and back up as each copy arrived; local wins briefly.
+    private var serverProgressLagging: Bool {
+        guard let server = StatsListenerService.shared.lifetimeStats else { return false }
+        let recentPrestige = lastPrestigeAt.map { Date().timeIntervalSince($0) < 600 } ?? false
+        if recentPrestige, server.prestige < gamificationProfile.prestige { return true }
+        if let changed = localProgressChangedAt, Date().timeIntervalSince(changed) < 90,
+           server.totalXP != gamificationProfile.totalXP {
+            return true
+        }
+        return false
     }
 
     /// Prestige shown in UI.
@@ -1330,6 +1345,8 @@ final class HoursStore: ObservableObject {
     /// 25 levels has to be earned in between), so anything inside this window
     /// is a double tap or a stale-eligibility race, not intent.
     private var lastPrestigeAt: Date?
+    /// When a user action last moved local XP (see serverProgressLagging).
+    private var localProgressChangedAt: Date?
     private static let prestigeCooldown: TimeInterval = 60
 
     func performPrestige() -> Bool {
@@ -1472,6 +1489,9 @@ final class HoursStore: ObservableObject {
         // Only hinted recalcs (real user actions) surface the floating +XP
         // toast; hint-less recalcs come from cloud pulls/settings syncs where
         // XP can transiently dip and restore without anything being earned.
+        if eventHint != nil, gamificationProfile.totalXP != previous.totalXP {
+            localProgressChangedAt = Date()
+        }
         if eventHint != nil, gamificationProfile.totalXP > previous.totalXP {
             xpGainEvent = XPGainEvent(id: UUID(), amount: gamificationProfile.totalXP - previous.totalXP)
         }
@@ -2632,9 +2652,7 @@ private enum GamificationEngine {
         // Daily + weekly challenge rewards.
         let daily = makeDailyChallenges(entries: workEntries)
         let weekly = makeWeeklyChallenges(entries: workEntries)
-        let challengeXP = (daily + weekly)
-            .filter(\.completed)
-            .reduce(0) { $0 + $1.rewardXP }
+        let challengeXP = earnedChallengeXP(entries: workEntries)
         let challengeFreezes = (daily + weekly)
             .filter(\.completed)
             .reduce(0) { $0 + $1.rewardStreakFreeze }
@@ -2775,11 +2793,7 @@ private enum GamificationEngine {
         let allEntries = (activeEntries + archivedEntries).sorted { $0.date < $1.date }
         let workEntries = allEntries.filter { !$0.isOffDay }
         let workedDays = distinctWorkedDays(from: workEntries)
-        let daily = makeDailyChallenges(entries: workEntries)
-        let weekly = makeWeeklyChallenges(entries: workEntries)
-        let challengeXP = (daily + weekly)
-            .filter(\.completed)
-            .reduce(0) { $0 + $1.rewardXP }
+        let challengeXP = earnedChallengeXP(entries: workEntries)
         return [
             "hourly": Int(workEntries.reduce(0.0) { $0 + ($1.paidHours * Double(xpPerHour)) }.rounded()),
             "logging": workEntries.count * shiftLogXP,
@@ -2917,9 +2931,50 @@ private enum GamificationEngine {
         return weekHours.values.filter { $0 >= 40 }.count
     }
 
-    private static func makeDailyChallenges(entries: [WorkEntry]) -> [ChallengeProgress] {
+    /// First day whose challenge rewards are kept for good (Monday of the
+    /// week this shipped). Challenge XP used to count only for TODAY and THIS
+    /// week, so it vanished at midnight / Monday and the XP bar went
+    /// backwards overnight. Every completed day and week since this date is
+    /// now re-derived from the entries — deterministic, the same on every
+    /// device, survives reinstalls — without retroactively paying out years
+    /// of history in one jump.
+    static let challengeHistoryStart: Date = {
+        var c = DateComponents(); c.year = 2026; c.month = 11; c.day = 2
+        return Calendar.current.date(from: c) ?? Date()
+    }()
+
+    /// All challenge XP earned from `challengeHistoryStart` through now.
+    static func earnedChallengeXP(entries: [WorkEntry], now: Date = Date()) -> Int {
         let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
+        let start = cal.startOfDay(for: challengeHistoryStart)
+        let today = cal.startOfDay(for: now)
+        func reward(_ list: [ChallengeProgress]) -> Int {
+            list.filter(\.completed).reduce(0) { $0 + $1.rewardXP }
+        }
+        guard today >= start else {
+            // Before the cutoff: the old today/this-week behaviour.
+            return reward(makeDailyChallenges(entries: entries, on: now)
+                          + makeWeeklyChallenges(entries: entries, on: now))
+        }
+        let recent = entries.filter { $0.date >= start }
+        var total = 0
+        // Only days with a shift can complete a daily challenge.
+        let days = Set(recent.map { cal.startOfDay(for: $0.date) }).filter { $0 <= today }
+        for day in days {
+            total += reward(makeDailyChallenges(entries: recent, on: day))
+        }
+        var weekStart = start
+        while weekStart <= today {
+            total += reward(makeWeeklyChallenges(entries: recent, on: weekStart))
+            guard let next = cal.date(byAdding: .day, value: 7, to: weekStart) else { break }
+            weekStart = next
+        }
+        return total
+    }
+
+    private static func makeDailyChallenges(entries: [WorkEntry], on reference: Date = Date()) -> [ChallengeProgress] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: reference)
         let todayEntries = entries.filter { cal.isDate($0.date, inSameDayAs: today) }
         let hasShift = !todayEntries.isEmpty
         let hoursToday = todayEntries.reduce(0.0) { $0 + $1.paidHours }
@@ -2938,10 +2993,10 @@ private enum GamificationEngine {
         ]
     }
 
-    private static func makeWeeklyChallenges(entries: [WorkEntry]) -> [ChallengeProgress] {
+    private static func makeWeeklyChallenges(entries: [WorkEntry], on reference: Date = Date()) -> [ChallengeProgress] {
         var cal = Calendar.current
         cal.firstWeekday = 2 // Monday
-        guard let weekStart = cal.dateInterval(of: .weekOfYear, for: Date())?.start,
+        guard let weekStart = cal.dateInterval(of: .weekOfYear, for: reference)?.start,
               let weekEnd = cal.date(byAdding: .day, value: 7, to: weekStart) else {
             return []
         }

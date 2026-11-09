@@ -2776,36 +2776,15 @@ exports.adminSendWinbackNudge = onCall(
   }
 );
 
+// Retired: it pushed "New Update Available!" to every device on every
+// publish, including people already on the latest version. The in-app
+// announcement card (shown once, skipped for updated users) replaces it.
+// Kept as a no-op so older admin builds that still call it get a clean reply.
 exports.adminSendUpdatePush = onCall(
-  { region: "us-central1", secrets: [ADMIN_PASSCODE], timeoutSeconds: 300, memory: "512MiB" },
+  { region: "us-central1", secrets: [ADMIN_PASSCODE] },
   async (request) => {
     assertAdmin(request);
-    const title = String(request.data?.title || "New Update Available!").trim().slice(0, 80);
-    const body = String(request.data?.body || "Tap to update Hour Tracker.").trim().slice(0, 200);
-
-    const snap = await db.collectionGroup("deviceTokens").get();
-    const tokens = new Set();
-    for (const doc of snap.docs) {
-      const token = doc.data()?.token;
-      if (typeof token === "string" && token.length > 0) tokens.add(token);
-    }
-    const all = [...tokens];
-
-    let sent = 0;
-    let failed = 0;
-    // sendEach caps at 500 messages per call.
-    for (let i = 0; i < all.length; i += 500) {
-      const batch = all.slice(i, i + 500).map((token) => ({
-        token,
-        notification: { title, body },
-        data: { kind: "appUpdate" },
-        apns: { payload: { aps: { sound: "default", "thread-id": "app_update" } } },
-      }));
-      const res = await messaging.sendEach(batch);
-      sent += res.successCount;
-      failed += res.failureCount;
-    }
-    return { status: "ok", devices: all.length, sent, failed };
+    return { status: "disabled", devices: 0, sent: 0, failed: 0 };
   }
 );
 
