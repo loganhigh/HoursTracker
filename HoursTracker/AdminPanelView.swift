@@ -968,6 +968,12 @@ private struct AdminEditUserSheet: View {
                     Text("Grants or removes the checkmark beside their name everywhere other users see it. Applies immediately. Submissions with screenshots arrive in the Verified inbox on the main admin screen.")
                 }
 
+                AdminSupporterCreditSection(uid: user.uid, passcode: passcode, currentTotal: user.tipTotal) { total in
+                    var updated = user
+                    updated.tipTotal = total
+                    onSaved(updated)
+                }
+
                 Section {
                     TextField("Set level", text: $levelText)
                         .keyboardType(.numberPad)

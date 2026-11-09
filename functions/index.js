@@ -2660,6 +2660,34 @@ exports.adminSetVerified = onCall(
 );
 
 /**
+ * Admin-only: set a user's supporter credit (the total-tipped amount the
+ * supporter tiers read: $5 colour, $20 ring). For tips made before the
+ * ledger existed, or paid outside the App Store. 0 removes supporter status.
+ */
+exports.adminSetSupporterTotal = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE] },
+  async (request) => {
+    assertAdmin(request);
+    const targetUid = request.data?.targetUid;
+    if (!targetUid || typeof targetUid !== "string") {
+      throw new HttpsError("invalid-argument", "targetUid is required.");
+    }
+    const total = Number(request.data?.total);
+    if (!Number.isFinite(total) || total < 0 || total > 10000) {
+      throw new HttpsError("invalid-argument", "total must be between 0 and 10000.");
+    }
+    const rounded = Math.round(total * 100) / 100;
+    await db.collection("users").doc(targetUid).set({
+      tipTotal: rounded,
+      isSupporter: rounded > 0,
+      supporterCreditSetAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await recomputeUserStats(db, targetUid, { skipFence: true });
+    return { status: "ok", targetUid, total: rounded, isSupporter: rounded > 0 };
+  }
+);
+
+/**
  * Admin-only: publish the app-wide announcement. One doc, one live
  * announcement — publishing replaces whatever was up. Every client shows it
  * once per id on next app open (see AnnouncementService), so re-publishing
