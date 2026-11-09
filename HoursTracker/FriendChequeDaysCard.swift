@@ -67,6 +67,9 @@ struct FriendChequeDaysCard: View {
         let days = days
         let mine = myHoursByDay
         let total = days.reduce(0) { $0 + $1.hours }
+        // Your hours over the SAME days (their cheque window), so the gap
+        // compares like with like.
+        let myTotal = days.reduce(0) { $0 + (mine[$1.date] ?? 0) }
 
         // Title inside the card so its top edge stays flat for the owl peek.
             VStack(spacing: 0) {
@@ -81,8 +84,14 @@ struct FriendChequeDaysCard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, AppSpacing.md)
 
+                if !days.isEmpty {
+                    gapChip(myTotal: myTotal, theirTotal: total)
+                        .padding(.top, AppSpacing.xs)
+                }
+
                 HStack {
-                    Text("\(days.filter { $0.hours > 0 }.count) days worked")
+                    let workedCount = days.filter { $0.hours > 0 }.count
+                    Text("\(workedCount) \(workedCount == 1 ? "day" : "days") worked")
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
                     Spacer()
@@ -107,6 +116,32 @@ struct FriendChequeDaysCard: View {
             .padding(.horizontal, AppSpacing.md)
             .padding(.bottom, AppSpacing.xxs)
             .homeCard()
+    }
+
+    /// "You're 6.5h ahead of tyler" / "behind" / "tied" for this cheque.
+    private func gapChip(myTotal: Double, theirTotal: Double) -> some View {
+        let diff = myTotal - theirTotal
+        let tied = abs(diff) < 0.05
+        let ahead = diff > 0
+        let amount = AppTheme.Format.hours(abs(diff), suffix: "h")
+        let text = tied
+            ? "You're tied with \(friend.displayName)"
+            : "You're \(amount) \(ahead ? "ahead of" : "behind") \(friend.displayName)"
+        let tint = tied ? AppColors.subtext : (ahead ? AppColors.positive : AppColors.negative)
+        let icon = tied ? "equal" : (ahead ? "arrow.up.right" : "arrow.down.right")
+        return HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption.weight(.bold))
+            Text(text)
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Capsule().fill(tint.opacity(0.12)))
+        .accessibilityElement(children: .combine)
     }
 
     private var columnHeader: some View {
