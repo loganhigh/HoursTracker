@@ -69,8 +69,8 @@ struct TipJarView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollView {
             VStack(spacing: AppSpacing.xl) {
-                Spacer(minLength: AppSpacing.lg)
 
                 // Heart while asking, cheering once the tip lands.
                 OwlView(pose: manager.didTip ? .cheer : .heart, size: .emptyState)
@@ -88,12 +88,13 @@ struct TipJarView: View {
                 }
                 .padding(.horizontal, AppSpacing.lg)
 
-                tipButtons
+                perksCard
 
-                Spacer()
+                tipButtons
             }
             .padding(AppSpacing.lg)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity)
+            }
             .background(AppColors.bg.ignoresSafeArea())
             .navigationTitle("Support")
             .navigationBarTitleDisplayMode(.inline)
@@ -112,6 +113,57 @@ struct TipJarView: View {
                 Text(manager.errorMessage ?? "")
             }
         }
+    }
+
+    /// What any tip unlocks — so people know where the blue names they see
+    /// around the app come from. Keep in step with the real perks.
+    private var perksCard: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            Text(manager.didTip ? "You've unlocked" : "Any tip unlocks")
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+                .foregroundStyle(AppColors.subtext)
+            perk(icon: "sparkles",
+                 title: "Supporter name",
+                 detail: "Your username turns shimmering blue")
+            perk(icon: "person.3.fill",
+                 title: "Seen everywhere",
+                 detail: "On the leaderboards, Friends, Board Chat and DMs")
+            perk(icon: "infinity",
+                 title: "Yours for good",
+                 detail: "One tip of any size — it never expires")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(AppSpacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(AppColors.card)
+        )
+    }
+
+    private func perk(icon: String, title: String, detail: String) -> some View {
+        HStack(spacing: AppSpacing.sm) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(PrestigeNameText.supporterColors[0])
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(PrestigeNameText.supporterColors[0].opacity(0.15)))
+            VStack(alignment: .leading, spacing: 1) {
+                if title == "Supporter name" {
+                    Text(title)
+                        .font(.system(.callout, design: .rounded, weight: .bold))
+                        .foregroundStyle(LinearGradient(colors: PrestigeNameText.supporterColors,
+                                                        startPoint: .leading, endPoint: .trailing))
+                } else {
+                    Text(title)
+                        .font(.system(.callout, design: .rounded, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                }
+                Text(detail)
+                    .appText(.caption)
+                    .foregroundStyle(AppColors.subtext)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -178,7 +230,7 @@ struct TipJarHomeCard: View {
                     .font(.system(.callout, design: .rounded, weight: .bold))
                     .foregroundStyle(AppColors.text)
                     .padding(.top, AppSpacing.sm)
-                Text("If you find it useful, a small tip helps cover the cost of keeping it running.")
+                Text("If you find it useful, a small tip helps cover the cost of keeping it running — and turns your name supporter blue.")
                     .appText(.subheadline)
                     .foregroundStyle(AppColors.subtext)
                     .fixedSize(horizontal: false, vertical: true)
