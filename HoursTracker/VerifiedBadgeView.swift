@@ -65,6 +65,7 @@ final class VerifiedStatusService: ObservableObject {
                     }
                     self.isVerified = snapshot?.data()?["hasReviewedApp"] as? Bool ?? false
                     SupporterRegistry.shared.adoptServerValue(snapshot?.data()?["isSupporter"] as? Bool ?? false)
+                    SupporterRegistry.shared.adoptSelfStyle(snapshot?.data()?["supporter"])
                 }
             }
     }

@@ -35,6 +35,7 @@ const usernames = require("./src/social/usernames");
 const chat = require("./src/social/chat");
 const adminAnalytics = require("./src/admin/analytics");
 const winback = require("./src/admin/winback");
+const { supporterInfo } = require("./src/supporter");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
@@ -666,6 +667,13 @@ exports.notifyAdminOnTip = onDocumentCreated(
       },
       { merge: true }
     );
+    // Publish the new total right away so unlocked perks (colour choice,
+    // photo ring, Supporter badge) appear without waiting for the next shift.
+    try {
+      await recomputeUserStats(db, data.uid, { skipFence: true, skipLeaderboardUpdate: true });
+    } catch (err) {
+      console.warn(`tip recompute failed uid=${data.uid}: ${err.message}`);
+    }
 
     const userSnap = await userRef.get();
     const username = userSnap.data()?.username;
@@ -2936,6 +2944,7 @@ async function chatSender(uid) {
     // Supporters get the blue name in chat too; carried on the message so
     // readers don't need the sender's profile loaded.
     isSupporter: userSnap.data()?.isSupporter === true || profile.isSupporter === true,
+    supporter: supporterInfo(userSnap.data()),
   };
 }
 
@@ -2988,6 +2997,7 @@ exports.sendGlobalChatMessage = onCall(
       prestige: sender.prestige,
       photoURL: sender.photoURL,
       isSupporter: sender.isSupporter,
+      supporter: sender.supporter,
       text,
       mentions: mentioned,
       createdAt: FieldValue.serverTimestamp(),
@@ -3058,7 +3068,7 @@ exports.sendDirectMessage = onCall(
       lastSenderUid: uid,
       lastAt: FieldValue.serverTimestamp(),
       unread: { [toUid]: FieldValue.increment(1), [uid]: 0 },
-      supporters: { [uid]: sender.isSupporter },
+      supporters: { [uid]: sender.supporter },
     }, { merge: true });
     await batch.commit();
 

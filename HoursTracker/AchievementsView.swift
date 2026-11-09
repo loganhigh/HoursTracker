@@ -187,7 +187,20 @@ struct AchievementsView: View {
 
     /// Earned badges serialized for the public profile doc so friends can
     /// see which badges someone has unlocked.
+    /// Matches the server's (functions/src/supporter.js SUPPORTER_BADGE),
+    /// which is the copy everyone else sees.
+    static let supporterBadge = SharedBadgeSummary(
+        icon: "heart.fill", name: "Supporter",
+        detail: "Helped keep Hour Tracker running", isLegend: false, order: 9000
+    )
+
+    @MainActor
     static func earnedBadgesForSharing(from store: HoursStore) -> [SharedBadgeSummary] {
+        let earned = earnedFactoryBadges(from: store)
+        return SupporterRegistry.shared.selfIsSupporter ? earned + [supporterBadge] : earned
+    }
+
+    private static func earnedFactoryBadges(from store: HoursStore) -> [SharedBadgeSummary] {
         let stats = BadgeStats(from: store)
         return BadgeFactory.makeBadges(stats: stats)
             .filter(\.isUnlocked)

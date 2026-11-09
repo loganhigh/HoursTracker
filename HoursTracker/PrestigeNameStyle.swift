@@ -43,7 +43,11 @@ struct PrestigeNameText: View {
 
     var body: some View {
         let isOwner = DeveloperConfig.isOwnerName(name) || DeveloperConfig.isCEO(uid: uid)
-        let isSupporter = !isOwner && supporters.contains(name)
+        let supporterStyle = isOwner ? nil : supporters.style(name: name, uid: uid)
+        let isSupporter = supporterStyle != nil
+        // Legend prestige keeps its earned colour unless the supporter chose
+        // to show their supporter colour instead.
+        let supporterWins = isSupporter && (!tier.isLegend || supporterStyle?.prefersColor == true)
         Group {
             if isOwner {
                 // Gold, so the sweep reads (white light over white text is
@@ -51,6 +55,14 @@ struct PrestigeNameText: View {
                 text.foregroundStyle(
                     LinearGradient(
                         colors: [AppColors.gold, AppColors.goldDeep, AppColors.gold],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+            } else if supporterWins, let supporterStyle {
+                text.foregroundStyle(
+                    LinearGradient(
+                        colors: supporterStyle.color.gradient,
                         startPoint: .leading,
                         endPoint: .trailing
                     )
@@ -72,7 +84,7 @@ struct PrestigeNameText: View {
                 text.foregroundStyle(style)
             }
         }
-        .modifier(OwnerNameShimmer(text: text, isOwner: isOwner || isSupporter))
+        .modifier(OwnerNameShimmer(text: text, isOwner: isOwner || supporterWins))
     }
 }
 

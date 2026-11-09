@@ -10,6 +10,7 @@
 const { makeCalendar, resolveUserTimeZone } = require("./localCalendar");
 const { sanitizeBadgeSummaries } = require("./badgeSanity");
 const { typicalGapDays } = require("../admin/winback");
+const { supporterInfo, withSupporterBadge } = require("../supporter");
 
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 
@@ -1204,7 +1205,12 @@ async function recomputeUserStats(db, uid, options = {}) {
       workedShiftCount: entries.filter((e) => !e.isOffDay && entryDate(e)).length,
     }
   );
-  const unlockedBadgeSummaries = badgeSanity.badges;
+  // The Supporter badge is the server's call (it knows who tipped): any
+  // client-sent copy is dropped and the real one added for supporters.
+  const unlockedBadgeSummaries = withSupporterBadge(
+    badgeSanity.badges,
+    privacy.shareBadges && userData.isSupporter === true
+  );
   if (badgeSanity.dropped.length > 0) {
     console.log(
       `badgeSanity uid=${uid} dropped ${badgeSanity.dropped.length} of ` +
@@ -1227,6 +1233,8 @@ async function recomputeUserStats(db, uid, options = {}) {
     // writes it to its own users doc when a tip goes through, and it rides
     // along unchanged. Purely cosmetic, so it is not verified against receipts.
     isSupporter: userData.isSupporter === true,
+    // Perks by total tipped (colour choice, Legend name style, photo ring).
+    supporter: supporterInfo(userData),
     // The public handle. Server-owned (claimUsername), so it rides along
     // unmoderated — it was validated and filtered when it was claimed.
     username: userData.username || null,
@@ -1613,6 +1621,7 @@ function buildBoardEntries(hourRows, profilesByUid) {
       streak: hidden ? 0 : Number(p.currentStreak) || 0,
       hasReviewedApp: p.hasReviewedApp === true,
       isSupporter: p.isSupporter === true,
+      supporter: p.supporter || null,
       occupation: String(p.companyOccupation || "").trim(),
     };
   });

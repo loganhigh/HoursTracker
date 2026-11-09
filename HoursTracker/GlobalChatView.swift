@@ -284,6 +284,7 @@ struct ChatMessageRow: View {
                     PrestigeNameText(name: "@\(message.username)", prestige: message.prestige,
                                      font: .subheadline.weight(.bold), uid: message.uid)
                         .lineLimit(1)
+                    SupporterHeart(name: message.username, uid: message.uid)
                     if isMine {
                         Text("You")
                             .font(.caption2.weight(.bold))

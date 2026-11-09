@@ -80,7 +80,7 @@ struct TipJarView: View {
                         .appText(.title)
                         .foregroundStyle(AppColors.text)
                     Text(manager.didTip
-                         ? "Your username now shimmers. That genuinely helps keep Hour Tracker running."
+                         ? "Your name now shimmers in supporter blue. That genuinely helps keep Hour Tracker running."
                          : "Hour Tracker is free to use. If you find it useful and want to help with the cost of keeping it running, you can leave a small tip. Your support helps keep Hour Tracker free and ad-free!")
                         .appText(.body)
                         .foregroundStyle(AppColors.subtext)
@@ -90,7 +90,12 @@ struct TipJarView: View {
 
                 perksCard
 
+                choicesCard
+
                 tipButtons
+
+                SupporterThanksWall()
+                    .padding(.top, AppSpacing.sm)
             }
             .padding(AppSpacing.lg)
             .frame(maxWidth: .infinity)
@@ -115,55 +120,152 @@ struct TipJarView: View {
         }
     }
 
-    /// What any tip unlocks — so people know where the blue names they see
-    /// around the app come from. Keep in step with the real perks.
+    @ObservedObject private var supporters = SupporterRegistry.shared
+
+    /// What tips unlock, by total tipped — so people know where the coloured
+    /// names, hearts and rings around the app come from. Keep in step with
+    /// functions/src/supporter.js.
     private var perksCard: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            Text(manager.didTip ? "You've unlocked" : "Any tip unlocks")
+        let total = supporters.selfStyle.total
+        let tipped = supporters.selfIsSupporter
+        return VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            Text(tipped ? "Your supporter perks" : "What tips unlock")
                 .font(.system(.subheadline, design: .rounded, weight: .bold))
                 .foregroundStyle(AppColors.subtext)
-            perk(icon: "sparkles",
-                 title: "Supporter name",
-                 detail: "Your username turns shimmering blue")
-            perk(icon: "person.3.fill",
-                 title: "Seen everywhere",
-                 detail: "On the leaderboards, Friends, Board Chat and DMs")
-            perk(icon: "infinity",
-                 title: "Yours for good",
-                 detail: "One tip of any size — it never expires")
+            perk(icon: "sparkles", title: "Supporter name", detail: "Your username turns shimmering blue everywhere",
+                 tier: "Any tip", unlocked: tipped, highlight: true)
+            perk(icon: "heart.fill", title: "Badge & chat heart",
+                 detail: "A Supporter badge on your profile and a heart by your name in chat",
+                 tier: "Any tip", unlocked: tipped)
+            perk(icon: "hands.clap.fill", title: "Thanks wall", detail: "Your name on the supporters list below",
+                 tier: "Any tip", unlocked: tipped)
+            perk(icon: "paintpalette.fill", title: "Pick your name colour",
+                 detail: "Blue, purple, emerald or rose",
+                 tier: "$5 total", unlocked: tipped && total >= SupporterStyle.colorUnlockTotal)
+            perk(icon: "circle.dashed", title: "Animated photo ring",
+                 detail: "A ring in your colour turns around your photo",
+                 tier: "$20 total", unlocked: tipped && total >= SupporterStyle.ringUnlockTotal)
+            Text("Tips add up, and perks never expire.")
+                .appText(.caption)
+                .foregroundStyle(AppColors.faint)
+                .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(AppColors.card)
-        )
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(AppColors.card))
     }
 
-    private func perk(icon: String, title: String, detail: String) -> some View {
-        HStack(spacing: AppSpacing.sm) {
+    private func perk(icon: String, title: String, detail: String, tier: String,
+                      unlocked: Bool, highlight: Bool = false) -> some View {
+        let color = supporters.selfStyle.color
+        return HStack(spacing: AppSpacing.sm) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(PrestigeNameText.supporterColors[0])
+                .foregroundStyle(color.solid)
                 .frame(width: 32, height: 32)
-                .background(Circle().fill(PrestigeNameText.supporterColors[0].opacity(0.15)))
+                .background(Circle().fill(color.solid.opacity(0.15)))
             VStack(alignment: .leading, spacing: 1) {
-                if title == "Supporter name" {
-                    Text(title)
-                        .font(.system(.callout, design: .rounded, weight: .bold))
-                        .foregroundStyle(LinearGradient(colors: PrestigeNameText.supporterColors,
-                                                        startPoint: .leading, endPoint: .trailing))
-                } else {
-                    Text(title)
-                        .font(.system(.callout, design: .rounded, weight: .bold))
-                        .foregroundStyle(AppColors.text)
+                Group {
+                    if highlight {
+                        Text(title).foregroundStyle(LinearGradient(colors: color.gradient,
+                                                                   startPoint: .leading, endPoint: .trailing))
+                    } else {
+                        Text(title).foregroundStyle(AppColors.text)
+                    }
                 }
+                .font(.system(.callout, design: .rounded, weight: .bold))
                 Text(detail)
                     .appText(.caption)
                     .foregroundStyle(AppColors.subtext)
             }
+            Spacer(minLength: 4)
+            if unlocked {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(AppColors.positive)
+                    .accessibilityLabel("Unlocked")
+            } else {
+                Text(tier)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(AppColors.subtext)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(AppColors.bg))
+            }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// Supporters' choices: colour ($5+) and, at Legend prestige, whether
+    /// the name shows Legend's colour or theirs.
+    @ViewBuilder
+    private var choicesCard: some View {
+        if supporters.selfIsSupporter {
+            let style = supporters.selfStyle
+            let colorUnlocked = style.total >= SupporterStyle.colorUnlockTotal
+            let isLegend = (HoursStore.current?.displayedPrestige ?? 0) > 10
+            VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                Text("Name colour")
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                    .foregroundStyle(AppColors.subtext)
+                HStack(spacing: AppSpacing.sm) {
+                    ForEach(SupporterColor.allCases) { option in
+                        let chosen = style.color == option
+                        Button {
+                            Haptics.lightTap()
+                            supporters.saveChoices(color: option)
+                        } label: {
+                            VStack(spacing: 4) {
+                                Circle()
+                                    .fill(LinearGradient(colors: option.gradient,
+                                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    .frame(width: 36, height: 36)
+                                    .overlay(Circle().stroke(AppColors.text, lineWidth: chosen ? 2 : 0))
+                                Text(option.label)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(chosen ? AppColors.text : AppColors.subtext)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!colorUnlocked && option != .blue)
+                        .opacity(!colorUnlocked && option != .blue ? 0.35 : 1)
+                        .accessibilityAddTraits(chosen ? .isSelected : [])
+                    }
+                }
+                if !colorUnlocked {
+                    Text("Tip \(Self.money(SupporterStyle.colorUnlockTotal - style.total)) more in total to pick a colour.")
+                        .appText(.caption)
+                        .foregroundStyle(AppColors.faint)
+                }
+                if isLegend {
+                    Toggle(isOn: Binding(
+                        get: { style.prefersColor },
+                        set: { supporters.saveChoices(prefersColor: $0) }
+                    )) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Show supporter colour at Legend")
+                                .font(.system(.callout, design: .rounded, weight: .bold))
+                                .foregroundStyle(AppColors.text)
+                            Text("Off shows your Legend prestige colour instead.")
+                                .appText(.caption)
+                                .foregroundStyle(AppColors.subtext)
+                        }
+                    }
+                    .tint(AppColors.accent)
+                    .padding(.top, AppSpacing.xs)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AppSpacing.md)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(AppColors.card))
+        }
+    }
+
+    private static func money(_ amount: Double) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.maximumFractionDigits = 2
+        return f.string(from: NSNumber(value: max(0, amount))) ?? String(format: "$%.2f", max(0, amount))
     }
 
     @ViewBuilder

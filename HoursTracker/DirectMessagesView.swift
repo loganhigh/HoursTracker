@@ -100,6 +100,7 @@ struct DirectInboxView: View {
                     PrestigeNameText(name: "@\(thread.otherUsername)", prestige: 0,
                                      font: .subheadline.weight(.bold), uid: thread.otherUid)
                         .lineLimit(1)
+                    SupporterHeart(name: thread.otherUsername, uid: thread.otherUid)
                     Spacer()
                     Text(ChatFormat.time(thread.lastAt))
                         .font(.caption2)
@@ -254,6 +255,7 @@ struct DirectThreadView: View {
             PrestigeNameText(name: "@\(target.otherUsername)", prestige: 0,
                              font: AppTypography.headline, uid: otherUid)
                 .lineLimit(1)
+            SupporterHeart(name: target.otherUsername, uid: otherUid)
             Spacer(minLength: 0)
             if let otherUid {
                 Menu {

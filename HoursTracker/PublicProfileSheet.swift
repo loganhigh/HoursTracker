@@ -351,6 +351,8 @@ struct PublicProfileSheet: View {
             let snap = try await Firestore.firestore()
                 .collection("publicProfiles").document(tracker.uid).getDocument()
             guard let data = snap.data() else { didFail = true; return }
+            SupporterRegistry.shared.record(name: tracker.name, isSupporter: data["isSupporter"] as? Bool ?? false,
+                                            uid: tracker.uid, supporter: data["supporter"])
             withAnimation(AppMotion.Spring.snappy) { glimpse = .parse(data) }
         } catch {
             didFail = true

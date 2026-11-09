@@ -30,7 +30,10 @@ struct ChatMessage: Identifiable, Equatable {
         let data = doc.data()
         guard let uid = data["uid"] as? String, let text = data["text"] as? String else { return nil }
         if let supporter = data["isSupporter"] as? Bool, let name = data["username"] as? String {
-            Task { @MainActor in SupporterRegistry.shared.record(name: name, isSupporter: supporter) }
+            let perks = data["supporter"]
+            Task { @MainActor in
+                SupporterRegistry.shared.record(name: name, isSupporter: supporter, uid: uid, supporter: perks)
+            }
         }
         return ChatMessage(
             id: doc.documentID,
@@ -101,9 +104,15 @@ struct DirectThread: Identifiable, Equatable {
         let names = data["usernames"] as? [String: Any] ?? [:]
         let unread = data["unread"] as? [String: Any] ?? [:]
         let reads = data["lastReadAt"] as? [String: Any] ?? [:]
-        if let supporter = (data["supporters"] as? [String: Any])?[other] as? Bool,
+        // supporters.{uid} is the server's perk map (or a bare Bool from the
+        // first version of this field).
+        if let raw = (data["supporters"] as? [String: Any])?[other],
            let name = names[other] as? String {
-            Task { @MainActor in SupporterRegistry.shared.record(name: name, isSupporter: supporter) }
+            let isSupporter = (raw as? Bool) ?? ((raw as? [String: Any])?["isSupporter"] as? Bool ?? false)
+            let perks = raw as? [String: Any]
+            Task { @MainActor in
+                SupporterRegistry.shared.record(name: name, isSupporter: isSupporter, uid: other, supporter: perks)
+            }
         }
         return DirectThread(
             id: doc.documentID,

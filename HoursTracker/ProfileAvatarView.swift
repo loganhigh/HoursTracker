@@ -19,6 +19,7 @@ struct ProfileAvatarView: View {
     /// uid + photoURL, and neither changes when you replace your own photo
     /// (Storage hands back the same download URL for the same path).
     @ObservedObject private var photoManager = ProfilePhotoManager.shared
+    @ObservedObject private var supporters = SupporterRegistry.shared
 
     private var initials: String {
         BoardContentFilter.initials(from: name)
@@ -57,6 +58,12 @@ struct ProfileAvatarView: View {
             if showsAccentRing {
                 Circle()
                     .stroke(AppTheme.Colors.accent.opacity(0.45), lineWidth: max(1, size * 0.02))
+            }
+        }
+        .overlay {
+            // $20+ supporters: a slowly turning ring in their colour.
+            if let style = supporters.style(name: name, uid: uid), style.ring {
+                SupporterAvatarRing(color: style.color, size: size)
             }
         }
         .contentShape(Circle())

@@ -261,7 +261,8 @@ final class TopTrackersService: ObservableObject {
         let parsed = Self.parseBoardRows(rows)
         for row in rows {
             if let name = row["name"] as? String {
-                SupporterRegistry.shared.record(name: name, isSupporter: row["isSupporter"] as? Bool ?? false)
+                SupporterRegistry.shared.record(name: name, isSupporter: row["isSupporter"] as? Bool ?? false,
+                                                uid: row["uid"] as? String, supporter: row["supporter"])
             }
         }
 
