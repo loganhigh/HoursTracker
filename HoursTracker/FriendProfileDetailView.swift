@@ -23,6 +23,7 @@ struct FriendProfileDetailView: View {
     @State private var nudgeSent = false
     @State private var nudgeMessage: String?
     @State private var showingNudgePicker = false
+    @State private var dmTarget: DirectThreadTarget?
 
     // CEO-only stats recompute (also gated server-side by UID + passcode).
     @State private var showAdminPasscodePrompt = false
@@ -70,6 +71,7 @@ struct FriendProfileDetailView: View {
                 .background(AppColors.bg.ignoresSafeArea())
             }
         }
+        .navigationDestination(item: $dmTarget) { DirectThreadView(target: $0) }
         .navigationTitle(friend?.displayName ?? "Profile")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -119,6 +121,8 @@ struct FriendProfileDetailView: View {
         ScrollView {
             VStack(spacing: AppSpacing.lg) {
                 FriendIdentityHeader(friend: friend, accent: accent)
+
+                messageButton(friend: friend, accent: accent)
 
                 // The screen's one owl peeks over the first card's flat top
                 // edge (a round avatar leaves his wing tips floating), scarf
@@ -280,6 +284,37 @@ struct FriendProfileDetailView: View {
             }
             .padding(.vertical, 8)
         }
+    }
+
+    // MARK: - Message
+
+    /// Direct message, straight from Friends — no detour through the global
+    /// board's profile sheet.
+    private func messageButton(friend: FriendProfile, accent: Color) -> some View {
+        Button {
+            Haptics.lightTap()
+            dmTarget = DirectThreadTarget(
+                otherUid: friend.uid,
+                otherUsername: Username.normalize(friend.displayName)
+            )
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "paperplane.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("Message")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+            }
+            .foregroundStyle(AppColors.textOnAccent)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                    .fill(accent)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Message \(friend.displayName)")
     }
 
     // MARK: - Nudge

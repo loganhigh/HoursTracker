@@ -30,6 +30,7 @@ struct FriendsView: View {
     @State private var isSending = false
     @State private var sendTimeoutTask: Task<Void, Never>?
     @State private var profileFriendUid: String?
+    @State private var dmTarget: DirectThreadTarget?
     @State private var nudgeTarget: FriendProfile?
     @State private var isSendingNudge = false
     @State private var nudgeResultMessage: String?
@@ -109,6 +110,7 @@ struct FriendsView: View {
                 Task { await friendsService.refreshFriendProfiles() }
             }
         }
+        .navigationDestination(item: $dmTarget) { DirectThreadView(target: $0) }
         .navigationDestination(item: $profileFriendUid) { uid in
             FriendProfileDetailView(
                 friendUid: uid,
@@ -338,6 +340,23 @@ struct FriendsView: View {
                         },
                         onNudge: nudgeAction(for: entry)
                     )
+                    .contextMenu {
+                        if !entry.isMe {
+                            Button {
+                                dmTarget = DirectThreadTarget(
+                                    otherUid: entry.id,
+                                    otherUsername: Username.normalize(entry.name)
+                                )
+                            } label: {
+                                Label("Message", systemImage: "paperplane.fill")
+                            }
+                            Button {
+                                profileFriendUid = entry.id
+                            } label: {
+                                Label("View profile", systemImage: "person.crop.circle")
+                            }
+                        }
+                    }
                 }
             } else if friendsService.isLoading {
                 AppLoadingState(message: "Loading friends…")

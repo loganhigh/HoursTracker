@@ -225,7 +225,10 @@ struct BadgeCollectionGroup: View {
             }
             .padding(.horizontal, AppSpacing.xxs)
 
-            LazyVStack(spacing: 0) {
+            // Plain VStack: a LazyVStack nested in the page's VStack inside a
+            // ScrollView mis-reports its height, so the scroll stopped short
+            // and the end of the list (Legend) couldn't be reached.
+            VStack(spacing: 0) {
                 ForEach(Array(badges.enumerated()), id: \.element.id) { index, badge in
                     BadgeCollectionRow(badge: badge)
                     if index < badges.count - 1 {

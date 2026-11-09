@@ -154,7 +154,8 @@ struct AchievementsView: View {
         }
         .padding(.horizontal, AppSpacing.md)
         .padding(.top, embedded ? 0 : 10)
-        .padding(.bottom, embedded ? 24 : 32)
+        // Clear the floating tab bar so the last Legend row isn't under it.
+        .padding(.bottom, embedded ? 24 : 120)
     }
 
     var body: some View {
