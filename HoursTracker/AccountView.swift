@@ -422,6 +422,9 @@ struct AccountView: View {
                     .foregroundStyle(AppColors.subtext)
                     .multilineTextAlignment(.center)
             }
+
+            ProfileBadgeStrip(badges: AchievementsView.earnedBadgesForSharing(from: store))
+                .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
     }

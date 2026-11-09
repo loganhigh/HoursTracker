@@ -22,6 +22,8 @@ struct PublicProfileGlimpse: Equatable {
     var bestStreak: Int
     var badgeCount: Int
     var topBadges: [SharedBadgeSummary]
+    /// Every published badge, for the strip under the title.
+    var allBadges: [SharedBadgeSummary] = []
     var shareHours: Bool
     var shareBadges: Bool
 
@@ -54,6 +56,7 @@ struct PublicProfileGlimpse: Equatable {
             badgeCount: max(badges.count, Int(number(data["badgeCount"]) ?? 0)),
             // Highest `order` = rarest / most recent — the three worth showing.
             topBadges: Array(badges.sorted { $0.order > $1.order }.prefix(3)),
+            allBadges: badges,
             shareHours: privacy.shareHours,
             shareBadges: privacy.shareBadges
         )
@@ -171,6 +174,10 @@ struct PublicProfileSheet: View {
                     .font(AppTypography.subheadline.weight(.bold))
                     .foregroundStyle(accent)
                     .multilineTextAlignment(.center)
+            }
+
+            if let glimpse, glimpse.shareBadges {
+                ProfileBadgeStrip(badges: glimpse.allBadges, tint: accent)
             }
 
             if !tracker.occupation.isEmpty {

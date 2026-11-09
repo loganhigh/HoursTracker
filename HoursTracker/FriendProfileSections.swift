@@ -404,6 +404,11 @@ struct FriendIdentityHeader: View {
                     .foregroundStyle(AppColors.subtext)
                     .multilineTextAlignment(.center)
             }
+
+            if friend.privacy.shareBadges {
+                ProfileBadgeStrip(badges: friend.unlockedBadgeSummaries, tint: accent)
+                    .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity)
     }
