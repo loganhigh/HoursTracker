@@ -11,6 +11,41 @@ final class PayPredictorTests: XCTestCase {
         )
     }
 
+    // MARK: Estimate-based projection
+
+    private func estimated(_ daysAgo: Int, hours: Double, payout: Double, estimate: Double) -> AdvancedPayPredictor.PastCheque {
+        var c = cheque(daysAgo, hours: hours, payout: payout)
+        c.estimatedPay = estimate
+        return c
+    }
+
+    func testUsesShiftEstimatesTimesLearnedTakeHomeRatio() {
+        // Both past cheques kept 75% of the estimate.
+        let past = [
+            estimated(28, hours: 80, payout: 2175, estimate: 2900),
+            estimated(14, hours: 70, payout: 1902.75, estimate: 2537),
+        ]
+        // One 10.5h double-time shift estimated at $761.25.
+        let p = AdvancedPayPredictor.predict(currentHours: 10.5, past: past, currentEstimatedPay: 761.25)!
+        XCTAssertEqual(p.amount, 761.25 * 0.75, accuracy: 0.01)
+    }
+
+    func testOutlierRatiosIgnored_fallsBackWhenTooFewLeft() {
+        let past = [
+            estimated(28, hours: 80, payout: 2100, estimate: 2800),
+            estimated(14, hours: 80, payout: 50, estimate: 2800), // typo'd total
+        ]
+        let p = AdvancedPayPredictor.predict(currentHours: 40, past: past, currentEstimatedPay: 1400)!
+        // Only one usable ratio → hours-based model, not 1400 × 0.75.
+        XCTAssertNotEqual(p.amount, 1050, accuracy: 0.01)
+    }
+
+    func testNoEstimateKeepsHoursModel() {
+        let past = [cheque(28, hours: 80, payout: 2000), cheque(14, hours: 80, payout: 2000)]
+        let p = AdvancedPayPredictor.predict(currentHours: 40, past: past, currentEstimatedPay: 0)!
+        XCTAssertEqual(p.amount, 1000, accuracy: 0.01)
+    }
+
     // MARK: Guard rails
 
     func testFewerThanTwoRecordsReturnsNil() {

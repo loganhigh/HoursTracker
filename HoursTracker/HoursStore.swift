@@ -1997,6 +1997,12 @@ final class HoursStore: ObservableObject {
                 .filter { !$0.isOffDay }
                 .reduce(0) { $0 + $1.paidHours }
         }
+        // Sum of each shift's own estimate — the same figure the shift
+        // editor shows ("≈ $761.25 before deductions").
+        func estimatedPay(in cycle: PayCycle) -> Double {
+            PayCycleEngine.entries(entries, in: cycle)
+                .reduce(0) { $0 + payBreakdown(for: $1).pay }
+        }
         var past: [AdvancedPayPredictor.PastCheque] = []
         var cursor = current
         for _ in 0..<60 {
@@ -2005,12 +2011,17 @@ final class HoursStore: ObservableObject {
                 past.append(AdvancedPayPredictor.PastCheque(
                     start: cursor.start,
                     hours: hours(in: cursor),
-                    payout: payout
+                    payout: payout,
+                    estimatedPay: estimatedPay(in: cursor)
                 ))
             }
             if cursor.start <= earliest { break }
         }
-        return AdvancedPayPredictor.predict(currentHours: hours(in: current), past: past)
+        return AdvancedPayPredictor.predict(
+            currentHours: hours(in: current),
+            past: past,
+            currentEstimatedPay: estimatedPay(in: current)
+        )
     }
 
     /// Cloud copy of the totals arriving from the listener. Replaces local

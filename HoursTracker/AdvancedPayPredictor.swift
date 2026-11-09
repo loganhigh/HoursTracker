@@ -22,6 +22,10 @@ struct AdvancedPayPredictor {
         let hours: Double
         /// What the cheque actually paid, as typed by the user.
         let payout: Double
+        /// The app's own before-deductions estimate for that period: the sum
+        /// of each shift's pay (overtime, double time, stat and holiday rules,
+        /// per-job wages). 0 when no wage is set.
+        var estimatedPay: Double = 0
     }
 
     struct Prediction {
@@ -109,11 +113,43 @@ struct AdvancedPayPredictor {
     /// Nil until there are at least two usable recorded cheques — one cheque
     /// is an anecdote, not a rate. Zero-hour or zero-payout records are
     /// skipped rather than crashing the averages they'd divide by.
-    static func predict(currentHours: Double, past: [PastCheque]) -> Prediction? {
+    static func predict(currentHours: Double, past: [PastCheque], currentEstimatedPay: Double = 0) -> Prediction? {
         let usable = past
             .filter { $0.hours > 0 && $0.payout > 0 && $0.payout.isFinite && $0.hours.isFinite }
             .sorted { $0.start < $1.start }
         guard usable.count >= 2, currentHours > 0, currentHours.isFinite else { return nil }
+
+        // Preferred: scale the shifts' own pay estimates by the take-home
+        // ratio learned from recorded cheques (payout ÷ estimate). The
+        // estimates already price double time, overtime and stat pay shift
+        // by shift, and a ratio has no intercept — so a cheque that's only
+        // one shift in projects that shift's pay, not a line fitted to full
+        // periods (which projected a 10.5h double-time shift at ~$154).
+        if currentEstimatedPay > 0, currentEstimatedPay.isFinite {
+            let rated = usable.filter {
+                guard $0.estimatedPay > 0, $0.estimatedPay.isFinite else { return false }
+                let ratio = $0.payout / $0.estimatedPay
+                // A typo'd total or a period with a missing shift isn't a
+                // take-home ratio; keep it out of the average.
+                return ratio > 0.2 && ratio < 2.0
+            }
+            if rated.count >= 2 {
+                var weighted = 0.0, totalWeight = 0.0
+                for (index, cheque) in rated.enumerated() {
+                    let weight = Double(index + 1)
+                    weighted += (cheque.payout / cheque.estimatedPay) * weight
+                    totalWeight += weight
+                }
+                let amount = currentEstimatedPay * (weighted / totalWeight)
+                return Prediction(
+                    amount: amount,
+                    netRate: amount / currentHours,
+                    sampleCount: rated.count,
+                    confidence: Confidence(sampleCount: rated.count),
+                    volumeAdjusted: false
+                )
+            }
+        }
 
         // Weighted moving average of the net rate: weights rise linearly with
         // recency (oldest = 1, newest = n), so a raise or a seasonal tip
