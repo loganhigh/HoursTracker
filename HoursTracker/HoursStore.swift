@@ -57,6 +57,11 @@ final class HoursStore: ObservableObject {
             monthHoursCache = nil
             allEntriesCache = nil
             lifetimeWorkStatsCache = nil
+            // Any shift, from any path, clears that day's "log your shift"
+            // reminders (debounced, so a cloud sync reschedules once).
+            if HoursStore.current === self {
+                SmartNotifier.shared.refreshShiftReminders()
+            }
         }
     }
     @Published var yearArchives: [YearArchive] = [] {

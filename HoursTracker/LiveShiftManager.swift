@@ -67,7 +67,10 @@ struct LiveShift: Codable, Equatable {
 final class LiveShiftManager: ObservableObject {
     static let shared = LiveShiftManager()
 
-    @Published private(set) var activeShift: LiveShift?
+    @Published private(set) var activeShift: LiveShift? {
+        // Clocking in/out moves today's shift reminders.
+        didSet { if (oldValue == nil) != (activeShift == nil) { SmartNotifier.shared.refreshShiftReminders() } }
+    }
 
     private let defaults: UserDefaults
     private let storageKey: String

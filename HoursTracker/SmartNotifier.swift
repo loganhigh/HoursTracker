@@ -286,12 +286,52 @@ class SmartNotifier: ObservableObject {
     
     // MARK: - Daily Shift Reminder
     
+    /// How many days ahead the daily reminder is laid out. Each day is its
+    /// own one-shot request, so a day that already has a shift is simply left
+    /// out — a repeating trigger can't skip a day, which is why people got
+    /// "Don't forget to log today's shift" after they'd logged it.
+    private static let dailyReminderDaysAhead = 14
+    private static let dailyReminderPrefix = "daily_shift_reminder_"
+    private static let legacyDailyReminderIdentifier = "daily_shift_reminder"
+
+    /// Re-lays out both shift reminders against the current entries. Called
+    /// (debounced) whenever entries change, however the shift arrived —
+    /// editor, live shift, Watch, Siri, or cloud sync.
+    func refreshShiftReminders() {
+        DispatchQueue.main.async {
+            self.refreshWorkItem?.cancel()
+            let item = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                let entries = HoursStore.current?.entries ?? []
+                self.scheduleDailyReminder(entries: entries)
+                self.scheduleForgotHoursReminderIfNeeded(entries: entries)
+            }
+            self.refreshWorkItem = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: item)
+        }
+    }
+    private var refreshWorkItem: DispatchWorkItem?
+
+    /// True while a live shift is running — the user is clearly working, so
+    /// "did you log it?" would be premature.
+    private func liveShiftRunningToday(calendar: Calendar) -> Bool {
+        LiveShiftManager.shared.activeShift != nil
+    }
+
     func scheduleDailyReminder() {
+        scheduleDailyReminder(entries: HoursStore.current?.entries ?? [])
+    }
+
+    func scheduleDailyReminder(entries: [WorkEntry]) {
         guard dailyReminderEnabled else {
             cancelDailyReminder()
             return
         }
-        
+        let calendar = Calendar.current
+        let loggedDays = Set(entries.map { calendar.startOfDay(for: $0.date) })
+        let skipToday = liveShiftRunningToday(calendar: calendar)
+        let hour = dailyReminderHour
+
         Task {
             // Request permission if not yet determined; use it if already granted
             var hasPermission = await notificationManager.hasPermission()
@@ -299,72 +339,65 @@ class SmartNotifier: ObservableObject {
                 hasPermission = await notificationManager.requestPermission()
             }
             guard hasPermission else { return }
-            
-            // Cancel existing reminder
-            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["daily_shift_reminder"])
-            
-            // Create new reminder
-            let content = UNMutableNotificationContent()
-            content.title = "Don't forget!"
-            content.body = "Don't forget to log today's shift"
-            content.sound = .default
-            content.badge = 1
-            
-            // Set trigger for daily at specified hour
-            var dateComponents = DateComponents()
-            dateComponents.hour = dailyReminderHour
-            dateComponents.minute = 0
-            
-            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-            
-            let request = UNNotificationRequest(
-                identifier: "daily_shift_reminder",
-                content: content,
-                trigger: trigger
-            )
-            
-            do {
-                try await UNUserNotificationCenter.current().add(request)
-                #if DEBUG
-                print("Daily reminder scheduled for \(dailyReminderHour):00")
-                #endif
-            } catch {
-                #if DEBUG
-                print("Failed to schedule daily reminder: \(error)")
-                #endif
+
+            await removePendingDailyReminders()
+
+            let now = Date()
+            let today = calendar.startOfDay(for: now)
+            for offset in 0..<Self.dailyReminderDaysAhead {
+                guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
+                if loggedDays.contains(day) { continue }
+                if offset == 0 && skipToday { continue }
+                guard let fire = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: day),
+                      fire > now else { continue }
+
+                let content = UNMutableNotificationContent()
+                content.title = "Don't forget!"
+                content.body = "Don't forget to log today's shift"
+                content.sound = .default
+                content.badge = 1
+
+                let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+                let id = Self.dailyReminderPrefix + Self.dayKey(day, calendar: calendar)
+                let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+                do {
+                    try await UNUserNotificationCenter.current().add(request)
+                } catch {
+                    #if DEBUG
+                    print("Failed to schedule daily reminder: \(error)")
+                    #endif
+                }
             }
         }
     }
-    
+
+    private static func dayKey(_ day: Date, calendar: Calendar) -> String {
+        let c = calendar.dateComponents([.year, .month, .day], from: day)
+        return String(format: "%04d%02d%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+    }
+
+    private func removePendingDailyReminders() async {
+        let pending = await UNUserNotificationCenter.current().pendingNotificationRequests()
+        let ids = pending.map(\.identifier).filter {
+            $0 == Self.legacyDailyReminderIdentifier || $0.hasPrefix(Self.dailyReminderPrefix)
+        }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+    }
+
     func cancelDailyReminder() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["daily_shift_reminder"])
+        Task { await removePendingDailyReminders() }
     }
     
     func cancelDailyReminderIfNeeded(for date: Date, entries: [WorkEntry]) {
         guard dailyReminderEnabled else { return }
-        
         let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let entryDay = calendar.startOfDay(for: date)
-        
-        // If the entry is for today, check if we should cancel today's notification
-        if entryDay == today {
-            // Check if there's already an entry for today
-            let hasEntryForToday = entries.contains { entry in
-                calendar.isDate(entry.date, inSameDayAs: today)
-            }
-            
-            if hasEntryForToday {
-                // User has logged today's shift, so we can consider canceling delivered notifications
-                // Note: We can't selectively cancel delivered notifications, but we can remove pending ones
-                // The daily reminder will still fire tomorrow as scheduled
-                #if DEBUG
-                print("Entry logged for today, daily reminder will still fire tomorrow as scheduled")
-                #endif
-            }
-        }
+        let day = calendar.startOfDay(for: date)
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: [Self.dailyReminderPrefix + Self.dayKey(day, calendar: calendar)]
+        )
     }
-    
+
     // MARK: - One-shot "today at H:00" trigger
 
     /// A calendar trigger whose fully-specified date has already passed has
@@ -415,7 +448,7 @@ class SmartNotifier: ObservableObject {
                 return
             }
             let hasEntryToday = entries.contains { calendar.isDate($0.date, inSameDayAs: today) }
-            guard !hasEntryToday else {
+            guard !hasEntryToday, !liveShiftRunningToday(calendar: calendar) else {
                 cancelForgotHoursReminder()
                 return
             }
