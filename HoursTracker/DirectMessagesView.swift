@@ -95,9 +95,11 @@ struct DirectInboxView: View {
             ProfileAvatarView(name: thread.otherUsername, size: 44, uid: thread.otherUid)
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
-                    Text("@\(thread.otherUsername)")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(AppColors.text)
+                    // Same name styling as Board Chat: supporter blue,
+                    // owner gold.
+                    PrestigeNameText(name: "@\(thread.otherUsername)", prestige: 0,
+                                     font: .subheadline.weight(.bold), uid: thread.otherUid)
+                        .lineLimit(1)
                     Spacer()
                     Text(ChatFormat.time(thread.lastAt))
                         .font(.caption2)
@@ -249,9 +251,8 @@ struct DirectThreadView: View {
             .accessibilityLabel("Back")
 
             ProfileAvatarView(name: target.otherUsername, size: 32, uid: otherUid)
-            Text("@\(target.otherUsername)")
-                .font(AppTypography.headline)
-                .foregroundStyle(AppColors.text)
+            PrestigeNameText(name: "@\(target.otherUsername)", prestige: 0,
+                             font: AppTypography.headline, uid: otherUid)
                 .lineLimit(1)
             Spacer(minLength: 0)
             if let otherUid {

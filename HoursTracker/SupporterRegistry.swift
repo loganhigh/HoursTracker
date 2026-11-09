@@ -87,7 +87,11 @@ final class SupporterRegistry: ObservableObject {
         return keys
     }
 
+    /// Chat shows handles as "@name" — the @ is display only, so it's
+    /// dropped here (it kept every chat name from matching).
     private static func key(_ name: String) -> String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("@") { trimmed.removeFirst() }
+        return trimmed.lowercased()
     }
 }

@@ -29,6 +29,9 @@ struct ChatMessage: Identifiable, Equatable {
     static func parse(_ doc: QueryDocumentSnapshot) -> ChatMessage? {
         let data = doc.data()
         guard let uid = data["uid"] as? String, let text = data["text"] as? String else { return nil }
+        if let supporter = data["isSupporter"] as? Bool, let name = data["username"] as? String {
+            Task { @MainActor in SupporterRegistry.shared.record(name: name, isSupporter: supporter) }
+        }
         return ChatMessage(
             id: doc.documentID,
             uid: uid,
@@ -98,6 +101,10 @@ struct DirectThread: Identifiable, Equatable {
         let names = data["usernames"] as? [String: Any] ?? [:]
         let unread = data["unread"] as? [String: Any] ?? [:]
         let reads = data["lastReadAt"] as? [String: Any] ?? [:]
+        if let supporter = (data["supporters"] as? [String: Any])?[other] as? Bool,
+           let name = names[other] as? String {
+            Task { @MainActor in SupporterRegistry.shared.record(name: name, isSupporter: supporter) }
+        }
         return DirectThread(
             id: doc.documentID,
             otherUid: other,

@@ -2933,6 +2933,9 @@ async function chatSender(uid) {
     username,
     prestige: Number(profile.prestige) || 0,
     photoURL: typeof profile.photoURL === "string" ? profile.photoURL : "",
+    // Supporters get the blue name in chat too; carried on the message so
+    // readers don't need the sender's profile loaded.
+    isSupporter: userSnap.data()?.isSupporter === true || profile.isSupporter === true,
   };
 }
 
@@ -2984,6 +2987,7 @@ exports.sendGlobalChatMessage = onCall(
       username: sender.username,
       prestige: sender.prestige,
       photoURL: sender.photoURL,
+      isSupporter: sender.isSupporter,
       text,
       mentions: mentioned,
       createdAt: FieldValue.serverTimestamp(),
@@ -3054,6 +3058,7 @@ exports.sendDirectMessage = onCall(
       lastSenderUid: uid,
       lastAt: FieldValue.serverTimestamp(),
       unread: { [toUid]: FieldValue.increment(1), [uid]: 0 },
+      supporters: { [uid]: sender.isSupporter },
     }, { merge: true });
     await batch.commit();
 
