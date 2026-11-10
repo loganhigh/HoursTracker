@@ -1,19 +1,16 @@
 import SwiftUI
 
-// MARK: - Profile badge strip
+// MARK: - Profile badges button
 
-/// A person's unlocked badges as one row of small icons right under their
-/// title — on your own profile, a friend's profile and the public profile
-/// sheet — so what someone has earned is visible at a glance instead of
-/// further down the page. Rarest / newest first. Tap an icon to read its
-/// name and what it's for underneath.
+/// One compact "N badges ›" pill under a person's title — on your own
+/// profile, a friend's profile and the public profile sheet. Tap it to open
+/// the full list of what they've unlocked (name and what each is for).
+/// Rarest / newest first.
 struct ProfileBadgeStrip: View {
     let badges: [SharedBadgeSummary]
     var tint: Color = AppColors.accent
 
-    @State private var selected: SharedBadgeSummary?
-
-    private static let legendTint = Color(red: 0.98, green: 0.78, blue: 0.30)
+    @State private var showingList = false
 
     private var ordered: [SharedBadgeSummary] {
         badges.sorted { a, b in
@@ -23,58 +20,73 @@ struct ProfileBadgeStrip: View {
 
     var body: some View {
         if !badges.isEmpty {
-            VStack(spacing: 6) {
-                // Centred when they fit, scrollable when they don't.
-                ViewThatFits(in: .horizontal) {
-                    row
-                    ScrollView(.horizontal, showsIndicators: false) { row }
+            Button {
+                Haptics.lightTap()
+                showingList = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "rosette")
+                        .font(.footnote.weight(.bold))
+                    Text("\(badges.count) \(badges.count == 1 ? "badge" : "badges")")
+                        .font(.subheadline.weight(.bold))
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .opacity(0.7)
                 }
+                .foregroundStyle(tint)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(Capsule().fill(tint.opacity(0.12)))
+                .overlay(Capsule().stroke(tint.opacity(0.35), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(badges.count) badges")
+            .accessibilityHint("Shows the badge list")
+            .sheet(isPresented: $showingList) {
+                ProfileBadgeListSheet(badges: ordered, tint: tint)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
+        }
+    }
+}
 
-                if let selected {
-                    VStack(spacing: 1) {
-                        Text(selected.name)
-                            .font(.caption.weight(.bold))
+/// The unlocked badges as a list: icon, name, what it's for.
+private struct ProfileBadgeListSheet: View {
+    let badges: [SharedBadgeSummary]
+    let tint: Color
+
+    private static let legendTint = Color(red: 0.98, green: 0.78, blue: 0.30)
+
+    var body: some View {
+        NavigationStack {
+            List(badges) { badge in
+                let color = badge.isLegend ? Self.legendTint : tint
+                HStack(spacing: 12) {
+                    Image(systemName: badge.icon)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(color)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(color.opacity(0.14)))
+                        .overlay(Circle().stroke(color.opacity(0.45), lineWidth: 1))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(badge.name)
+                            .font(.subheadline.weight(.bold))
                             .foregroundStyle(AppColors.text)
-                        if !selected.detail.isEmpty {
-                            Text(selected.detail)
-                                .font(.caption2)
+                        if !badge.detail.isEmpty {
+                            Text(badge.detail)
+                                .font(.caption)
                                 .foregroundStyle(AppColors.subtext)
                         }
                     }
-                    .multilineTextAlignment(.center)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
+                .padding(.vertical, 2)
+                .listRowBackground(AppColors.card)
             }
-            .animation(.snappy(duration: 0.2), value: selected)
+            .scrollContentBackground(.hidden)
+            .background(AppColors.bg.ignoresSafeArea())
+            .navigationTitle("\(badges.count) \(badges.count == 1 ? "Badge" : "Badges")")
+            .navigationBarTitleDisplayMode(.inline)
         }
-    }
-
-    private var row: some View {
-        HStack(spacing: 8) {
-            ForEach(ordered) { badge in
-                icon(badge)
-            }
-        }
-        .padding(.horizontal, 2)
-        .padding(.vertical, 2)
-    }
-
-    private func icon(_ badge: SharedBadgeSummary) -> some View {
-        let color = badge.isLegend ? Self.legendTint : tint
-        let isSelected = selected == badge
-        return Button {
-            Haptics.lightTap()
-            selected = isSelected ? nil : badge
-        } label: {
-            Image(systemName: badge.icon)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(color)
-                .frame(width: 30, height: 30)
-                .background(Circle().fill(color.opacity(isSelected ? 0.28 : 0.12)))
-                .overlay(Circle().stroke(color.opacity(isSelected ? 0.9 : 0.45), lineWidth: 1.2))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(badge.name)
-        .accessibilityHint(badge.detail)
     }
 }
