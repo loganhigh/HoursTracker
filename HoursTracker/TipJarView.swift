@@ -89,11 +89,11 @@ struct TipJarView: View {
                 }
                 .padding(.horizontal, AppSpacing.lg)
 
+                tipButtons
+
                 perksCard
 
                 choicesCard
-
-                tipButtons
 
                 SupporterThanksWall()
                     .padding(.top, AppSpacing.sm)
@@ -133,6 +133,7 @@ struct TipJarView: View {
             Text(tipped ? "Your supporter perks" : "What tips unlock")
                 .font(.system(.subheadline, design: .rounded, weight: .bold))
                 .foregroundStyle(AppColors.subtext)
+                .frame(maxWidth: .infinity, alignment: .center)
             perk(icon: "sparkles", title: "Supporter name", detail: "Your username turns shimmering blue everywhere",
                  tier: "Any tip", unlocked: tipped, highlight: true)
             perk(icon: "heart.fill", title: "Badge & chat heart",
@@ -146,6 +147,8 @@ struct TipJarView: View {
             Text("Tips add up, and perks never expire.")
                 .appText(.caption)
                 .foregroundStyle(AppColors.faint)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -205,6 +208,7 @@ struct TipJarView: View {
                 Text("Name colour")
                     .font(.system(.subheadline, design: .rounded, weight: .bold))
                     .foregroundStyle(AppColors.subtext)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 HStack(spacing: AppSpacing.sm) {
                     ForEach(SupporterColor.allCases) { option in
                         let chosen = style.color == option
@@ -234,6 +238,8 @@ struct TipJarView: View {
                     Text("Tip \(Self.money(SupporterStyle.colorUnlockTotal - style.total)) more in total to pick a colour.")
                         .appText(.caption)
                         .foregroundStyle(AppColors.faint)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 }
                 if isLegend {
                     Toggle(isOn: Binding(
