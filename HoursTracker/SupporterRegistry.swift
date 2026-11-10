@@ -44,7 +44,7 @@ struct SupporterStyle: Equatable {
     var ring: Bool = false
     var total: Double = 0
 
-    static let colorUnlockTotal = 5.0
+    static let colorUnlockTotal = 4.99 // the $4.99 tip counts
     static let ringUnlockTotal = 20.0
 
     /// Parses the server's `supporter` map; nil when it isn't one.

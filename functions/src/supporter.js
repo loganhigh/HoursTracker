@@ -5,14 +5,14 @@
 // the public profile, the board rows, chat messages and DM threads.
 //
 //   any tip  → supporter name colour (blue), badge, chat heart, thanks wall
-//   $5 total → choose the name colour
+//   $4.99 total → choose the name colour
 //   $20 total→ animated profile-photo ring
 //
 // The choices (supporterColor, supporterNameStyle) are written by the user's
 // own device; anything not unlocked yet falls back here, so a hand-edited doc
 // can't skip ahead.
 
-const COLOR_UNLOCK_TOTAL = 5;
+const COLOR_UNLOCK_TOTAL = 4.99; // the $4.99 tip counts
 const RING_UNLOCK_TOTAL = 20;
 const COLORS = ["blue", "purple", "emerald", "rose"];
 

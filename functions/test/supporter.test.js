@@ -13,7 +13,9 @@ test("small tip: blue only, choice ignored", () => {
   assert.deepEqual([s.color, s.ring], ["blue", false]);
 });
 
-test("$5 total unlocks colour, $20 the ring", () => {
+test("$4.99 total unlocks colour, $20 the ring", () => {
+  assert.equal(supporterInfo({ isSupporter: true, tipTotal: 4.99, supporterColor: "rose" }).color, "rose");
+  assert.equal(supporterInfo({ isSupporter: true, tipTotal: 4.98, supporterColor: "rose" }).color, "blue");
   assert.equal(supporterInfo({ isSupporter: true, tipTotal: 5, supporterColor: "purple" }).color, "purple");
   assert.equal(supporterInfo({ isSupporter: true, tipTotal: 19.99 }).ring, false);
   assert.equal(supporterInfo({ isSupporter: true, tipTotal: 20.97 }).ring, true);

@@ -47,8 +47,8 @@ struct AdminSupporterCreditSection: View {
                     .frame(maxWidth: 110)
             }
             HStack(spacing: 8) {
-                ForEach([5.0, 20.0], id: \.self) { preset in
-                    Button("$\(Int(preset))") { amountText = String(format: "%.2f", preset) }
+                ForEach([4.99, 20.0], id: \.self) { preset in
+                    Button(String(format: "$%.2f", preset)) { amountText = String(format: "%.2f", preset) }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                 }
@@ -70,7 +70,7 @@ struct AdminSupporterCreditSection: View {
         } header: {
             Text("Supporter credit")
         } footer: {
-            Text("Sets their total tipped. Any amount = supporter name, badge, chat heart and thanks wall. $5+ unlocks name colours, $20+ the photo ring. 0 removes supporter status. Applies immediately.")
+            Text("Sets their total tipped. Any amount = supporter name, badge, chat heart and thanks wall. $4.99+ unlocks name colours, $20+ the photo ring. 0 removes supporter status. Applies immediately.")
         }
     }
 
