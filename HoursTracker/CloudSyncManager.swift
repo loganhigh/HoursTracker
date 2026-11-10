@@ -973,7 +973,6 @@ final class CloudSyncManager: ObservableObject {
         guard let uid = currentUID else { return }
         let profile = store.gamificationProfile
         var payload: [String: Any] = [
-            "adminXPOffset": profile.adminXPOffset,
             "totalXP": profile.totalXP,
             "prestige": profile.prestige,
             "prestigeXPSnapshots": profile.prestigeXPSnapshots,
@@ -1004,13 +1003,16 @@ final class CloudSyncManager: ObservableObject {
             DispatchQueue.main.async {
                 var hadLevelOverride = false
                 var hadPrestigeOverride = false
-                if let data = snapshot?.data(), let anchors = self.gamificationAnchors(from: data) {
+                if snapshot?.metadata.hasPendingWrites != true,
+                   let data = snapshot?.data(), let anchors = self.gamificationAnchors(from: data) {
                     let consumed = self.reconcileGamificationWithCloudBeforePush(store: store, anchors: anchors)
                     hadLevelOverride = consumed.hadLevelOverride
                     hadPrestigeOverride = consumed.hadPrestigeOverride
                 }
 
-                let cloudOffset = snapshot.flatMap { self.firestoreOptionalInt($0.data() ?? [:], key: "adminXPOffset") } ?? 0
+                let cloudOffset = snapshot.flatMap { snap in
+                    snap.metadata.hasPendingWrites ? nil : self.firestoreOptionalInt(snap.data() ?? [:], key: "adminXPOffset")
+                } ?? 0
                 // A cloud admin offset this device hasn't adopted yet: adopt it
                 // and continue the push with the corrected profile. Returning
                 // early here (the old behavior) blocked EVERY anchors push —
@@ -1032,7 +1034,8 @@ final class CloudSyncManager: ObservableObject {
                     "streakFreezes": profile.streakFreezes,
                     "equippedTitle": profile.equippedTitle ?? "",
                     "totalXP": profile.totalXP,
-                    "adminXPOffset": profile.adminXPOffset,
+                    // adminXPOffset is admin-owned: never echo it back. A
+                    // stale local 0 queued here overwrote admin sets.
                     "level": profile.level,
                     // Parity telemetry for the server-XP migration: lets the
                     // server's shadow logs attribute any client/server XP drift
@@ -1134,6 +1137,13 @@ final class CloudSyncManager: ObservableObject {
                             }
                             if let publicTitle = userData?["equippedTitle"] {
                                 combined["equippedTitle"] = publicTitle
+                            }
+                            // The users doc holds the authoritative admin
+                            // offset; the gamification copy can be a stale
+                            // value an old build pushed (or a queued local
+                            // write overlaying the server doc).
+                            if let authoritativeOffset = userData?["adminXPOffset"] {
+                                combined["adminXPOffset"] = authoritativeOffset
                             }
                         }
                         completion(.success(self?.gamificationAnchors(from: combined)))
@@ -1512,7 +1522,14 @@ final class CloudSyncManager: ObservableObject {
                         )
                         return
                     }
-                    guard let data = snapshot?.data(),
+                    // A snapshot with pending writes is this device's own
+                    // queued write laid over the server doc, not cloud truth.
+                    // On devices whose direct write channel stalls (anchors
+                    // then go through the callable) those writes stay queued
+                    // across launches, so every fire re-asserted the stale
+                    // local prestige/offset and undid admin sets.
+                    guard snapshot?.metadata.hasPendingWrites != true,
+                          let data = snapshot?.data(),
                           let anchors = self.gamificationAnchors(from: data) else {
                         return
                     }

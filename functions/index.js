@@ -1865,9 +1865,12 @@ exports.clientSaveGamificationAnchors = onCall(
     }
     const ALLOWED = new Set([
       "totalXP", "prestige", "prestigeXPSnapshots", "prestigeHourSnapshots",
-      "bestStreak", "streakFreezes", "equippedTitle", "adminXPOffset",
+      "bestStreak", "streakFreezes", "equippedTitle",
       "level", "xpBreakdown",
     ]);
+    // adminXPOffset is admin-owned (authoritative copy on users/{uid}); a
+    // device that never adopted it pushed 0 here and clients then adopted
+    // the 0 back from the doc. recomputeUserStats heals the doc's copy.
     const update = {};
     for (const [key, value] of Object.entries(anchors)) {
       if (ALLOWED.has(key)) update[key] = value;
