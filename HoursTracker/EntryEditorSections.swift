@@ -352,7 +352,7 @@ struct EntryShiftTypeSection: View {
 
 struct EntryDetailsSection: View {
     @Binding var place: ShiftPlace
-    var recentPlaces: [ShiftPlace] = []
+    var locations: [ShiftLocationSummary] = []
     @Binding var notes: String
     /// Off days and holidays have no work location, so the location field is asked
     /// for on work shifts only. Notes stay for every kind.
@@ -363,7 +363,7 @@ struct EntryDetailsSection: View {
             EntrySectionLabel("Details")
             EntryEditorCard {
                 if showsLocation {
-                    ShiftLocationRow(place: $place, recentPlaces: recentPlaces)
+                    ShiftLocationRow(place: $place, locations: locations)
                     EntryRowDivider()
                         .padding(.vertical, 10)
                 }

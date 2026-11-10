@@ -361,7 +361,7 @@ final class PinLocator: NSObject, ObservableObject {
 /// place name, or a prompt to drop one.
 struct ShiftLocationRow: View {
     @Binding var place: ShiftPlace
-    let recentPlaces: [ShiftPlace]
+    let locations: [ShiftLocationSummary]
     @State private var showingPicker = false
 
     var body: some View {
@@ -383,7 +383,7 @@ struct ShiftLocationRow: View {
                 }
                 HStack(spacing: AppSpacing.xs) {
                     Image(systemName: "mappin.and.ellipse").foregroundStyle(AppColors.accent)
-                    Text(place.displayText ?? "Drop a pin for where you worked")
+                    Text(place.displayText ?? "Select location")
                         .appText(.body)
                         .foregroundStyle(place.isEmpty ? AppColors.subtext : AppColors.text)
                         .lineLimit(2)
@@ -397,7 +397,7 @@ struct ShiftLocationRow: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showingPicker) {
-            ShiftLocationPickerSheet(place: $place, recentPlaces: recentPlaces)
+            SavedLocationPickerSheet(place: $place, locations: locations)
         }
     }
 }

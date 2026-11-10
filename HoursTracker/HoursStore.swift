@@ -999,6 +999,7 @@ final class HoursStore: ObservableObject {
         AutoOffDayFiller.clearMarkers()
         LevelUpRatchet.resetAll()
         MissingShiftDismissals.shared.removeAll()
+        SavedLocationsStore.removeAll()
         IncomeMilestoneSeenStore.removeAll()
         isLoaded = false
         UserDefaults.standard.removeObject(forKey: entriesKey)

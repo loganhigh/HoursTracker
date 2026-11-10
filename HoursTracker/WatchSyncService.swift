@@ -88,7 +88,7 @@ final class WatchSyncService: NSObject {
                           endMinutes: $0.endMinutes, breakMinutes: $0.breakMinutes,
                           locationName: $0.locationName)
         }
-        let places = store.recentShiftPlaces(limit: 8).map(\.trimmedName).filter { !$0.isEmpty }
+        let places = store.shiftLocationSummaries().prefix(8).map(\.name)
 
         return WatchSnapshot(
             signedIn: signedIn, liveShift: live, chequeHours: cheque, monthHours: month,
@@ -204,9 +204,9 @@ final class WatchSyncService: NSObject {
 
         // Reuse a past pin for the same place name, like the phone's picker.
         let name = draft.locationName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let place = name.isEmpty ? ShiftPlace() : (store.recentShiftPlaces(limit: 12).first {
-            $0.trimmedName.caseInsensitiveCompare(name) == .orderedSame
-        } ?? ShiftPlace(name: name))
+        let place = name.isEmpty ? ShiftPlace() : (store.shiftLocationSummaries().first {
+            $0.name.caseInsensitiveCompare(name) == .orderedSame
+        }?.place ?? ShiftPlace(name: name))
 
         // Honour the phone's "Split at midnight" choice for overnight shifts.
         let splits = UserDefaults.standard.bool(forKey: "split_overnight_at_midnight") && end <= start

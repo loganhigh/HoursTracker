@@ -278,6 +278,7 @@ final class AuthService: NSObject, ObservableObject {
     private func discardDeviceBoundSession() {
         LiveShiftManager.shared.discard()
         MissingShiftDismissals.shared.removeAll()
+        SavedLocationsStore.removeAll()
         IncomeMilestoneSeenStore.removeAll()
     }
 

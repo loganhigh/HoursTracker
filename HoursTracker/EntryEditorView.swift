@@ -194,7 +194,7 @@ struct EntryEditorView: View {
                         }
                         EntryDetailsSection(
                             place: $place,
-                            recentPlaces: store.recentShiftPlaces(),
+                            locations: store.shiftLocationSummaries(),
                             notes: $notes,
                             showsLocation: needsTimes
                         )

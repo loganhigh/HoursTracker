@@ -158,7 +158,7 @@ struct AddShiftWizardView: View {
             }
         }
         .sheet(isPresented: $showLocationPicker) {
-            ShiftLocationPickerSheet(place: $place, recentPlaces: store.recentShiftPlaces())
+            SavedLocationPickerSheet(place: $place, locations: store.shiftLocationSummaries())
         }
         .sheet(isPresented: $showWagePrompt, onDismiss: afterWagePrompt) {
             WagePromptSheet(store: store)
@@ -375,9 +375,9 @@ struct AddShiftWizardView: View {
             showCustomBreak = template.breakMinutes > 0 && ![15, 30, 45, 60].contains(template.breakMinutes)
             if !template.locationName.isEmpty {
                 // Reuse the pin from a past shift with the same name, if any.
-                place = store.recentShiftPlaces(limit: 50).first {
-                    $0.trimmedName.caseInsensitiveCompare(template.locationName) == .orderedSame
-                } ?? ShiftPlace(name: template.locationName)
+                place = store.shiftLocationSummaries().first {
+                    $0.name.caseInsensitiveCompare(template.locationName) == .orderedSame
+                }?.place ?? ShiftPlace(name: template.locationName)
             }
             expandedField = nil
         }
@@ -535,7 +535,7 @@ struct AddShiftWizardView: View {
     }
 
     private var locationValueText: String {
-        place.displayText ?? "Drop a pin"
+        place.displayText ?? "Select location"
     }
 
     private var totalCaption: String {
