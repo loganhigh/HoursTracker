@@ -58,21 +58,24 @@ const db = getFirestore();
 const auth = getAuth();
 const messaging = getMessaging();
 
-/** Collect FCM registration tokens from profile doc (legacy) and deviceTokens subcollection. */
+/**
+ * A user's push targets: legacy FCM registration tokens (profile doc and
+ * older deviceTokens docs) and Firebase Installation IDs (deviceTokens docs
+ * written by 3.6+, `kind: "fid"`). Each is `{ value, fid }`.
+ */
 async function tokensForUser(friendUid, friendData) {
-  const tokens = new Set();
+  const targets = new Map();
+  const add = (value, fid) => {
+    if (typeof value === "string" && value.length > 0 && !targets.has(value)) {
+      targets.set(value, { value, fid });
+    }
+  };
 
   if (friendData) {
-    if (typeof friendData.fcmToken === "string" && friendData.fcmToken.length > 0) {
-      tokens.add(friendData.fcmToken);
-    }
+    add(friendData.fcmToken, false);
     const map = friendData.fcmTokens;
     if (map && typeof map === "object") {
-      for (const value of Object.values(map)) {
-        if (typeof value === "string" && value.length > 0) {
-          tokens.add(value);
-        }
-      }
+      for (const value of Object.values(map)) add(value, false);
     }
   }
 
@@ -83,13 +86,23 @@ async function tokensForUser(friendUid, friendData) {
     .get();
 
   for (const doc of deviceSnap.docs) {
-    const token = doc.data()?.token;
-    if (typeof token === "string" && token.length > 0) {
-      tokens.add(token);
-    }
+    const data = doc.data() || {};
+    add(data.token, data.kind === "fid");
   }
 
-  return [...tokens];
+  return [...targets.values()];
+}
+
+/** The message target for one push target: `fid` for installation IDs. */
+function fcmTarget(target) {
+  return target.fid ? { fid: target.value } : { token: target.value };
+}
+
+/** FCM said this target is gone for good. */
+function isStaleTargetError(err) {
+  const code = err?.errorInfo?.code || err?.code;
+  return code === "messaging/registration-token-not-registered" ||
+    code === "messaging/invalid-registration-token";
 }
 
 function friendShiftAlertsEnabled(data) {
@@ -242,10 +255,10 @@ async function sendPushToUser(targetUid, friendData, { title, body, dataPayload,
   const tokens = await tokensForUser(targetUid, friendData);
   if (tokens.length === 0) return;
 
-  const sends = tokens.map((token) =>
+  const sends = tokens.map((target) =>
     messaging
       .send({
-        token,
+        ...fcmTarget(target),
         notification: { title, body },
         data: dataPayload,
         apns: {
@@ -260,12 +273,8 @@ async function sendPushToUser(targetUid, friendData, { title, body, dataPayload,
         },
       })
       .catch(async (err) => {
-        const code = err?.errorInfo?.code || err?.code;
-        if (
-          code === "messaging/registration-token-not-registered" ||
-          code === "messaging/invalid-registration-token"
-        ) {
-          await removeStaleToken(targetUid, token, friendData);
+        if (isStaleTargetError(err)) {
+          await removeStaleToken(targetUid, target.value, friendData);
         }
         console.warn(`FCM send failed user=${targetUid}:`, err?.message || err);
       })
@@ -331,11 +340,11 @@ exports.notifyFriendsOnShiftLogged = onDocumentCreated(
       const tokens = await tokensForUser(friendUid, friendData);
       if (tokens.length === 0) continue;
 
-      for (const token of tokens) {
+      for (const target of tokens) {
         sendPromises.push(
           messaging
             .send({
-              token,
+              ...fcmTarget(target),
               notification: {
                 title: notificationTitle,
                 body: notificationBody,
@@ -356,12 +365,8 @@ exports.notifyFriendsOnShiftLogged = onDocumentCreated(
               },
             })
             .catch(async (err) => {
-              const code = err?.errorInfo?.code || err?.code;
-              if (
-                code === "messaging/registration-token-not-registered" ||
-                code === "messaging/invalid-registration-token"
-              ) {
-                await removeStaleToken(friendUid, token, friendData);
+              if (isStaleTargetError(err)) {
+                await removeStaleToken(friendUid, target.value, friendData);
               }
               console.warn(
                 `FCM send failed friend=${friendUid} event=${eventId}:`,

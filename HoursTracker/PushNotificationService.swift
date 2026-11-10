@@ -42,10 +42,13 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         #endif
     }
 
-    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-        guard let fcmToken, !fcmToken.isEmpty else { return }
+    /// FCM registered this install (FirebaseMessagingInstallationIdEnabled
+    /// in Info.plist): the Firebase Installation ID is what the server pushes
+    /// to now. Called once per launch and whenever the ID changes.
+    func messaging(_ messaging: Messaging, didReceiveRegistration installationId: String?) {
+        guard let installationId, !installationId.isEmpty else { return }
         Task { @MainActor in
-            await PushNotificationService.shared.handleFCMToken(fcmToken)
+            await PushNotificationService.shared.handleFCMToken(installationId)
         }
     }
 
@@ -180,12 +183,14 @@ final class PushNotificationService {
             UIApplication.shared.registerForRemoteNotifications()
         }
 
-        // The server pushes to FCM tokens. Firebase now nudges toward
-        // installation-ID registration (register(completion:)), a server-side
-        // migration; until then read the same token property via KVC so the
-        // deprecation warning doesn't bury real ones.
-        if let token = Messaging.messaging().value(forKey: "FCMToken") as? String {
-            await handleFCMToken(token)
+        // Registration delivers the installation ID to
+        // messaging(_:didReceiveRegistration:), which uploads it.
+        do {
+            try await Messaging.messaging().register()
+        } catch {
+            #if DEBUG
+            print("FCM register failed: \(error.localizedDescription)")
+            #endif
         }
     }
 
@@ -231,8 +236,16 @@ final class PushNotificationService {
                 .collection("deviceTokens").document(deviceId)
                 .setData([
                     "token": token,
+                    // An installation ID, not a legacy registration token:
+                    // the server sends it as `fid`.
+                    "kind": "fid",
                     "updatedAt": FieldValue.serverTimestamp()
                 ], merge: true)
+            // Drop this device's legacy registration token (very old builds
+            // kept one on the profile doc) so it isn't pushed twice.
+            try? await db.collection("users").document(uid).setData([
+                "fcmTokens": [deviceId: FieldValue.delete()]
+            ], merge: true)
             // Alert preferences are written ONLY when the user flips a toggle
             // (syncAlertPreferenceToCloud). This used to push this device's
             // local values on every foreground, so merely opening the app on
@@ -245,7 +258,7 @@ final class PushNotificationService {
                 )
             }
             #if DEBUG
-            print("FCM token synced for device \(deviceId.prefix(8))…")
+            print("FCM installation ID synced for device \(deviceId.prefix(8))…")
             #endif
         } catch {
             #if DEBUG
