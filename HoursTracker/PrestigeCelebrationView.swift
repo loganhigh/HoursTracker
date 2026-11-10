@@ -87,15 +87,15 @@ struct PrestigeCelebrationView: View {
                     VStack(spacing: 8) {
                         Text(tier.name)
                             .font(.system(.title, design: .rounded, weight: .black))
-                            .foregroundStyle(AppColors.textOnAccent)
+                            .foregroundStyle(Color.white)
 
                         Text(rankTransitionLabel)
                             .font(.system(.footnote, design: .rounded, weight: .semibold))
-                            .foregroundStyle(AppColors.textOnAccent.opacity(0.55))
+                            .foregroundStyle(Color.white.opacity(0.55))
 
                         Text(Self.tagline(for: prestige))
                             .font(.system(.subheadline, design: .rounded, weight: .medium))
-                            .foregroundStyle(AppColors.textOnAccent.opacity(0.72))
+                            .foregroundStyle(Color.white.opacity(0.72))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 28)
                             .padding(.top, 4)
@@ -230,7 +230,7 @@ struct PrestigeCelebrationView: View {
 
                 Text("P\(prestige)")
                     .font(.system(.largeTitle, design: .rounded, weight: .black))
-                    .foregroundStyle(AppColors.textOnAccent)
+                    .foregroundStyle(Color.white)
             }
             .shadow(color: tier.primary.opacity(0.5), radius: 10)
         }
@@ -269,7 +269,7 @@ struct PrestigeCelebrationView: View {
                 .foregroundStyle(tier.highlight)
             Text(label)
                 .font(.system(.caption2, design: .rounded, weight: .semibold))
-                .foregroundStyle(AppColors.textOnAccent.opacity(0.75))
+                .foregroundStyle(Color.white.opacity(0.75))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .minimumScaleFactor(0.85)
