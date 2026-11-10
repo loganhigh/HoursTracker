@@ -45,6 +45,8 @@ struct AddShiftWizardView: View {
 
     /// Presents the map pin picker as a sheet from screen 1's Location row.
     @State private var showLocationPicker = false
+    /// The three most recent places worked, as one-tap chips under Location.
+    @State private var quickLocations: [ShiftLocationSummary] = []
 
     @State private var shiftKind: EntryEditorView.ShiftKind = .work
     @State private var offDayReason: String = EntryEditorView.offDayReasons[0]
@@ -159,6 +161,9 @@ struct AddShiftWizardView: View {
         }
         .sheet(isPresented: $showLocationPicker) {
             SavedLocationPickerSheet(place: $place, locations: store.shiftLocationSummaries())
+        }
+        .task {
+            quickLocations = Array(store.shiftLocationSummaries().filter { $0.lastWorked != nil }.prefix(3))
         }
         .sheet(isPresented: $showWagePrompt, onDismiss: afterWagePrompt) {
             WagePromptSheet(store: store)
@@ -278,6 +283,9 @@ struct AddShiftWizardView: View {
                 ) {
                     Haptics.lightTap()
                     showLocationPicker = true
+                }
+                if !quickLocations.isEmpty {
+                    quickLocationChips
                 }
             }
 
@@ -532,6 +540,39 @@ struct AddShiftWizardView: View {
     private var endValueText: String {
         let text = end.formatted(date: .omitted, time: .shortened)
         return isOvernight ? "\(text) (+1 day)" : text
+    }
+
+    /// Recent places as chips: tap to use, tap the chosen one again to clear.
+    private var quickLocationChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AppSpacing.xs) {
+                ForEach(quickLocations) { location in
+                    let selected = place.trimmedName.caseInsensitiveCompare(location.name) == .orderedSame
+                    Button {
+                        Haptics.lightTap()
+                        withAnimation(AppMotion.Spring.snappy) {
+                            place = selected ? ShiftPlace() : location.place
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: selected ? "checkmark" : "clock.arrow.circlepath")
+                                .font(.caption2.weight(.bold))
+                            Text(location.name)
+                                .font(.footnote.weight(.semibold))
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(selected ? AppColors.textOnAccent : AppColors.accent)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(selected ? AppColors.accent : AppColors.accent.opacity(0.12)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(selected ? "\(location.name), selected" : "Use \(location.name)")
+                }
+            }
+            .padding(.top, AppSpacing.xs)
+            .padding(.bottom, 2)
+        }
     }
 
     private var locationValueText: String {
