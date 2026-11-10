@@ -376,6 +376,7 @@ final class HoursStore: ObservableObject {
     func cloudSessionEnded() {
         lastSeenCloudSettings = nil
         lastSeenCloudGamificationAnchors = nil
+        adoptedCloudProgression = nil
     }
 
     func applyRemoteSettings(_ remoteSettings: PaySettings) {
@@ -402,6 +403,14 @@ final class HoursStore: ObservableObject {
     /// almost at 24"). After the disk profile loads, these anchors are
     /// re-applied on top so cloud truth always wins for the fields it owns.
     private(set) var lastSeenCloudGamificationAnchors: RemoteGamificationAnchors?
+
+    /// Anchors adopted authoritatively this session (admin override or offset
+    /// change via `applyCloudGamificationProgression`). The override flag is
+    /// cleared in the cloud the moment it's consumed, so if the disk profile
+    /// loads afterwards (cold launch) and still says the OLD higher prestige,
+    /// the normal re-apply refuses to lower it and the device pushed the old
+    /// prestige straight back. Re-adopt these after the disk load instead.
+    private var adoptedCloudProgression: RemoteGamificationAnchors?
 
     func applyRemoteGamificationAnchors(_ anchors: RemoteGamificationAnchors?) {
         guard let anchors else { return }
@@ -730,6 +739,7 @@ final class HoursStore: ObservableObject {
     /// truth; local XP earned since simply stacks on top of it.
     func applyCloudGamificationProgression(_ anchors: RemoteGamificationAnchors) {
         lastSeenCloudGamificationAnchors = anchors
+        adoptedCloudProgression = anchors
         var dirty = false
         if anchors.prestige != gamificationProfile.prestige {
             gamificationProfile.prestige = anchors.prestige
@@ -1066,6 +1076,7 @@ final class HoursStore: ObservableObject {
         gamificationProfile = .defaultProfile
         gamificationEventMessage = nil
         lastSeenCloudGamificationAnchors = nil
+        adoptedCloudProgression = nil
         lastSeenCloudSettings = nil
         // Also account data that used to survive deletion and resurface for
         // the next account signed in on this phone (and get uploaded to it).
@@ -2349,6 +2360,9 @@ final class HoursStore: ObservableObject {
                     if let anchors = self.lastSeenCloudGamificationAnchors {
                         self.applyRemoteGamificationAnchors(anchors)
                     }
+                    if let adopted = self.adoptedCloudProgression {
+                        self.applyCloudGamificationProgression(adopted)
+                    }
                     self.recalculateGamification(eventHint: nil)
                     self.saveLocallyOnly()
                     // Firestore listener applied entries before loadAsync finished,
@@ -2372,6 +2386,9 @@ final class HoursStore: ObservableObject {
                     self.gamificationProfile = loadedGamification
                     if let anchors = self.lastSeenCloudGamificationAnchors {
                         self.applyRemoteGamificationAnchors(anchors)
+                    }
+                    if let adopted = self.adoptedCloudProgression {
+                        self.applyCloudGamificationProgression(adopted)
                     }
                     self.recalculateGamification(eventHint: nil)
                     if rollover.didArchive {
