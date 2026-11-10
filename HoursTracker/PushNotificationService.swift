@@ -127,8 +127,9 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
             }
         }
         if let kind = userInfo["kind"] as? String, kind == "prestigeReady" {
-            // "Level 25 complete" — the Prestige button is on the You tab.
+            // "Level 25 complete" — open the You tab with the Prestige sheet up.
             Task { @MainActor in
+                NotificationRouter.shared.openPrestigePrompt = true
                 NotificationRouter.shared.openYouTab = true
             }
         }
@@ -159,6 +160,9 @@ final class NotificationRouter: ObservableObject {
     /// Raised by a "you can Prestige" push; AppTabView selects the You tab
     /// (where the Prestige button lives) and lowers it.
     @Published var openYouTab = false
+    /// Raised with `openYouTab` by the same push; AccountView shows the
+    /// one-tap Prestige sheet (if still eligible) and lowers it.
+    @Published var openPrestigePrompt = false
     /// Raised by a win-back push; AppTabView opens Add Shift and lowers it.
     @Published var openAddShift = false
     /// A tapped "You're at work" push: AppTabView shows the start sheet.

@@ -30,3 +30,28 @@ test("later prestige runs deduct earlier runs via snapshots", () => {
 test("never offered at the prestige cap", () => {
   assert.strictEqual(canPrestigeFromXP(RUN * (MAX_PRESTIGE + 2), MAX_PRESTIGE, []), false);
 });
+
+const {
+  REMINDER_AFTER_MS,
+  prestigeReadyMessage,
+  prestigeReminderDecision,
+} = require("../src/stats/prestigeReady");
+const { PRESTIGE_TIER_NAMES } = require("../src/stats/recompute");
+
+test("push copy names the next rank and says tap", () => {
+  const first = prestigeReadyMessage(4, 1, PRESTIGE_TIER_NAMES);
+  assert.match(first.body, /Tap to Prestige to P5 Diamond/);
+  const reminder = prestigeReadyMessage(0, 2, PRESTIGE_TIER_NAMES);
+  assert.match(reminder.body, /P1 Bronze/);
+  assert.match(reminder.title, /waiting/);
+});
+
+test("one reminder after the wait, only while still unprestiged", () => {
+  const now = Date.UTC(2026, 10, 10);
+  const ev = { prestige: 2, createdAtMs: now - REMINDER_AFTER_MS };
+  assert.strictEqual(prestigeReminderDecision(ev, 2, now), "remind");
+  assert.strictEqual(prestigeReminderDecision({ ...ev, createdAtMs: now - 1000 }, 2, now), "wait");
+  assert.strictEqual(prestigeReminderDecision({ ...ev, remindedAtMs: now }, 2, now), "done");
+  assert.strictEqual(prestigeReminderDecision(ev, 3, now), "done");
+  assert.strictEqual(prestigeReminderDecision(ev, 1, now), "done");
+});

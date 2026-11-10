@@ -38,6 +38,10 @@ struct AccountView: View {
     @State private var showingPhotoPicker = false
     @State private var showingPrestigeInfo = false
     @State private var showingPrestigeCelebration = false
+    /// The one-tap Prestige sheet raised by a "Level 25 complete" push.
+    @State private var showingPrestigeReady = false
+    @State private var celebrateAfterPrestigeSheet = false
+    @ObservedObject private var notificationRouter = NotificationRouter.shared
     /// The most recent completed year worth watching, resolved when the You
     /// tab appears. nil when no year clears the data bar.
     @State private var wrappedStats: WrappedYearStats?
@@ -177,6 +181,27 @@ struct AccountView: View {
                 )
             }
         }
+        .sheet(isPresented: $showingPrestigeReady, onDismiss: {
+            // The celebration is a full-screen cover; it can only go up once
+            // the sheet is fully gone.
+            if celebrateAfterPrestigeSheet {
+                celebrateAfterPrestigeSheet = false
+                showingPrestigeCelebration = true
+            }
+        }) {
+            PrestigeReadySheet(currentPrestige: store.displayedGamificationProfile().prestige) {
+                if store.performPrestige() {
+                    celebrateAfterPrestigeSheet = true
+                    showingPrestigeReady = false
+                } else {
+                    Haptics.error()
+                    showingPrestigeReady = false
+                }
+            }
+        }
+        .onChange(of: notificationRouter.openPrestigePrompt) { _, isOpen in
+            if isOpen { showPrestigePromptFromPush() }
+        }
         .fullScreenCover(isPresented: $showingPrestigeCelebration) {
             PrestigeCelebrationView(
                 prestige: store.gamificationProfile.prestige,
@@ -196,6 +221,8 @@ struct AccountView: View {
         .onAppear {
             chat.startInbox()
             resolveWrappedYear()
+            // Cold launch from the push: the flag is up before this view exists.
+            if notificationRouter.openPrestigePrompt { showPrestigePromptFromPush() }
             // Same recovery hook as CareerView: guarantees the server-stats
             // listeners are attached whenever a level-displaying screen appears.
             StatsListenerService.shared.ensureListening()
@@ -216,6 +243,23 @@ struct AccountView: View {
             }
         }
         #endif
+    }
+
+    /// Shows the Prestige sheet for a tapped "Level 25 complete" push. Waits a
+    /// moment for the tab switch and server stats; if the run isn't
+    /// Prestige-ready (already claimed, or the push is stale) the You tab
+    /// alone is the answer.
+    private func showPrestigePromptFromPush() {
+        notificationRouter.openPrestigePrompt = false
+        Task { @MainActor in
+            for _ in 0..<10 {
+                try? await Task.sleep(for: .milliseconds(300))
+                if store.gamificationProfile.canPrestige || store.displayedGamificationProfile().canPrestige {
+                    showingPrestigeReady = true
+                    return
+                }
+            }
+        }
     }
 
     // MARK: - Settings bar

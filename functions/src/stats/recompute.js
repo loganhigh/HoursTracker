@@ -1813,6 +1813,7 @@ module.exports = {
   deriveProgressionFromEntryXP,
   MAX_PRESTIGE,
   LEGACY_MAX_PRESTIGE,
+  PRESTIGE_TIER_NAMES,
   levelStateFromXP,
   canPrestigeFromXP,
   paidHours,

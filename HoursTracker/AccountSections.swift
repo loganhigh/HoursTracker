@@ -245,6 +245,74 @@ struct PrestigeActionSection: View {
     }
 }
 
+// MARK: - Prestige sheet (from the "Level 25 complete" push)
+
+/// One tap from the push to the Prestige: what changes, what carries over,
+/// and the button itself. The caller runs the Prestige and the celebration.
+struct PrestigeReadySheet: View {
+    let currentPrestige: Int
+    let onPrestige: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private var nextTier: PrestigeTheme.Tier { PrestigeTheme.tier(for: currentPrestige + 1) }
+
+    var body: some View {
+        VStack(spacing: AppSpacing.md) {
+            Image(systemName: nextTier.icon)
+                .font(.system(size: 44, weight: .bold))
+                .foregroundStyle(nextTier.primary)
+                .padding(.top, AppSpacing.lg)
+            VStack(spacing: 6) {
+                Text("Level 25 complete")
+                    .appText(.title)
+                    .foregroundStyle(AppColors.text)
+                Text("Prestige to P\(currentPrestige + 1) · \(nextTier.name)")
+                    .appText(.headline)
+                    .foregroundStyle(nextTier.primary)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                point("arrow.counterclockwise", "Your level starts again at 1 with a new rank")
+                point("clock.fill", "Hours, shifts and badges stay exactly as they are")
+                point("plus.circle.fill", "XP earned past Level 25 carries into the new run")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AppSpacing.md)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(AppColors.card))
+
+            Spacer(minLength: 0)
+
+            Button {
+                Haptics.success()
+                onPrestige()
+            } label: {
+                Label("Prestige now", systemImage: "sparkles")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            Button("Not now") { dismiss() }
+                .appText(.subheadline)
+                .foregroundStyle(AppColors.subtext)
+                .padding(.bottom, AppSpacing.sm)
+        }
+        .padding(.horizontal, AppSpacing.lg)
+        .background(AppColors.bg.ignoresSafeArea())
+        .presentationDetents([.medium, .large])
+    }
+
+    private func point(_ icon: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: AppSpacing.sm) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(nextTier.primary)
+                .frame(width: 20)
+            Text(text)
+                .appText(.subheadline)
+                .foregroundStyle(AppColors.text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 // MARK: - Prestige Call To Action
 
 struct PrestigeCallToAction: View {

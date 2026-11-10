@@ -25,6 +25,7 @@ const {
   deriveProgressionFromEntryXP,
   MAX_PRESTIGE,
   LEGACY_MAX_PRESTIGE,
+  PRESTIGE_TIER_NAMES,
   levelStateFromXP,
   stripWrappingQuotes,
   sanitizeDisplayName,
@@ -35,6 +36,7 @@ const usernames = require("./src/social/usernames");
 const chat = require("./src/social/chat");
 const adminAnalytics = require("./src/admin/analytics");
 const winback = require("./src/admin/winback");
+const prestigeReady = require("./src/stats/prestigeReady");
 const { supporterInfo } = require("./src/supporter");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
@@ -753,14 +755,61 @@ exports.notifyOnPrestigeReady = onDocumentCreated(
     const currentPrestige = Number(gamSnap.data()?.prestige) || 0;
     if (currentPrestige !== prestige) return;
 
-    const next = prestige + 1;
+    const msg = prestigeReady.prestigeReadyMessage(prestige, 1, PRESTIGE_TIER_NAMES);
     await sendPushToUser(uid, userSnap.data(), {
-      title: "Level 25 complete 👑",
-      body: `You can Prestige to P${next} now. Open the You tab to claim it.`,
-      dataPayload: { kind: "prestigeReady", prestige: String(next) },
+      title: msg.title,
+      body: msg.body,
+      dataPayload: { kind: "prestigeReady", prestige: String(prestige + 1) },
       threadId: "prestige_ready",
     });
     await gamRef.set({ prestigeReadyNotifiedFor: prestige }, { merge: true });
+  }
+);
+
+/**
+ * Daily 00:20 UTC (late afternoon / evening across North America): one
+ * reminder per finished run for anyone who still hasn't pressed Prestige
+ * five days after the first push. Rules in src/stats/prestigeReady.js;
+ * `remindedAt` on the `_prestigeReady` event marks it sent.
+ */
+exports.prestigeReminderDaily = onSchedule(
+  { schedule: "20 0 * * *", timeZone: "UTC", region: "us-central1", timeoutSeconds: 300 },
+  async () => {
+    const now = Date.now();
+    const events = await db.collection("_prestigeReady").get();
+    let sent = 0;
+    for (const doc of events.docs) {
+      const data = doc.data() || {};
+      const uid = data.uid;
+      if (!uid) continue;
+      const event = {
+        prestige: Number(data.prestige) || 0,
+        createdAtMs: data.createdAt?.toMillis?.() || 0,
+        remindedAtMs: data.remindedAt?.toMillis?.() || 0,
+      };
+      if (event.remindedAtMs) continue;
+      try {
+        const [userSnap, gamSnap] = await Promise.all([
+          db.collection("users").doc(uid).get(),
+          db.collection("users").doc(uid).collection("gamification").doc("current").get(),
+        ]);
+        if (!userSnap.exists) continue;
+        const currentPrestige = Number(gamSnap.data()?.prestige) || 0;
+        if (prestigeReady.prestigeReminderDecision(event, currentPrestige, now) !== "remind") continue;
+        const msg = prestigeReady.prestigeReadyMessage(event.prestige, 2, PRESTIGE_TIER_NAMES);
+        await sendPushToUser(uid, userSnap.data(), {
+          title: msg.title,
+          body: msg.body,
+          dataPayload: { kind: "prestigeReady", prestige: String(event.prestige + 1) },
+          threadId: "prestige_ready",
+        });
+        await doc.ref.set({ remindedAt: FieldValue.serverTimestamp() }, { merge: true });
+        sent++;
+      } catch (err) {
+        console.warn(`prestige reminder failed uid=${uid}:`, err?.message || err);
+      }
+    }
+    console.log(`prestigeReminderDaily: sent=${sent} events=${events.size}`);
   }
 );
 
