@@ -53,6 +53,10 @@ final class ArrivalMonitor: NSObject, ObservableObject, CLLocationManagerDelegat
     private static let sitesKey = "arrival_sites_v1"
     private static let enabledKey = "arrival_alerts_enabled"
     private static let promptedKey = "arrival_prompted_v1"
+    /// Set while the geofence monitor is being created, cleared once it
+    /// exists. Still set at the next launch = that creation took the app
+    /// down, so the feature switches itself off rather than crash again.
+    private static let startingKey = "arrival_monitor_starting"
     /// iOS allows 20 monitored regions per app.
     static let maxSites = 20
 
@@ -91,6 +95,13 @@ final class ArrivalMonitor: NSObject, ObservableObject, CLLocationManagerDelegat
 
     private let manager = CLLocationManager()
     private var monitor: CLMonitor?
+    /// The one in-flight `CLMonitor` creation. iOS kills the app if two
+    /// monitors with the same name exist, and at launch `start()` and the
+    /// authorization callback both sync at once — they must share this.
+    private var monitorCreation: Task<CLMonitor, Never>?
+    /// Syncs run one at a time; a request during a sync re-runs it after.
+    private var isSyncing = false
+    private var needsResync = false
     private var eventsTask: Task<Void, Never>?
     /// iOS 18+: keeps background region events flowing (`CLServiceSession`).
     private var serviceSession: AnyObject?
@@ -122,6 +133,12 @@ final class ArrivalMonitor: NSObject, ObservableObject, CLLocationManagerDelegat
     /// geofence fires; the monitor has to be reopened (same name) for the
     /// event to be delivered.
     func start() {
+        if UserDefaults.standard.bool(forKey: Self.startingKey) {
+            UserDefaults.standard.removeObject(forKey: Self.startingKey)
+            isEnabled = false
+            UserDefaults.standard.set(false, forKey: Self.enabledKey)
+            return
+        }
         guard isEnabled, sites.contains(where: \.enabled) else { return }
         Task { await syncMonitor() }
     }
@@ -195,6 +212,31 @@ final class ArrivalMonitor: NSObject, ObservableObject, CLLocationManagerDelegat
 
     /// Brings iOS's watched regions in line with the enabled sites.
     private func syncMonitor() async {
+        // One sync at a time. Main-actor isolated, so this check-and-set has
+        // no suspension point between them.
+        if isSyncing { needsResync = true; return }
+        isSyncing = true
+        defer { isSyncing = false }
+        repeat {
+            needsResync = false
+            await performSync()
+        } while needsResync
+    }
+
+    /// The single monitor for this app, created at most once.
+    private func sharedMonitor() async -> CLMonitor {
+        if let monitor { return monitor }
+        if let monitorCreation { return await monitorCreation.value }
+        UserDefaults.standard.set(true, forKey: Self.startingKey)
+        let creation = Task { await CLMonitor(Self.monitorName) }
+        monitorCreation = creation
+        let created = await creation.value
+        UserDefaults.standard.removeObject(forKey: Self.startingKey)
+        monitor = created
+        return created
+    }
+
+    private func performSync() async {
         let wanted = isEnabled ? sites.filter(\.enabled) : []
         if wanted.isEmpty {
             if let monitor {
@@ -205,13 +247,7 @@ final class ArrivalMonitor: NSObject, ObservableObject, CLLocationManagerDelegat
             serviceSession = nil
             return
         }
-        let monitor: CLMonitor
-        if let existing = self.monitor {
-            monitor = existing
-        } else {
-            monitor = await CLMonitor(Self.monitorName)
-            self.monitor = monitor
-        }
+        let monitor = await sharedMonitor()
         if #available(iOS 18.0, *), serviceSession == nil {
             serviceSession = CLServiceSession(authorization: .always)
         }
