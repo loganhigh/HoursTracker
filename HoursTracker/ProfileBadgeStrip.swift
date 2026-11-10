@@ -9,6 +9,9 @@ import SwiftUI
 struct ProfileBadgeStrip: View {
     let badges: [SharedBadgeSummary]
     var tint: Color = AppColors.accent
+    /// Your own profile opens the full collection (locked badges and
+    /// progress included) instead of the earned-only list.
+    var onTap: (() -> Void)? = nil
 
     @State private var showingList = false
 
@@ -19,10 +22,10 @@ struct ProfileBadgeStrip: View {
     }
 
     var body: some View {
-        if !badges.isEmpty {
+        if !badges.isEmpty || onTap != nil {
             Button {
                 Haptics.lightTap()
-                showingList = true
+                if let onTap { onTap() } else { showingList = true }
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "rosette")

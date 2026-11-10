@@ -46,6 +46,7 @@ struct AccountView: View {
     @ObservedObject private var photoManager = ProfilePhotoManager.shared
     @ObservedObject private var chat = ChatService.shared
     @State private var showingInbox = false
+    @State private var showingBadges = false
     #if DEBUG
     /// Temporary Stage-2 entry point for testing Wrapped. Not a real
     /// product surface — remove once Wrapped has a real launch point.
@@ -191,6 +192,7 @@ struct AccountView: View {
             }
         }
         .navigationDestination(isPresented: $showingInbox) { DirectInboxView() }
+        .navigationDestination(isPresented: $showingBadges) { AchievementsView(store: store) }
         .onAppear {
             chat.startInbox()
             resolveWrappedYear()
@@ -423,7 +425,9 @@ struct AccountView: View {
                     .multilineTextAlignment(.center)
             }
 
-            ProfileBadgeStrip(badges: AchievementsView.earnedBadgesForSharing(from: store))
+            ProfileBadgeStrip(badges: AchievementsView.earnedBadgesForSharing(from: store)) {
+                showingBadges = true
+            }
                 .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
@@ -466,20 +470,7 @@ struct AccountView: View {
     // MARK: - Navigation card
 
     private var navigationCard: some View {
-        let badgeCounts = AchievementsView.badgeCollectionCounts(for: store)
-
-        return AccountRowsCard {
-            NavigationLink(destination: AchievementsView(store: store)) {
-                AccountNavRow(
-                    icon: "rosette",
-                    title: "Badges",
-                    detail: "\(badgeCounts.earned) of \(badgeCounts.total)"
-                )
-            }
-            .buttonStyle(PremiumPressStyle())
-
-            AccountRowHairline()
-
+        AccountRowsCard {
             Button {
                 openURL(AppLegalURLs.support)
             } label: {
