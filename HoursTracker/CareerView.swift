@@ -76,6 +76,9 @@ struct CareerSections: View {
         VStack(spacing: AppSpacing.xl) {
                 companyCard
 
+                // Extra jobs, each in its own card under the main one.
+                OtherJobCareerCards(store: store)
+
                 SectionCard(
                     title: "Personal bests",
                     subtitle: "The records to beat",
