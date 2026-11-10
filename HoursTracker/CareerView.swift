@@ -234,13 +234,16 @@ struct CareerSections: View {
                     icon: "clock.fill",
                     title: "Hours logged",
                     value: FriendProfileFormat.hoursDisplay(companyHoursLogged),
-                    detail: companyStartDate == nil ? "All shifts in app" : "Since start date",
+                    detail: store.hasMultipleJobs
+                        ? (companyStartDate == nil ? "All jobs" : "All jobs, since start date")
+                        : (companyStartDate == nil ? "All shifts in app" : "Since start date"),
                     tint: AppColors.streak
                 )
                 FriendRecordRow(
                     icon: "calendar",
                     title: "Days worked",
                     value: "\(companyDaysWorked)",
+                    detail: store.hasMultipleJobs ? "All jobs" : nil,
                     tint: AppColors.accent
                 )
 
