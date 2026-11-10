@@ -138,7 +138,7 @@ struct PrestigeCelebrationView: View {
                         Text("Claim Your Rank")
                             .font(.system(.body, design: .rounded, weight: .black))
                     }
-                    .foregroundStyle(AppColors.textOnAccent)
+                    .foregroundStyle(tier.onPrimary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
                     .background(
