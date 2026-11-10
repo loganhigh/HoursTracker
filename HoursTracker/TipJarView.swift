@@ -336,7 +336,7 @@ struct TipJarHomeCard: View {
                     .font(.system(.callout, design: .rounded, weight: .bold))
                     .foregroundStyle(AppColors.text)
                     .padding(.top, AppSpacing.sm)
-                Text("If you find it useful, a small tip helps cover the cost of keeping it running — and turns your name supporter blue.")
+                Text("If you find it useful, a small tip helps cover the cost of keeping it running.")
                     .appText(.subheadline)
                     .foregroundStyle(AppColors.subtext)
                     .fixedSize(horizontal: false, vertical: true)
