@@ -52,6 +52,10 @@ struct ServerLifetimeStats: Equatable {
     let totalHours: Double
     let totalXP: Int
     let level: Int
+    /// The XP bar for `level`, from the user's real prestige snapshots.
+    /// Nil until the server publishes it.
+    let xpIntoLevel: Int?
+    let xpForNextLevel: Int?
     let prestige: Int
     let bestStreak: Int
     let badgeCount: Int
@@ -63,6 +67,8 @@ struct ServerLifetimeStats: Equatable {
             totalHours: firestoreDouble(data, key: "totalHours"),
             totalXP: firestoreInt(data, key: "totalXP"),
             level: firestoreInt(data, key: "level", default: 1),
+            xpIntoLevel: data["xpIntoLevel"] == nil ? nil : firestoreInt(data, key: "xpIntoLevel"),
+            xpForNextLevel: data["xpForNextLevel"] == nil ? nil : firestoreInt(data, key: "xpForNextLevel"),
             prestige: firestoreInt(data, key: "prestige"),
             bestStreak: firestoreInt(data, key: "bestStreak"),
             badgeCount: firestoreInt(data, key: "badgeCount"),

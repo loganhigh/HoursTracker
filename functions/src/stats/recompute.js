@@ -1076,6 +1076,14 @@ async function recomputeUserStats(db, uid, options = {}) {
     );
   }
   const level = Math.min(CLIENT_MAX_LEVEL, xpLevel);
+  // The XP bar, from this user's real snapshots — the client can't rebuild
+  // it (it only has standard snapshots), so it showed 0/N whenever its own
+  // level differed from this one.
+  const xpForNextLevel = xpRequiredForLevel(level);
+  const xpIntoLevel = Math.max(
+    0,
+    Math.min(totalXP - totalXPAtLevelStart(level, prestige, snapshots), xpForNextLevel)
+  );
   const badgeCount =
     Number(userData.badgeCount) ||
     (Array.isArray(gamification.unlockedBadges) ? gamification.unlockedBadges.length : 0);
@@ -1118,6 +1126,8 @@ async function recomputeUserStats(db, uid, options = {}) {
     totalHours,
     totalXP,
     level,
+    xpIntoLevel,
+    xpForNextLevel,
     prestige,
     bestStreak: best,
     badgeCount,

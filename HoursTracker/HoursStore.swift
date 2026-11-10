@@ -667,6 +667,17 @@ final class HoursStore: ObservableObject {
         // bar always matches the label; park it at the level start if server
         // XP isn't available yet.
         if profile.level != gamificationProfile.level {
+            // Best: the server's own bar for the level it published.
+            if let server = StatsListenerService.shared.lifetimeStats,
+               server.level == profile.level, server.prestige == gamificationProfile.prestige,
+               let into = server.xpIntoLevel, let next = server.xpForNextLevel, next > 0 {
+                profile.xpIntoCurrentLevel = min(into, next)
+                profile.xpForNextLevel = next
+                profile.canPrestige = profile.level >= GamificationLevelCalculator.maxLevelForPrestige(server.prestige)
+                    && into >= next
+                    && server.prestige < GamificationLevelCalculator.maxPrestige
+                return profile
+            }
             if let server = StatsListenerService.shared.lifetimeStats {
                 let state = GamificationLevelCalculator.levelState(
                     for: server.totalXP,

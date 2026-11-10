@@ -73,3 +73,13 @@ test("rank titles cover the Legend tiers", () => {
   assert.equal(rankTitle(1, 11), "Elite Rookie");
   assert.equal(rankTitle(25, 20), "G.O.A.T. Prestige Ready");
 });
+
+test("XP bar published with the level: P5 with 4 real snapshots (logan, 2026-11-10)", () => {
+  const { totalXPAtLevelStart } = require("../src/stats/recompute.js");
+  const xp = 438338;
+  const snaps = [86322, 172644, 258966, 345288];
+  const level = levelStateFromXP(xp, 5, snaps);
+  assert.equal(level, 6);
+  // Matches the device's level-up screen: 204 / 1,928 XP.
+  assert.equal(xp - totalXPAtLevelStart(level, 5, snaps), 204);
+});
