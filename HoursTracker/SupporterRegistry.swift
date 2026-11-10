@@ -74,6 +74,7 @@ final class SupporterRegistry: ObservableObject {
 
     private init() {
         selfIsSupporter = UserDefaults.standard.bool(forKey: Self.selfKey)
+        TipLedger.start()
     }
 
     func contains(_ name: String) -> Bool {
@@ -144,25 +145,17 @@ final class SupporterRegistry: ObservableObject {
         }
     }
 
-    /// A tip just went through on this device: flip the supporter flag and
-    /// log the tip so the admin can see who gave what. Apple never says who
-    /// paid, so this record (keyed by the App Store transaction id, so a
-    /// retry can't double-count) is the only per-person ledger there is.
-    func recordTip(transaction: StoreKit.Transaction, product: Product) {
+    /// A tip went through on this device (now, or finishing later through
+    /// Transaction.updates): flip the supporter flag and add it to the
+    /// ledger, which keeps the running total (see TipLedger).
+    func recordTip(transaction: StoreKit.Transaction, productName: String? = nil) {
+        guard TipLedger.isTip(transaction.productID), transaction.revocationDate == nil else { return }
         setSelf(true)
-        guard let uid = Auth.auth().currentUser?.uid else { return }
-        let db = Firestore.firestore()
-        db.collection("users").document(uid).setData(["isSupporter": true], merge: true)
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        db.collection("tips").document(String(transaction.id)).setData([
-            "uid": uid,
-            "productID": product.id,
-            "productName": product.displayName,
-            "amount": NSDecimalNumber(decimal: product.price).doubleValue,
-            "currency": product.priceFormatStyle.currencyCode,
-            "appVersion": version,
-            "createdAt": FieldValue.serverTimestamp()
-        ])
+        if let uid = Auth.auth().currentUser?.uid {
+            Firestore.firestore().collection("users").document(uid)
+                .setData(["isSupporter": true], merge: true)
+        }
+        TipLedger.record(transaction, productName: productName)
     }
 
     /// Our own published profile says we are a supporter (a new device, or a

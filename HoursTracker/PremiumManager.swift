@@ -229,6 +229,11 @@ final class PremiumManager: ObservableObject {
         updatesTask = Task { [weak self] in
             for await update in Transaction.updates {
                 guard let self, let transaction = try? self.checkVerified(update) else { continue }
+                // Tips that finish outside the tip sheet (Ask to Buy, app
+                // closed mid-purchase) still count toward the total.
+                if TipLedger.isTip(transaction.productID) {
+                    SupporterRegistry.shared.recordTip(transaction: transaction)
+                }
                 await transaction.finish()
                 await self.refresh()
             }

@@ -49,8 +49,9 @@ final class TipJarManager: ObservableObject {
                     errorMessage = "That purchase couldn't be verified."
                     return
                 }
+                // Ledger first: once finished, StoreKit won't hand it back.
+                SupporterRegistry.shared.recordTip(transaction: transaction, productName: product.displayName)
                 await transaction.finish()
-                SupporterRegistry.shared.recordTip(transaction: transaction, product: product)
                 didTip = true
             case .pending, .userCancelled:
                 break
