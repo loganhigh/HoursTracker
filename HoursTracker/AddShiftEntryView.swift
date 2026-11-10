@@ -20,6 +20,9 @@ struct AddShiftEntryView: View {
     @EnvironmentObject private var liveShift: LiveShiftManager
     /// Day to pre-select in the manual wizard (e.g. a suggested missing shift).
     var initialDate: Date? = nil
+    /// Set by the End button / a "Clock out" push: clock out at this time
+    /// as soon as the live screen appears.
+    var clockOutAt: Date? = nil
 
     /// Once the live screen is up it stays up for the life of this sheet —
     /// clocking out clears `activeShift`, and the earnings card that follows
@@ -29,7 +32,7 @@ struct AddShiftEntryView: View {
     var body: some View {
         Group {
             if showingLive || liveShift.activeShift != nil {
-                LiveShiftTrackingView(store: store)
+                LiveShiftTrackingView(store: store, clockOutAt: clockOutAt)
             } else {
                 AddShiftWizardView(store: store, initialDate: initialDate)
             }

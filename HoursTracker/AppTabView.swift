@@ -56,6 +56,9 @@ struct AppTabView: View {
     @EnvironmentObject private var authService: AuthService
     @StateObject private var tabRouter = TabRouter()
     @State private var showingAddShift = false
+    /// Clock-out time for the next Add Shift cover (End button / push).
+    @State private var pendingClockOutAt: Date?
+    @EnvironmentObject private var liveShift: LiveShiftManager
     @State private var showingSettings = false
     @AppStorage(FriendsFeature.storageKey) private var friendsEnabled = true
     @ObservedObject private var crewService = CrewService.shared
@@ -94,6 +97,21 @@ struct AppTabView: View {
         showingAddShift = true
     }
 
+    private func endLiveShift(at date: Date) {
+        notificationRouter.clockOutLiveShiftAt = nil
+        guard liveShift.activeShift != nil else { return }
+        pendingClockOutAt = date
+        showingAddShift = true
+    }
+
+    private var liveBar: some View {
+        LiveShiftBar(
+            onOpen: { pendingClockOutAt = nil; showingAddShift = true },
+            onEnd: { endLiveShift(at: Date()) }
+        )
+        .animation(AppMotion.Spring.smooth, value: liveShift.activeShift != nil)
+    }
+
     private func openYouTabFromPush() {
         tabRouter.selection = .you
         notificationRouter.openYouTab = false
@@ -105,12 +123,14 @@ struct AppTabView: View {
                 HoursHomeView()
                     .background(AppColors.bg.ignoresSafeArea())
             }
+            .safeAreaInset(edge: .bottom) { liveBar }
             .tabItem { Label("Home", systemImage: "house.fill") }
             .tag(AppTab.home)
 
             NavigationStack {
                 HistoryTabView()
             }
+            .safeAreaInset(edge: .bottom) { liveBar }
             .tabItem { Label("History", systemImage: "calendar") }
             .tag(AppTab.history)
 
@@ -125,6 +145,7 @@ struct AppTabView: View {
                 NavigationStack {
                     FriendsView(store: store)
                 }
+            .safeAreaInset(edge: .bottom) { liveBar }
                 .tabItem { Label("Friends", systemImage: "person.2.fill") }
                 .tag(AppTab.friends)
             }
@@ -132,6 +153,7 @@ struct AppTabView: View {
             NavigationStack {
                 YouTabView(store: store)
             }
+            .safeAreaInset(edge: .bottom) { liveBar }
             .tabItem { Label("You", systemImage: "person.crop.circle") }
             .tag(AppTab.you)
         }
@@ -159,6 +181,7 @@ struct AppTabView: View {
         .onAppear {
             if notificationRouter.openYouTab { openYouTabFromPush() }
             if notificationRouter.openAddShift { openAddShiftFromPush() }
+            if let date = notificationRouter.clockOutLiveShiftAt { endLiveShift(at: date) }
         }
         .onChange(of: friendsEnabled) { _, isEnabled in
             // Friends can be the selected tab at the moment it's switched off
@@ -170,8 +193,16 @@ struct AppTabView: View {
             }
         }
         // Full screen, not a sheet — matches Home's Add Shift button.
-        .fullScreenCover(isPresented: $showingAddShift) {
-            AddShiftEntryView(store: store)
+        .fullScreenCover(isPresented: $showingAddShift, onDismiss: { pendingClockOutAt = nil }) {
+            AddShiftEntryView(store: store, clockOutAt: pendingClockOutAt)
+        }
+        // A tapped "You're at work" push: pick when the shift started.
+        .sheet(item: $notificationRouter.arrivalPrompt) { prompt in
+            LiveShiftStartSheet(prompt: prompt, store: store)
+                .presentationDetents([.large])
+        }
+        .onChange(of: notificationRouter.clockOutLiveShiftAt) { _, date in
+            if let date { endLiveShift(at: date) }
         }
         // Presented only by an incoming `join-crew` deep link (below) —
         // Settings is otherwise reached from its row in the You tab.

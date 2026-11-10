@@ -21,6 +21,15 @@ struct LiveShift: Codable, Equatable {
     /// The job this shift is for (nil = main job). Chosen at clock-in from
     /// Home's cheque job and changeable while the shift runs.
     var jobID: String? = nil
+    /// Where the shift is being worked (from an arrival prompt or picked in
+    /// the app). Optional so shifts saved by older builds still decode.
+    var locationName: String? = nil
+    var latitude: Double? = nil
+    var longitude: Double? = nil
+
+    var place: ShiftPlace {
+        ShiftPlace(name: locationName ?? "", latitude: latitude, longitude: longitude)
+    }
 
     /// True while a break has been started but not ended.
     var isOnBreak: Bool {
@@ -97,11 +106,44 @@ final class LiveShiftManager: ObservableObject {
     // MARK: Clock in / out
 
     /// Starts a shift. Ignored when one is already active.
-    func clockIn(at date: Date = Date()) {
+    func clockIn(at date: Date = Date(), place: ShiftPlace? = nil) {
         guard activeShift == nil else { return }
-        activeShift = LiveShift(startDate: date, breaks: [], jobID: HoursStore.current?.defaultJobID)
+        var shift = LiveShift(startDate: min(date, Date()), breaks: [], jobID: HoursStore.current?.defaultJobID)
+        if let place, !place.isEmpty {
+            shift.locationName = place.trimmedName
+            shift.latitude = place.latitude
+            shift.longitude = place.longitude
+        }
+        activeShift = shift
         persist()
         syncActivity()
+    }
+
+    /// Moves the start of the running shift (arrived early, or started it
+    /// late). Never into the future, never more than 24 hours back, and
+    /// never after the first break began.
+    @discardableResult
+    func setStartDate(_ date: Date) -> Bool {
+        guard var shift = activeShift else { return false }
+        let now = Date()
+        var latest = now
+        if let firstBreak = shift.breaks.first?.start { latest = min(latest, firstBreak) }
+        guard date <= latest, now.timeIntervalSince(date) <= Self.maxShiftSeconds else { return false }
+        shift.startDate = date
+        activeShift = shift
+        persist()
+        syncActivity()
+        return true
+    }
+
+    /// Sets (or clears) where the running shift is being worked.
+    func setPlace(_ place: ShiftPlace) {
+        guard var shift = activeShift else { return }
+        shift.locationName = place.isEmpty ? nil : place.trimmedName
+        shift.latitude = place.latitude
+        shift.longitude = place.longitude
+        activeShift = shift
+        persist()
     }
 
     /// Moves the running shift to another job.
@@ -195,6 +237,7 @@ final class LiveShiftManager: ObservableObject {
             isHoliday: false
         )
         entry.jobID = shift.jobID
+        shift.place.apply(to: &entry)
 
         // Mirror the editor's validation: a shift that rounds down to zero
         // paid hours is not worth saving.

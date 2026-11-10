@@ -22,6 +22,8 @@ import SwiftUI
 
 struct LiveShiftTrackingView: View {
     @ObservedObject var store: HoursStore
+    /// Clock out at this time on appear (End button, "Clock out" push).
+    var clockOutAt: Date? = nil
     @EnvironmentObject private var liveShift: LiveShiftManager
     @Environment(\.dismiss) private var dismiss
 
@@ -38,12 +40,29 @@ struct LiveShiftTrackingView: View {
         return f
     }()
 
+    @State private var handledClockOut = false
+    @State private var showingStartEditor = false
+    @State private var editedStart = Date()
+    @State private var showingLocationPicker = false
+    @State private var editedPlace = ShiftPlace()
+
     var body: some View {
-        if let earnings {
-            ShiftEarningsView(store: store, earnings: earnings) { dismiss() }
-                .transition(.opacity)
-        } else {
-            trackingBody
+        Group {
+            if let earnings {
+                ShiftEarningsView(store: store, earnings: earnings) { dismiss() }
+                    .transition(.opacity)
+            } else {
+                trackingBody
+            }
+        }
+        .sheet(isPresented: $showingStartEditor) { startEditor }
+        .sheet(isPresented: $showingLocationPicker, onDismiss: { liveShift.setPlace(editedPlace) }) {
+            SavedLocationPickerSheet(place: $editedPlace, locations: store.shiftLocationSummaries())
+        }
+        .onAppear {
+            guard let clockOutAt, !handledClockOut, liveShift.activeShift != nil else { return }
+            handledClockOut = true
+            performClockOut(at: clockOutAt)
         }
     }
 
@@ -108,9 +127,22 @@ struct LiveShiftTrackingView: View {
                             .appText(.caption)
                             .foregroundStyle(AppColors.warning)
                     } else {
-                        Text("Started \(Self.startedTimeFormatter.string(from: shift.startDate))")
+                        // Tap to move the start (got there early, started late).
+                        Button {
+                            Haptics.lightTap()
+                            editedStart = shift.startDate
+                            showingStartEditor = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text("Started \(Self.startedTimeFormatter.string(from: shift.startDate))")
+                                Image(systemName: "pencil")
+                                    .font(.caption2.weight(.bold))
+                            }
                             .appText(.caption)
-                            .foregroundStyle(AppColors.subtext)
+                            .foregroundStyle(AppColors.accent)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Change when the shift started")
                     }
                 }
             }
@@ -118,6 +150,24 @@ struct LiveShiftTrackingView: View {
             if store.hasMultipleJobs {
                 JobPickerMenu(store: store, selection: store.job(id: shift.jobID).id) { liveShift.setJob($0) }
             }
+
+            Button {
+                Haptics.lightTap()
+                editedPlace = shift.place
+                showingLocationPicker = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "mappin.and.ellipse")
+                    Text(shift.place.displayText ?? "Add location")
+                        .lineLimit(1)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .opacity(0.6)
+                }
+                .appText(.subheadline)
+                .foregroundStyle(shift.place.isEmpty ? AppColors.subtext : AppColors.text)
+            }
+            .buttonStyle(.plain)
 
             if let clockOutMessage {
                 Text(clockOutMessage)
@@ -194,10 +244,51 @@ struct LiveShiftTrackingView: View {
         )
     }
 
+    // MARK: Start time editor
+
+    /// Earliest allowed start: 24 hours back. Latest: now, or the first
+    /// break if one has been taken.
+    private var startRange: ClosedRange<Date> {
+        let now = Date()
+        let latest = liveShift.activeShift?.breaks.first?.start ?? now
+        return now.addingTimeInterval(-24 * 3600)...min(latest, now)
+    }
+
+    private var startEditor: some View {
+        NavigationStack {
+            VStack(spacing: AppSpacing.md) {
+                Text("When did this shift start?")
+                    .appText(.headline)
+                    .foregroundStyle(AppColors.text)
+                DatePicker("Start", selection: $editedStart, in: startRange,
+                           displayedComponents: [.date, .hourAndMinute])
+                    .datePickerStyle(.wheel)
+                    .labelsHidden()
+                Spacer(minLength: 0)
+            }
+            .padding(AppSpacing.lg)
+            .background(AppColors.bg.ignoresSafeArea())
+            .navigationTitle("Start time")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showingStartEditor = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        if liveShift.setStartDate(editedStart) { Haptics.success() } else { Haptics.error() }
+                        showingStartEditor = false
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
     // MARK: Actions
 
-    private func performClockOut() {
-        guard let entry = liveShift.clockOut(at: Date(), into: store) else {
+    private func performClockOut(at date: Date = Date()) {
+        guard let entry = liveShift.clockOut(at: min(date, Date()), into: store) else {
             Haptics.error()
             let worked = liveShift.activeShift?.elapsedWorked(at: Date()) ?? 0
             clockOutMessage = worked > 24 * 3600

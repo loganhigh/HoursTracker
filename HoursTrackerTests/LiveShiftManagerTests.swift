@@ -241,6 +241,64 @@ final class LiveShiftManagerTests: XCTestCase {
         XCTAssertFalse(shift.isStale(at: date(hour: 16)))
         XCTAssertTrue(shift.isStale(at: date(hour: 16, minute: 1)))
     }
+    // MARK: - Start time and location (arrival prompts)
+
+    func testClockInCarriesPlaceIntoSavedEntry() {
+        let manager = makeManager()
+        let start = Date().addingTimeInterval(-3 * 3600)
+        manager.clockIn(at: start, place: ShiftPlace(name: "Main Yard", latitude: 51.05, longitude: -114.07))
+        XCTAssertEqual(manager.activeShift?.locationName, "Main Yard")
+        let entry = manager.materializedEntry(at: Date())
+        XCTAssertEqual(entry?.locationName, "Main Yard")
+        XCTAssertEqual(entry?.latitude, 51.05)
+        manager.discard()
+    }
+
+    func testClockInNeverStartsInTheFuture() {
+        let manager = makeManager()
+        manager.clockIn(at: Date().addingTimeInterval(3600))
+        XCTAssertLessThanOrEqual(manager.activeShift!.startDate, Date())
+        manager.discard()
+    }
+
+    func testSetStartDateMovesStartEarlier() {
+        let manager = makeManager()
+        manager.clockIn(at: Date().addingTimeInterval(-600))
+        let earlier = Date().addingTimeInterval(-45 * 60)
+        XCTAssertTrue(manager.setStartDate(earlier))
+        XCTAssertEqual(manager.activeShift?.startDate, earlier)
+        manager.discard()
+    }
+
+    func testSetStartDateRejectsFutureTooOldAndAfterFirstBreak() {
+        let manager = makeManager()
+        let start = Date().addingTimeInterval(-2 * 3600)
+        manager.clockIn(at: start)
+        XCTAssertFalse(manager.setStartDate(Date().addingTimeInterval(600)), "future")
+        XCTAssertFalse(manager.setStartDate(Date().addingTimeInterval(-25 * 3600)), "over 24h")
+        manager.startBreak(at: Date().addingTimeInterval(-3600))
+        manager.endBreak(at: Date().addingTimeInterval(-3000))
+        XCTAssertFalse(manager.setStartDate(Date().addingTimeInterval(-1800)), "after the first break")
+        XCTAssertEqual(manager.activeShift?.startDate, start)
+        manager.discard()
+    }
+
+    func testSetPlaceClearsWithEmptyPlace() {
+        let manager = makeManager()
+        manager.clockIn(at: Date().addingTimeInterval(-600), place: ShiftPlace(name: "North Shop"))
+        manager.setPlace(ShiftPlace())
+        XCTAssertNil(manager.activeShift?.locationName)
+        manager.discard()
+    }
+
+    func testOldSavedShiftWithoutLocationStillDecodes() throws {
+        let json = #"{"startDate":"2026-03-10T07:00:00Z","breaks":[]}"#
+        let dec = JSONDecoder()
+        dec.dateDecodingStrategy = .iso8601
+        let shift = try dec.decode(LiveShift.self, from: Data(json.utf8))
+        XCTAssertNil(shift.locationName)
+        XCTAssertTrue(shift.place.isEmpty)
+    }
 }
 
 // MARK: - Auto-off marker (per account, rewinds on backfill)
@@ -354,4 +412,5 @@ final class PaySettingsLegacyOvertimeDecodingTests: XCTestCase {
         let s = try JSONDecoder().decode(PaySettings.self, from: data)
         XCTAssertEqual(s.weeklyOvertimeAfterHours, 40)
     }
+
 }

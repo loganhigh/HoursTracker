@@ -15,7 +15,12 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         Messaging.messaging().delegate = self
-        UNUserNotificationCenter.current().setNotificationCategories([Self.chatReplyCategory])
+        UNUserNotificationCenter.current().setNotificationCategories(
+            Set([Self.chatReplyCategory] + ArrivalMonitor.notificationCategories)
+        )
+        // Reopen the work-place geofences first thing: a background relaunch
+        // for an arrival only delivers the event to a monitor opened here.
+        ArrivalMonitor.shared.start()
         return true
     }
 
@@ -66,6 +71,15 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
+        // Arrived at / leaving work: start or end the live shift.
+        if let kind = userInfo["kind"] as? String, kind == "shiftArrival" || kind == "shiftDeparture" {
+            let action = response.actionIdentifier
+            Task { @MainActor in
+                _ = ArrivalMonitor.shared.handleResponse(actionID: action, userInfo: userInfo)
+                completionHandler()
+            }
+            return
+        }
         if response.actionIdentifier == Self.chatReplyActionID,
            let reply = (response as? UNTextInputNotificationResponse)?.userText {
             let kind = userInfo["kind"] as? String
@@ -147,6 +161,10 @@ final class NotificationRouter: ObservableObject {
     @Published var openYouTab = false
     /// Raised by a win-back push; AppTabView opens Add Shift and lowers it.
     @Published var openAddShift = false
+    /// A tapped "You're at work" push: AppTabView shows the start sheet.
+    @Published var arrivalPrompt: ArrivalPrompt?
+    /// "Clock out" on a leaving-work push, with the time they left.
+    @Published var clockOutLiveShiftAt: Date?
     private init() {}
 }
 
