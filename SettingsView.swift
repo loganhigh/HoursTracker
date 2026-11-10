@@ -258,6 +258,15 @@ struct SettingsView: View {
                             SettingsChevron()
                         }
                     }
+                    NavigationLink {
+                        ArrivalAlertsView(store: store)
+                    } label: {
+                        SettingsRowLabel(
+                            icon: "location.circle.fill",
+                            title: "Arrive at Work",
+                            subtitle: "Start your live shift when you get there"
+                        )
+                    }
                 } header: {
                     SectionEyebrow("Notifications")
                 } footer: {

@@ -89,7 +89,19 @@ enum WrappedStatsEngine {
 
         // MARK: Extremes
         let longestShift = sorted.max { $0.paidHours < $1.paidHours }
-        let earliestShift = sorted.min { timeOfDayMinutes($0.start, calendar: cal) < timeOfDayMinutes($1.start, calendar: cal) }
+        // A shift split at midnight is saved as two entries; the second half
+        // "starts" at 12:00 AM but isn't a midnight start. Skip those when
+        // looking for the earliest clock-in.
+        let daysEndingAtMidnight = Set(sorted.filter {
+            timeOfDayMinutes($0.end, calendar: cal) == 0 && $0.end != $0.start
+        }.map { cal.startOfDay(for: $0.date) })
+        let realStarts = sorted.filter { entry in
+            guard timeOfDayMinutes(entry.start, calendar: cal) == 0,
+                  let previousDay = cal.date(byAdding: .day, value: -1, to: cal.startOfDay(for: entry.date)) else { return true }
+            return !daysEndingAtMidnight.contains(previousDay)
+        }
+        let earliestShift = (realStarts.isEmpty ? sorted : realStarts)
+            .min { timeOfDayMinutes($0.start, calendar: cal) < timeOfDayMinutes($1.start, calendar: cal) }
         let latestShift = sorted.max { lateNightAdjustedMinutes($0.end, calendar: cal) < lateNightAdjustedMinutes($1.end, calendar: cal) }
 
         // MARK: Long-day thresholds
@@ -262,10 +274,10 @@ enum WrappedStatsEngine {
         return (comps.hour ?? 0) * 60 + (comps.minute ?? 0)
     }
 
-    /// Minutes since midnight, with hours before 5 AM rolled forward by 24h
+    /// Minutes since midnight, with hours before 6 AM rolled forward by 24h
     /// so a 2:00 AM clock-out ranks *after* an 11:00 PM clock-out instead of
     /// before it. Without this, "latest shift end" would nonsensically pick
-    /// an early-evening finish over a shift that ran past midnight. The 5 AM
+    /// an early-evening finish over a shift that ran past midnight. The 6 AM
     /// cutoff matches the existing graveyard/night-shift hour buckets in
     /// `AchievementBadges.BadgeStats` (hour < 3 / < 4), just widened slightly
     /// since this is about ranking "how late," not classifying shift type.
@@ -273,7 +285,7 @@ enum WrappedStatsEngine {
         let comps = calendar.dateComponents([.hour, .minute], from: date)
         let hour = comps.hour ?? 0
         var minutes = hour * 60 + (comps.minute ?? 0)
-        if hour < 5 { minutes += 24 * 60 }
+        if hour < 6 { minutes += 24 * 60 }
         return minutes
     }
 

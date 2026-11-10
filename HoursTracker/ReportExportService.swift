@@ -26,6 +26,9 @@ private struct ExportReport {
 
 /// Exports monthly/weekly reports as CSV or PDF. Runs off main thread.
 final class ReportExportService {
+    /// See DataExportService: skip the isolated-deinit back-deploy hop.
+    nonisolated deinit {}
+
 
     /// Export month data as CSV. Returns URL to temp file.
     func exportCSV(monthDate: Date, entries: [WorkEntry], store: HoursStore, companyName: String? = nil) async throws -> URL {

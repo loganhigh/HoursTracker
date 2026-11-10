@@ -22,6 +22,8 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Used to show today's local weather on the Home screen and to drop a pin for where you worked.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Lets Hour Tracker notice when you arrive at or leave a work location you've added, so it can offer to start or end your live shift. It isn't used to track where you go.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Saves your shift card to your photos.</string>
 	<key>NSSupportsLiveActivities</key>
