@@ -305,12 +305,11 @@ struct ShiftEarningsCard: View {
         if let weather {
             out.append(Stat(symbol: weather.symbolName, value: weather.temperatureText, label: weather.conditionText))
         }
-        let city = weather?.locality ?? ""
+        // Only the location the user picked for the shift — never the
+        // phone's current city (weather's locality), which is wrong for a
+        // shift logged from home or backdated.
         if !earnings.locationName.isEmpty {
-            out.append(Stat(symbol: "mappin.circle.fill", value: earnings.locationName,
-                            label: city.isEmpty ? "Location" : city))
-        } else if !city.isEmpty {
-            out.append(Stat(symbol: "mappin.circle.fill", value: city, label: "Location"))
+            out.append(Stat(symbol: "mappin.circle.fill", value: earnings.locationName, label: "Location"))
         }
         if let rule = earnings.holidayRule {
             out.append(Stat(symbol: "star.circle.fill", value: rule.isWorked ? "\(HolidayPayRule.multText(rule.workedMultiplier))×" : "Paid",
