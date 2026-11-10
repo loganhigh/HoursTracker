@@ -20,6 +20,14 @@ struct PayPeriodStatement {
         let holidayRule: HolidayPayRule?
         let statPayHours: Double
         let notes: String
+        var location: String = ""
+
+        /// The small line under a shift: where it was, then any notes.
+        var detailLine: String {
+            [location.isEmpty ? "" : "Location: \(location)", notes]
+                .filter { !$0.isEmpty }
+                .joined(separator: "  ·  ")
+        }
     }
 
     let periodStart: Date
@@ -60,7 +68,8 @@ struct PayPeriodStatement {
                     isOffDay: entry.isOffDay, offDayReason: entry.offDayReason,
                     isHoliday: entry.isHoliday,
                     holidayRule: entry.holidayPayRule, statPayHours: b.statPayHours,
-                    notes: entry.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                    notes: entry.notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                    location: entry.isOffDay ? "" : entry.locationName.trimmingCharacters(in: .whitespacesAndNewlines)
                 )
             }
         func clean(_ s: String?) -> String? {
@@ -169,7 +178,7 @@ private struct PayPeriodStatementRenderer {
     // MARK: Pagination
 
     private func height(of row: PayPeriodStatement.Row) -> CGFloat {
-        rowHeight + (row.notes.isEmpty ? 0 : noteHeight)
+        rowHeight + (row.detailLine.isEmpty ? 0 : noteHeight)
     }
 
     /// Splits rows across pages, reserving room for the totals row and the
@@ -350,8 +359,8 @@ private struct PayPeriodStatementRenderer {
                 x += col.width
             }
         }
-        if !row.notes.isEmpty {
-            drawText(row.notes, at: CGPoint(x: margin + 8, y: y + rowHeight - 5), font: .systemFont(ofSize: 7.5), color: muted, maxWidth: contentWidth - 16)
+        if !row.detailLine.isEmpty {
+            drawText(row.detailLine, at: CGPoint(x: margin + 8, y: y + rowHeight - 5), font: .systemFont(ofSize: 7.5), color: muted, maxWidth: contentWidth - 16)
         }
         y += h
         fill(CGRect(x: margin, y: y - 0.5, width: contentWidth, height: 0.5), hairline)

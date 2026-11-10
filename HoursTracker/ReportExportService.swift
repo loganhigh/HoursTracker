@@ -11,6 +11,8 @@ private struct ExportRow {
     let overtimeHours: Double
     let notes: String
     let location: String
+    /// Location for the PDF: the place name, coordinates only when unnamed.
+    let placeName: String
 }
 
 /// Summary + rows for a single report date range.
@@ -216,7 +218,7 @@ final class ReportExportService {
                     ctx.beginPage()
                     y = margin
                 }
-                let line1 = "\(dateFmt.string(from: row.date)) - \(timeFmt.string(from: row.start))/\(timeFmt.string(from: row.end)) (\(String(format: "%.2f", row.totalHours))h)" + (row.location.isEmpty ? "" : " - Location: (\(row.location))")
+                let line1 = "\(dateFmt.string(from: row.date)) - \(timeFmt.string(from: row.start))/\(timeFmt.string(from: row.end)) (\(String(format: "%.2f", row.totalHours))h)" + (row.placeName.isEmpty ? "" : " - \(row.placeName)")
                 let font = UIFont.systemFont(ofSize: 10, weight: .regular)
                 let attr: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black]
                 NSAttributedString(string: line1, attributes: attr).draw(at: CGPoint(x: margin, y: y))
@@ -268,7 +270,9 @@ final class ReportExportService {
                     totalHours: entry.paidHours,
                     overtimeHours: b.overtimeHours,
                     notes: entry.notes,
-                    location: loc
+                    location: loc,
+                    placeName: entry.locationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? loc : entry.locationName.trimmingCharacters(in: .whitespacesAndNewlines)
                 )
             }
     }
