@@ -277,8 +277,6 @@ final class AuthService: NSObject, ObservableObject {
     /// sign-out (account deletion, revoked token) alike.
     private func discardDeviceBoundSession() {
         LiveShiftManager.shared.discard()
-        // Earnings goals are local-only and account-bound too.
-        EarningsGoalStore.shared.removeAll()
         MissingShiftDismissals.shared.removeAll()
         IncomeMilestoneSeenStore.removeAll()
     }

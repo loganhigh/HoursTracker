@@ -107,6 +107,9 @@ struct HoursTrackerApp: App {
                 SmartNotifier.shared.scheduleDailyReminder()
                 SmartNotifier.shared.scheduleForgotHoursReminderIfNeeded(entries: store.entries)
                 SmartNotifier.shared.cancelGoalReminder()
+                // Earnings Goals were removed: drop any saved goals.
+                UserDefaults.standard.removeObject(forKey: "earnings_goals_v1")
+                UserDefaults.standard.removeObject(forKey: "goal_expenses_v1")
                 SmartNotifier.shared.scheduleMotivationReminderIfNeeded(entries: store.entries)
                 SmartNotifier.shared.scheduleStreakNotificationsIfNeeded(entries: store.entries, currentStreak: store.gamificationProfile.currentStreak)
                 Task { @MainActor in

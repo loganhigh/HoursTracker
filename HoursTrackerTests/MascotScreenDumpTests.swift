@@ -146,13 +146,9 @@ final class MascotScreenDumpTests: XCTestCase {
         defaults.set("Northline Electric", forKey: "company_name")
         defaults.set("Electrician", forKey: "company_occupation")
         defaults.set(cal.date(byAdding: .month, value: -27, to: today)!.timeIntervalSince1970, forKey: "company_start_date_ts")
-        let goal = EarningsGoal(name: "Truck down payment", targetAmount: 8000, alreadySaved: 2500, monthlyContribution: 600)
-        EarningsGoalStore.shared.add(goal)
-        EarningsGoalStore.shared.addDeposit(1200, to: goal.id)
         defer {
             Self.removeSampleShifts(store)
             for (key, value) in zip(companyKeys, savedCompany) { defaults.set(value, forKey: key) }
-            EarningsGoalStore.shared.delete(id: goal.id)
         }
 
         let photo = UIGraphicsImageRenderer(size: CGSize(width: 600, height: 800)).image { ctx in
@@ -168,8 +164,6 @@ final class MascotScreenDumpTests: XCTestCase {
             ("you-full", AnyView(NavigationStack { AccountView(store: store) }), CGSize(width: 390, height: 2700), 1.2),
             ("badges", AnyView(NavigationStack { AchievementsView(store: store) }), phone, 1.2),
             ("company", AnyView(NavigationStack { CompanyProfileView(store: store) }), phone, 1.2),
-            ("goal-detail", AnyView(EarningsGoalDetailSheet(goalID: goal.id, store: store)), phone, 1.2),
-            ("goal-editor", AnyView(EarningsGoalEditorSheet(existing: nil, currencyCode: "USD")), phone, 1.2),
             // The portal opening runs ~2.8s before the reveal settles.
             ("prestige", AnyView(PrestigeCelebrationView(prestige: 4, onDismiss: {})), phone, 5),
             ("crop", AnyView(ProfilePhotoCropView(image: photo, onCancel: {}, onConfirm: { _ in })), phone, 1.2),
