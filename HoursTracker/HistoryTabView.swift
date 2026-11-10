@@ -251,7 +251,7 @@ struct HistoryTabView: View {
     /// ordinal of the user's actual first cheque (e.g. "12th Cheque" for
     /// what is really their first).
     private func previousCycles(before current: PayCycle) -> [PayCycle] {
-        guard let earliest = store.entries.map(\.date).min() else { return [] }
+        guard let earliest = store.allEntriesIncludingArchive().map(\.date).min() else { return [] }
         var walked: [PayCycle] = []
         var cursor = current
         for _ in 0..<maxWalkedCycles {

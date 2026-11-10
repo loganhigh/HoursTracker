@@ -206,13 +206,13 @@ struct OnboardingView: View {
             }
             .tag(1)
 
-            namePage
+            scrollablePage { namePage }
                 .tag(namePageIndex)
 
-            photoPage
+            scrollablePage { photoPage }
                 .tag(photoPageIndex)
 
-            payPage
+            scrollablePage { payPage }
                 .tag(payPageIndex)
 
             companyPage
@@ -240,6 +240,22 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(PrimaryButtonStyle())
             }
+        }
+    }
+
+    /// The form pages were plain VStacks: at accessibility text sizes on a
+    /// small phone the content outgrew the screen and Continue was pushed
+    /// off it with no way to scroll. Same ScrollView + min-height centering
+    /// as the sign-in page, so nothing changes when the content fits.
+    private func scrollablePage<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        ScrollView {
+            content()
+                .frame(maxWidth: .infinity, minHeight: signInPageMinHeight)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .scrollBounceBehavior(.basedOnSize)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+            signInPageMinHeight = height
         }
     }
 

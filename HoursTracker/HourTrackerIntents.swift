@@ -115,7 +115,7 @@ struct HoursThisWeekIntent: AppIntent {
             return .result(dialog: "Couldn't figure out this week's range.")
         }
         var total: Double = 0
-        for entry in store.entries where entry.date >= weekInterval.start && entry.date < weekInterval.end {
+        for entry in store.allEntriesIncludingArchive() where entry.date >= weekInterval.start && entry.date < weekInterval.end {
             total += entry.paidHours
         }
         return .result(dialog: "You've worked \(AppTheme.Format.hours(total)) this week.")

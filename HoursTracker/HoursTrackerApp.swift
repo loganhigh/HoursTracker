@@ -5,6 +5,11 @@ import FirebaseCore
 struct HoursTrackerApp: App {
     @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
     @Environment(\.scenePhase) private var scenePhase
+    /// Set on `.background`, consumed on the next `.active`. Control Center,
+    /// Face ID, notification banners and StoreKit sheets only pass through
+    /// `.inactive`; each one used to re-read the whole `entries` collection
+    /// and kick off server recomputes.
+    @State private var returningFromBackground = false
     // Declared without default values — all StateObjects are constructed
     // exactly once inside `init()` so we never accidentally build a throw-
     // away `HoursStore()` from the property default *and* a real one in
@@ -90,17 +95,19 @@ struct HoursTrackerApp: App {
                 LiveShiftManager.shared.refreshActivity()
             }
             if case .background = newPhase {
+                returningFromBackground = true
                 LiveShiftManager.shared.refreshActivity()
                 PresenceService.shared.stopHeartbeating()
                 sessionManager.resetSession(reason: .background)
                 WidgetDataManager.shared.updateWidgetData(
-                    entries: store.entries,
+                    entries: store.allEntriesIncludingArchive(),
                     paySettings: store.paySettings,
                     prestige: store.gamificationProfile.prestige
                 )
                 WidgetDataManager.shared.reloadAllWidgets()
             }
-            if case .active = newPhase {
+            if case .active = newPhase, returningFromBackground {
+                returningFromBackground = false
                 store.advanceNextPaydayIfNeeded()
                 store.applyYearlyResetIfNeeded()
                 WidgetDataManager.shared.reloadAllWidgets()

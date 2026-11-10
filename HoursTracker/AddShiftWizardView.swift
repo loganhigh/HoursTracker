@@ -658,7 +658,7 @@ struct AddShiftWizardView: View {
             let sharedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
             var saved: [WorkEntry] = []
             for day in holidayDates {
-                if store.entries.contains(where: { cal.isDate($0.date, inSameDayAs: day) }) { continue }
+                if store.allEntriesIncludingArchive().contains(where: { cal.isDate($0.date, inSameDayAs: day) }) { continue }
                 let entry = WorkEntry(date: day, start: day, end: day, breakMinutes: 0, notes: sharedNotes,
                                       isOffDay: true, offDayReason: EntryEditorView.holidayReason)
                 withAnimation(AppMotion.Spring.smooth) { store.add(entry) }

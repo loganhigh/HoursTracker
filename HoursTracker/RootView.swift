@@ -269,7 +269,7 @@ struct HoursHomeView: View {
 
         for offset in 0..<max(1, days) {
             guard let day = cal.date(byAdding: .day, value: offset, to: normalizedStart) else { continue }
-            if store.entries.contains(where: { cal.isDate($0.date, inSameDayAs: day) }) {
+            if store.allEntriesIncludingArchive().contains(where: { cal.isDate($0.date, inSameDayAs: day) }) {
                 skipped += 1
                 continue
             }

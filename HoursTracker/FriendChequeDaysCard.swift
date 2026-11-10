@@ -50,7 +50,7 @@ struct FriendChequeDaysCard: View {
     private var myHoursByDay: [String: Double] {
         let iso = FriendDailyEntry.isoFormatter
         var map: [String: Double] = [:]
-        for entry in store.entries where !entry.isOffDay {
+        for entry in store.allEntriesIncludingArchive() where !entry.isOffDay {
             map[iso.string(from: entry.date), default: 0] += entry.paidHours
         }
         return map

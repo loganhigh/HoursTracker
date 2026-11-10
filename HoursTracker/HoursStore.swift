@@ -66,6 +66,9 @@ final class HoursStore: ObservableObject {
     }
     @Published var yearArchives: [YearArchive] = [] {
         didSet {
+            // Week buckets read the archive too: the Jan 1 rollover must not
+            // drop the last days of December out of their pay week.
+            weekEntriesCache = nil
             allEntriesCache = nil
             lifetimeWorkStatsCache = nil
         }
@@ -233,7 +236,11 @@ final class HoursStore: ObservableObject {
         // Entries the user just deleted must stay gone even if a stale snapshot
         // (or an in-flight pull) still carries them. `pending_deletes` acts as a
         // tombstone set until the server confirms the removal.
-        let tombstones = cloudSync.pendingDeletionIDs()
+        // Plus the server's own record of deletions made on ANY device: this
+        // phone may still hold a shift another phone deleted, and without it
+        // the local-only re-upload below re-created it in the cloud.
+        let tombstones = cloudSync.pendingDeletionIDs().union(cloudSync.serverDeletedIDs)
+        let pendingUploads = cloudSync.pendingEntryIDs()
 
         // Drop tombstoned docs from the remote set so they can't be re-added,
         // and drop any locally-held copy so the row disappears immediately.
@@ -256,18 +263,38 @@ final class HoursStore: ObservableObject {
         // recalculateGamification (entries + archives) counted them twice —
         // inflating XP/level until the next cold launch re-archived them.
         var archiveIndexByID = [UUID: (archive: Int, entry: Int)]()
+        if !tombstones.isEmpty {
+            let pruned = yearArchives.map { archive in
+                YearArchive(year: archive.year, entries: archive.entries.filter { !tombstones.contains($0.id.uuidString) })
+            }
+            if pruned != yearArchives { yearArchives = pruned }
+        }
         for (a, archive) in yearArchives.enumerated() {
             for (e, entry) in archive.entries.enumerated() { archiveIndexByID[entry.id] = (a, e) }
         }
+        // Local copies newer than the cloud's (an edit made offline, or one
+        // whose upload hasn't landed yet) win and are pushed again; replacing
+        // them reverted the edit and then uploaded the reverted copy.
+        var newerLocal: [WorkEntry] = []
         for remote in liveRemote {
             if let idx = indexByID[remote.id] {
-                merged[idx] = remote
+                let local = merged[idx]
+                if local != remote, Self.localCopyWins(local, over: remote, pending: pendingUploads) {
+                    newerLocal.append(local)
+                } else {
+                    merged[idx] = remote
+                }
             } else if let loc = archiveIndexByID[remote.id] {
                 // Already archived: adopt any edit made on another device in
                 // place, so the archive stays the single copy of that shift.
                 // saveLocallyOnly() below persists yearArchives alongside entries.
-                if yearArchives[loc.archive].entries[loc.entry] != remote {
-                    yearArchives[loc.archive].entries[loc.entry] = remote
+                let local = yearArchives[loc.archive].entries[loc.entry]
+                if local != remote {
+                    if Self.localCopyWins(local, over: remote, pending: pendingUploads) {
+                        newerLocal.append(local)
+                    } else {
+                        yearArchives[loc.archive].entries[loc.entry] = remote
+                    }
                 }
             } else {
                 indexByID[remote.id] = merged.count
@@ -278,17 +305,17 @@ final class HoursStore: ObservableObject {
         recalculateGamification(eventHint: nil)
         saveLocallyOnly()
         WidgetDataManager.shared.updateWidgetData(
-            entries: entries,
+            entries: allEntriesIncludingArchive(),
             paySettings: paySettings,
             prestige: gamificationProfile.prestige
         )
 
-        // Re-upload only genuinely local-only entries (offline-created) — never
-        // tombstoned ones, which are already excluded from `merged`.
+        // Re-upload only genuinely local-only entries (offline-created) plus
+        // the newer local copies — never tombstoned ones, which are already
+        // excluded from `merged`. One batch call: the guarded callable writes
+        // both collections and rejects stale or server-deleted ids.
         let localOnly = merged.filter { !remoteIDs.contains($0.id) }
-        for entry in localOnly {
-            cloudSync.saveEntry(entry) { _ in }
-        }
+        cloudSync.uploadEntriesViaCallable(localOnly + newerLocal, reason: "local-only/newer re-upload")
 
         // Clear tombstones the server has confirmed gone (absent from the raw
         // snapshot) — but ONLY from an authoritative snapshot. Firestore's
@@ -302,6 +329,37 @@ final class HoursStore: ObservableObject {
         }
 
         syncProfileSnapshotToCloud()
+    }
+
+    /// Whether a local entry should be kept over the cloud copy with the same
+    /// id: its upload is still queued, or it was edited after the cloud copy.
+    /// Unstamped copies (pre-stamp builds) fall back to the cloud, as before.
+    static func localCopyWins(_ local: WorkEntry, over remote: WorkEntry, pending: Set<UUID>) -> Bool {
+        if pending.contains(local.id) { return true }
+        guard let localStamp = local.modifiedAt, let remoteStamp = remote.modifiedAt else { return false }
+        return localStamp > remoteStamp
+    }
+
+    /// Shifts deleted on another device (the server's `deletedEntries`):
+    /// drop any copy this device still holds, archive included.
+    func applyServerDeletions(_ ids: Set<String>) {
+        guard !ids.isEmpty else { return }
+        let before = entries.count + yearArchives.reduce(0) { $0 + $1.entries.count }
+        let keptEntries = entries.filter { !ids.contains($0.id.uuidString) }
+        let keptArchives = yearArchives.map { archive in
+            YearArchive(year: archive.year, entries: archive.entries.filter { !ids.contains($0.id.uuidString) })
+        }
+        let after = keptEntries.count + keptArchives.reduce(0) { $0 + $1.entries.count }
+        guard after != before else { return }
+        entries = keptEntries
+        yearArchives = keptArchives
+        recalculateGamification(eventHint: nil)
+        saveLocallyOnly()
+        WidgetDataManager.shared.updateWidgetData(
+            entries: allEntriesIncludingArchive(),
+            paySettings: paySettings,
+            prestige: gamificationProfile.prestige
+        )
     }
 
     /// Applies pay settings from Firestore without triggering a cloud upload loop.
@@ -326,7 +384,7 @@ final class HoursStore: ObservableObject {
         lastSeenCloudSettings = paySettings
         saveLocallyOnly()
         WidgetDataManager.shared.updateWidgetData(
-            entries: entries,
+            entries: allEntriesIncludingArchive(),
             paySettings: paySettings,
             prestige: gamificationProfile.prestige
         )
@@ -513,7 +571,7 @@ final class HoursStore: ObservableObject {
             UserDefaults.standard.set(yearArchivesData, forKey: yearArchivesKey)
             UserDefaults.standard.set(gamificationData, forKey: gamificationKey)
             WidgetDataManager.shared.updateWidgetData(
-                entries: entriesCopy,
+                entries: entriesCopy + yearArchivesCopy.flatMap(\.entries),
                 paySettings: settingsCopy,
                 prestige: prestigeCopy
             )
@@ -979,6 +1037,14 @@ final class HoursStore: ObservableObject {
         save()
     }
     
+    /// A different account signed in: drop the previous account's local
+    /// copy, but stay loaded so the new account's settings persist as they
+    /// arrive from the cloud.
+    func resetForAccountSwitch() {
+        deleteAllData()
+        isLoaded = true
+    }
+
     func deleteAllData() {
         entries.removeAll()
         yearArchives.removeAll()
@@ -1239,7 +1305,8 @@ final class HoursStore: ObservableObject {
         let cal = Calendar.current
         guard let start = cal.date(from: cal.dateComponents([.year, .month], from: monthDate)),
               let end = cal.date(byAdding: .month, value: 1, to: start) else { return [] }
-        return entries.filter { $0.date >= start && $0.date < end }
+        // Archived years too: in January, last December lives in the archive.
+        return allEntriesIncludingArchive().filter { $0.date >= start && $0.date < end }
     }
 
     // Memoized month → total-paid-hours, invalidated whenever `entries` changes
@@ -1561,7 +1628,7 @@ final class HoursStore: ObservableObject {
             return cache[key] ?? []
         }
         var buckets: [WeekBucket: [WorkEntry]] = [:]
-        for entry in entries where !entry.isOffDay && entry.holidayPayRule == nil {
+        for entry in allEntriesIncludingArchive() where !entry.isOffDay && entry.holidayPayRule == nil {
             guard let start = cal.dateInterval(of: .weekOfYear, for: entry.date)?.start else { continue }
             buckets[WeekBucket(job: self.jobID(of: entry), start: start), default: []].append(entry)
         }
@@ -1861,7 +1928,7 @@ final class HoursStore: ObservableObject {
             currentStreak: gamificationProfile.currentStreak
         )
         WidgetDataManager.shared.updateWidgetData(
-            entries: entries,
+            entries: allEntriesIncludingArchive(),
             paySettings: paySettings,
             prestige: gamificationProfile.prestige
         )
@@ -1989,11 +2056,12 @@ final class HoursStore: ObservableObject {
     func chequeProjection(for current: PayCycle) -> AdvancedPayPredictor.Prediction? {
         // Cheques from different employers can't train one prediction.
         guard chequeJobScope != Self.allJobsScope else { return nil }
-        let entries = scopedEntries
+        let entries = scopedEntries   // includes archived years
+        let all = entries
         let paySettings = scopedPaySettings
         guard !actualPayouts.isEmpty, let earliest = entries.map(\.date).min() else { return nil }
         func hours(in cycle: PayCycle) -> Double {
-            PayCycleEngine.entries(entries, in: cycle)
+            PayCycleEngine.entries(all, in: cycle)
                 .filter { !$0.isOffDay }
                 .reduce(0) { $0 + $1.paidHours }
         }
@@ -2112,7 +2180,7 @@ final class HoursStore: ObservableObject {
 
             // Update widget data
             WidgetDataManager.shared.updateWidgetData(
-                entries: entriesCopy,
+                entries: entriesCopy + yearArchivesCopy.flatMap(\.entries),
                 paySettings: settingsCopy,
                 prestige: prestigeCopy
             )
@@ -2308,7 +2376,7 @@ final class HoursStore: ObservableObject {
                 AppLogger.db.debug("loadAsync: done, \(deduplicatedEntries.count) entries (removed \(loadedEntries.count - deduplicatedEntries.count) duplicates), skipSyncedEntries=\(skipSyncedEntries)")
                 // Push current data to widget on every app launch
                 WidgetDataManager.shared.updateWidgetData(
-                    entries: self.entries,
+                    entries: self.allEntriesIncludingArchive(),
                     paySettings: self.paySettings,
                     prestige: self.gamificationProfile.prestige
                 )

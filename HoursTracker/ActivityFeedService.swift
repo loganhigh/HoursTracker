@@ -45,7 +45,22 @@ final class ActivityFeedService {
         metric: Double? = nil,
         documentId: String? = nil
     ) {
-        guard SocialPrivacyStore.shared.flags.shareActivity else { return }
+        let flags = SocialPrivacyStore.shared.flags
+        guard flags.shareActivity else { return }
+        var body = body
+        var metric = metric
+        switch kind {
+        case .shiftLogged where !flags.shareHours:
+            // Friends still hear about the shift, not how long it was.
+            body = "logged a shift"
+            metric = nil
+        case .monthlyMilestone, .weeklyMilestone:
+            guard flags.shareHours else { return }
+        case .badgeUnlocked:
+            guard flags.shareBadges else { return }
+        default:
+            break
+        }
         guard let user = Auth.auth().currentUser else { return }
         let uid = user.uid
         let displayName = UserDefaults.standard.string(forKey: "profile_display_name") ?? "Worker"

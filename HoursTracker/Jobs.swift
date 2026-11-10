@@ -136,10 +136,13 @@ extension HoursStore {
     }
 
     /// The shifts the cheque screens count: the chosen job's, or all of them.
+    /// The cheque scope's shifts, archived prior years included: a cheque
+    /// that spans New Year must still see its December shifts.
     var scopedEntries: [WorkEntry] {
+        let all = allEntriesIncludingArchive()
         let scope = chequeJobScope
-        guard scope != Self.allJobsScope, hasMultipleJobs else { return entries }
-        return entries.filter { jobID(of: $0) == scope }
+        guard scope != Self.allJobsScope, hasMultipleJobs else { return all }
+        return all.filter { jobID(of: $0) == scope }
     }
 
     var chequeScopeName: String {

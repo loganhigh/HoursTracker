@@ -245,11 +245,25 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
+    function entryWriteAllowed(uid, entryId) {
+      return !exists(/databases/$(database)/documents/users/$(uid)/deletedEntries/$(entryId))
+        && (resource == null
+          || !('modifiedAt' in resource.data)
+          || !(resource.data.modifiedAt is number)
+          || (request.resource.data.modifiedAt is number
+            && request.resource.data.modifiedAt >= resource.data.modifiedAt));
+    }
+
     match /users/{uid} {
-      // Profile docs are readable by any signed-in user so friend-code lookup
-      // (query on `friendCode`) works before a friendship exists. Push device
-      // tokens live in the private `deviceTokens` subcollection instead.
-      allow read: if request.auth != null;
+      // Owner and friends only, and never listable: the doc carries tip
+      // totals, time zone, company and the privacy map. Strangers see
+      // `publicProfiles`; friend adds go through usernames and callables, so
+      // no client queries this collection. Friends still need `get` for the
+      // fallback used before a friend's publicProfiles doc exists.
+      allow get: if request.auth != null
+        && (request.auth.uid == uid
+          || exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid)));
+      allow list: if false;
       allow create: if request.auth != null && request.auth.uid == uid
         && noAdminOnlyFieldsCreate();
       allow update: if request.auth != null && request.auth.uid == uid
@@ -264,12 +278,25 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }
 
+      // Direct entry writes get the same two guards as the upload callable:
+      // a shift deleted on any device stays deleted, and a copy stamped
+      // older than the stored one (a stale device) can't overwrite it.
       match /entries/{entryId} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow read, delete: if request.auth != null && request.auth.uid == uid;
+        allow create, update: if request.auth != null && request.auth.uid == uid
+          && entryWriteAllowed(uid, entryId);
       }
 
       match /timeEntries/{entryId} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow read, delete: if request.auth != null && request.auth.uid == uid;
+        allow create, update: if request.auth != null && request.auth.uid == uid
+          && entryWriteAllowed(uid, entryId);
+      }
+
+      // Written only by clientDeleteTimeEntriesBatch.
+      match /deletedEntries/{entryId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
       }
 
       match /stats/{statDoc} {

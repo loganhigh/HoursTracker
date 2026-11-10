@@ -160,6 +160,9 @@ final class SupporterRegistry: ObservableObject {
         if isSupporter { setSelf(true) }
     }
 
+    /// Account switch: the flag belonged to the account that signed out.
+    func resetSelf() { setSelf(false) }
+
     private func setSelf(_ value: Bool) {
         guard selfIsSupporter != value else { return }
         selfIsSupporter = value

@@ -1585,13 +1585,73 @@ const BROADCAST_RANK_LIMIT = 1000;
  * - `totalRanked` is only clamped upward, never recounted here.
  */
 async function applyLeaderboardDeltaForUser(db, uid) {
-  // Everyone is ranked by their real hours now, including people who hide
-  // them (their row says "Hours hidden"). The board doc can't carry hidden
-  // hours to sort by, so a shift write rebuilds the whole board instead of
-  // patching one row — a few hundred reads at this scale.
-  const { current } = await updateGlobalLeaderboard(db);
-  const row = current.find((e) => e.uid === uid);
-  console.log(`applyLeaderboardDeltaForUser uid=${uid} action=rebuilt rank=${row ? row.rank : "none"}`);
+  // Everyone is ranked by their real hours, including people who hide them
+  // (their row says "Hours hidden"), and the public board doc can't carry
+  // those hours to sort by. The full rebuild leaves them in a server-only
+  // doc, so one user's row can be re-sorted from 4 reads instead of every
+  // boardHours + publicProfiles doc on each shift write (which made the
+  // board's cost grow with users × shifts).
+  const boardRef = db.collection("leaderboards").doc("global");
+  const privateRef = db.collection("_leaderboardPrivate").doc("global");
+  const outcome = await db.runTransaction(async (tx) => {
+    const [boardSnap, privateSnap, hoursSnap, profileSnap] = await tx.getAll(
+      boardRef,
+      privateRef,
+      db.collection("boardHours").doc(uid),
+      db.collection("publicProfiles").doc(uid)
+    );
+    if (!boardSnap.exists || !privateSnap.exists) return "missing";
+    const hoursData = hoursSnap.exists ? hoursSnap.data() || {} : {};
+    const row = profileSnap.exists
+      ? buildBoardEntries(
+        [{ uid, hours: Number(hoursData.hours) || 0, hidden: hoursData.hidden === true }],
+        new Map([[uid, profileSnap.data() || {}]])
+      )[0] || null
+      : null;
+    const board = boardSnap.data() || {};
+    const next = applyBoardDelta(
+      Array.isArray(board.all) ? board.all : [],
+      privateSnap.data()?.hours || {},
+      uid,
+      row,
+      Number(hoursData.hours) || 0
+    );
+    tx.set(boardRef, {
+      top: next.rows.slice(0, 5).map(({ uid: id, name, hours, countryCode }) => ({ uid: id, name, hours, countryCode })),
+      all: next.rows,
+      totalRanked: Math.max(Number(board.totalRanked) || 0, next.rows.length),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: false });
+    tx.set(privateRef, { hours: next.hours, updatedAt: FieldValue.serverTimestamp() }, { merge: false });
+    return "patched";
+  });
+  if (outcome === "missing") {
+    // First run after deploy (no private hours doc yet): one full rebuild
+    // writes it; every later write patches.
+    await updateGlobalLeaderboard(db);
+  }
+}
+
+/**
+ * Pure: the broadcast rows with one user's row replaced (or removed when
+ * `row` is null or has no hours), re-sorted by real hours and re-ranked.
+ * `realHours` maps uid → real hours for every broadcast row (hidden ones
+ * included); the returned map is trimmed to the rows kept.
+ */
+function applyBoardDelta(rows, realHours, uid, row, hours) {
+  const nextHours = { ...realHours };
+  delete nextHours[uid];
+  const kept = rows.filter((r) => r.uid !== uid);
+  if (row && hours > 0) {
+    kept.push(row);
+    nextHours[uid] = hours;
+  }
+  const real = (r) => (nextHours[r.uid] != null ? Number(nextHours[r.uid]) : Number(r.hours) || 0);
+  kept.sort((a, b) => (real(b) - real(a)) || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0));
+  const sliced = kept.slice(0, BROADCAST_RANK_LIMIT).map((r, i) => ({ ...r, rank: i + 1 }));
+  const trimmed = {};
+  for (const r of sliced) trimmed[r.uid] = real(r);
+  return { rows: sliced, hours: trimmed };
 }
 
 /**
@@ -1710,6 +1770,15 @@ async function updateGlobalLeaderboard(db) {
     },
     { merge: false }
   );
+  // Real hours behind each broadcast row, for applyLeaderboardDeltaForUser.
+  // Server-only: no rule grants clients this collection.
+  const realHoursByUid = new Map(hourRows.map((r) => [r.uid, Math.round((Number(r.hours) || 0) * 100) / 100]));
+  const realHours = {};
+  for (const r of broadcastAll) realHours[r.uid] = realHoursByUid.get(r.uid) || 0;
+  await db.collection("_leaderboardPrivate").doc("global").set(
+    { hours: realHours, updatedAt: FieldValue.serverTimestamp() },
+    { merge: false }
+  );
 
   return { previous, current: broadcastAll };
 }
@@ -1723,6 +1792,7 @@ module.exports = {
   rankTitle,
   updateGlobalLeaderboard,
   applyLeaderboardDeltaForUser,
+  applyBoardDelta,
   buildBoardEntries,
   entryDerivedXP,
   entryXPComponents,
