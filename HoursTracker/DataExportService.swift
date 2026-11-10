@@ -23,6 +23,11 @@ struct DataExportPayload: Codable {
 }
 
 final class DataExportService {
+    /// MainActor-default classes get an isolated deinit; its back-deploy
+    /// shim (deployment target < iOS 18.4) aborts when an instance is freed
+    /// during view teardown. Nothing isolated is touched here, so skip the hop.
+    nonisolated deinit {}
+
     func exportCSV(
         scope: DataExportScope,
         selectedDate: Date,
