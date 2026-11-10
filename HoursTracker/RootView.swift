@@ -814,7 +814,7 @@ struct HoursHomeView: View {
 
     private var homeTopTrackersSection: some View {
         VStack(spacing: AppSpacing.sm) {
-            HomeSectionHeader("Top 5 hour trackers")
+            HomeSectionHeader("Top 5 Hour Trackers")
             VStack(spacing: 0) {
                 if topTrackers.topTrackers.isEmpty {
                     Text(topTrackers.hasLoaded ? "No rankings yet" : "Loading…")
