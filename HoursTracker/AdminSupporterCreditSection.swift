@@ -3,7 +3,7 @@ import FirebaseFunctions
 
 /// Edit-user sheet section: set how much someone has tipped in total, for
 /// tips made before the ledger existed or paid outside the App Store. The
-/// supporter tiers read this total ($5 name colour, $20 photo ring).
+/// supporter tiers read this total ($4.99 unlocks name colours).
 /// 0 removes supporter status. Applies immediately.
 struct AdminSupporterCreditSection: View {
     let uid: String
@@ -47,7 +47,7 @@ struct AdminSupporterCreditSection: View {
                     .frame(maxWidth: 110)
             }
             HStack(spacing: 8) {
-                ForEach([4.99, 20.0], id: \.self) { preset in
+                ForEach([0.99, 4.99], id: \.self) { preset in
                     Button(String(format: "$%.2f", preset)) { amountText = String(format: "%.2f", preset) }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -70,7 +70,7 @@ struct AdminSupporterCreditSection: View {
         } header: {
             Text("Supporter credit")
         } footer: {
-            Text("Sets their total tipped. Any amount = supporter name, badge, chat heart and thanks wall. $4.99+ unlocks name colours, $20+ the photo ring. 0 removes supporter status. Applies immediately.")
+            Text("Sets their total tipped. Any amount = supporter name, badge, chat heart and thanks wall. $4.99+ unlocks name colours. 0 removes supporter status. Applies immediately.")
         }
     }
 

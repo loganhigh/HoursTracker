@@ -5,20 +5,19 @@ const { supporterInfo, withSupporterBadge } = require("../src/supporter");
 test("non-supporter gets nothing", () => {
   const s = supporterInfo({ tipTotal: 50, supporterColor: "rose" });
   assert.equal(s.isSupporter, false);
-  assert.equal(s.ring, false);
+  assert.equal(s.color, "blue");
 });
 
 test("small tip: blue only, choice ignored", () => {
   const s = supporterInfo({ isSupporter: true, tipTotal: 1.99, supporterColor: "rose" });
-  assert.deepEqual([s.color, s.ring], ["blue", false]);
+  assert.equal(s.color, "blue");
 });
 
-test("$4.99 total unlocks colour, $20 the ring", () => {
+test("$4.99 total unlocks colour", () => {
   assert.equal(supporterInfo({ isSupporter: true, tipTotal: 4.99, supporterColor: "rose" }).color, "rose");
   assert.equal(supporterInfo({ isSupporter: true, tipTotal: 4.98, supporterColor: "rose" }).color, "blue");
   assert.equal(supporterInfo({ isSupporter: true, tipTotal: 5, supporterColor: "purple" }).color, "purple");
-  assert.equal(supporterInfo({ isSupporter: true, tipTotal: 19.99 }).ring, false);
-  assert.equal(supporterInfo({ isSupporter: true, tipTotal: 20.97 }).ring, true);
+  assert.equal("ring" in supporterInfo({ isSupporter: true, tipTotal: 50 }), false);
 });
 
 test("unknown colour falls back to blue", () => {

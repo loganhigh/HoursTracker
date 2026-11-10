@@ -143,9 +143,6 @@ struct TipJarView: View {
             perk(icon: "paintpalette.fill", title: "Pick your name colour",
                  detail: "Blue, purple, emerald or rose",
                  tier: "$4.99 total", unlocked: tipped && total >= SupporterStyle.colorUnlockTotal)
-            perk(icon: "circle.dashed", title: "Animated photo ring",
-                 detail: "A ring in your colour turns around your photo",
-                 tier: "$20 total", unlocked: tipped && total >= SupporterStyle.ringUnlockTotal)
             Text("Tips add up, and perks never expire.")
                 .appText(.caption)
                 .foregroundStyle(AppColors.faint)

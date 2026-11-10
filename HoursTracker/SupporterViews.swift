@@ -21,35 +21,6 @@ struct SupporterHeart: View {
     }
 }
 
-// MARK: - Avatar ring
-
-/// $20+ supporters: a ring in their colour that slowly turns around their
-/// photo. Still under Reduce Motion.
-struct SupporterAvatarRing: View {
-    let color: SupporterColor
-    let size: CGFloat
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            let angle = reduceMotion ? 0 : (t * 60).truncatingRemainder(dividingBy: 360)
-            Circle()
-                .strokeBorder(
-                    AngularGradient(
-                        colors: color.gradient + [color.gradient[0]],
-                        center: .center,
-                        angle: .degrees(angle)
-                    ),
-                    lineWidth: max(2, size * 0.06)
-                )
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-}
-
 // MARK: - Thanks wall
 
 /// Everyone who has left a tip, in their supporter colours. Names only —

@@ -40,12 +40,9 @@ struct SupporterStyle: Equatable {
     var color: SupporterColor = .blue
     /// At Legend prestige, show the supporter colour instead of Legend's.
     var prefersColor: Bool = false
-    /// $20+ total: animated profile-photo ring.
-    var ring: Bool = false
     var total: Double = 0
 
     static let colorUnlockTotal = 4.99 // the $4.99 tip counts
-    static let ringUnlockTotal = 20.0
 
     /// Parses the server's `supporter` map; nil when it isn't one.
     static func parse(_ raw: Any?) -> SupporterStyle? {
@@ -53,7 +50,6 @@ struct SupporterStyle: Equatable {
         return SupporterStyle(
             color: SupporterColor(rawValue: map["color"] as? String ?? "") ?? .blue,
             prefersColor: map["prefersColor"] as? Bool ?? false,
-            ring: map["ring"] as? Bool ?? false,
             total: (map["total"] as? NSNumber)?.doubleValue ?? 0
         )
     }

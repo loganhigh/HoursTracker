@@ -6,21 +6,19 @@
 //
 //   any tip  → supporter name colour (blue), badge, chat heart, thanks wall
 //   $4.99 total → choose the name colour
-//   $20 total→ animated profile-photo ring
 //
 // The choices (supporterColor, supporterNameStyle) are written by the user's
 // own device; anything not unlocked yet falls back here, so a hand-edited doc
 // can't skip ahead.
 
 const COLOR_UNLOCK_TOTAL = 4.99; // the $4.99 tip counts
-const RING_UNLOCK_TOTAL = 20;
 const COLORS = ["blue", "purple", "emerald", "rose"];
 
 function supporterInfo(userData) {
   const data = userData || {};
   const isSupporter = data.isSupporter === true;
   if (!isSupporter) {
-    return { isSupporter: false, total: 0, color: "blue", prefersColor: false, ring: false };
+    return { isSupporter: false, total: 0, color: "blue", prefersColor: false };
   }
   const total = Math.max(0, Math.round((Number(data.tipTotal) || 0) * 100) / 100);
   const wanted = String(data.supporterColor || "blue");
@@ -32,7 +30,6 @@ function supporterInfo(userData) {
     // At Legend prestige (P11+) the earned Legend colour shows unless the
     // supporter switched to their supporter colour.
     prefersColor: data.supporterNameStyle === "supporter",
-    ring: total >= RING_UNLOCK_TOTAL,
   };
 }
 
@@ -49,4 +46,4 @@ function withSupporterBadge(summaries, isSupporter) {
   return isSupporter ? [...rest, { ...SUPPORTER_BADGE }] : rest;
 }
 
-module.exports = { supporterInfo, withSupporterBadge, SUPPORTER_BADGE, COLOR_UNLOCK_TOTAL, RING_UNLOCK_TOTAL, COLORS };
+module.exports = { supporterInfo, withSupporterBadge, SUPPORTER_BADGE, COLOR_UNLOCK_TOTAL, COLORS };
