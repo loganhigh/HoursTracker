@@ -122,7 +122,13 @@ struct FriendProfileDetailView: View {
             VStack(spacing: AppSpacing.lg) {
                 FriendIdentityHeader(friend: friend, accent: accent)
 
-                messageButton(friend: friend, accent: accent)
+                VStack(spacing: AppSpacing.sm) {
+                    messageButton(friend: friend, accent: accent)
+                    // Badges sit under Message, not inside the name block.
+                    if friend.privacy.shareBadges {
+                        ProfileBadgeStrip(badges: friend.unlockedBadgeSummaries, tint: accent)
+                    }
+                }
 
                 // The screen's one owl peeks over the first card's flat top
                 // edge (a round avatar leaves his wing tips floating), scarf
