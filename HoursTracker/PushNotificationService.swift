@@ -180,7 +180,11 @@ final class PushNotificationService {
             UIApplication.shared.registerForRemoteNotifications()
         }
 
-        if let token = Messaging.messaging().fcmToken {
+        // The server pushes to FCM tokens. Firebase now nudges toward
+        // installation-ID registration (register(completion:)), a server-side
+        // migration; until then read the same token property via KVC so the
+        // deprecation warning doesn't bury real ones.
+        if let token = Messaging.messaging().value(forKey: "FCMToken") as? String {
             await handleFCMToken(token)
         }
     }

@@ -202,8 +202,8 @@ final class ChatService: ObservableObject {
             .limit(to: Self.globalPageSize)
             .addSnapshotListener { [weak self] snapshot, _ in
                 guard let snapshot else { return }
-                let messages = snapshot.documents.compactMap(ChatMessage.parse).reversed()
                 Task { @MainActor in
+                    let messages = snapshot.documents.compactMap(ChatMessage.parse).reversed()
                     self?.globalMessages = Array(messages)
                     self?.hasLoadedGlobal = true
                 }
@@ -457,7 +457,7 @@ final class ChatService: ObservableObject {
         ]
         if let messageId { data["messageId"] = messageId }
         if let threadId { data["threadId"] = threadId }
-        try? await db.collection("chatReports").addDocument(data: data)
+        _ = try? await db.collection("chatReports").addDocument(data: data)
     }
 
     #if DEBUG

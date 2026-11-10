@@ -8,7 +8,7 @@ import Foundation
 // Everything travels as JSON `Data` under a single key so both sides share
 // one Codable definition instead of hand-built dictionaries.
 
-enum WatchKeys {
+nonisolated enum WatchKeys {
     static let command = "cmd"
     static let snapshot = "snapshot"
     static let result = "result"

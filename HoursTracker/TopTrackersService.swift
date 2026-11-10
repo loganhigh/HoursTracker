@@ -34,7 +34,7 @@ struct TopTracker: Identifiable, Equatable {
 
     /// Trimmed, with the first letter capitalised — "electrician" and
     /// "Electrician" read the same on the board regardless of how it was typed.
-    static func displayOccupation(_ raw: String?) -> String {
+    nonisolated static func displayOccupation(_ raw: String?) -> String {
         let trimmed = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard let first = trimmed.first else { return "" }
         return first.uppercased() + trimmed.dropFirst()
