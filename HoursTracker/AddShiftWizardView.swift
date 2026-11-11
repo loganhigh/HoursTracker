@@ -794,14 +794,19 @@ struct AddShiftWizardView: View {
         let result = store.shiftEarnings(for: accepted)
         let paid = accepted.contains { ($0.isOffDay ? $0.statPayHours : $0.paidHours) > 0 }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-            if let result {
-                withAnimation(.easeInOut(duration: 0.35)) { earnings = result }
-            } else if paid, !store.paySettings.hourlyRateSet, WagePromptSheet.shouldOffer() {
-                savedForPrompt = accepted
-                showWagePrompt = true
-            } else {
-                dismiss()
-            }
+            // Crew: Messages with the boss prefilled, then the usual close.
+            CrewTextBoss.offerIfNeeded(after: accepted) { afterSave(result: result, paid: paid, accepted: accepted) }
+        }
+    }
+
+    private func afterSave(result: ShiftEarnings?, paid: Bool, accepted: [WorkEntry]) {
+        if let result {
+            withAnimation(.easeInOut(duration: 0.35)) { earnings = result }
+        } else if paid, !store.paySettings.hourlyRateSet, WagePromptSheet.shouldOffer() {
+            savedForPrompt = accepted
+            showWagePrompt = true
+        } else {
+            dismiss()
         }
     }
 

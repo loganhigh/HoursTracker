@@ -77,27 +77,18 @@ final class CatchUpPlannerTests: XCTestCase {
         XCTAssertEqual(cal.component(.hour, from: afternoon), 17)
     }
 
-    // MARK: Clock Out shortcut with no live shift
+    // MARK: Crew "Text your boss"
 
-    func testClockOutLogsTodayFromUsualStartToNow() {
-        // Usual Wednesday: 7am, 30m break. Now is Wed Mar 18 at 5:15pm.
-        let entries = [shift(4), shift(9), shift(11)]
-        let now = cal.date(bySettingHour: 17, minute: 15, second: 0, of: day(18))!
-        let e = ClockOutPlanner.shiftEndingNow(entries: entries, now: now, calendar: cal)
-        XCTAssertNotNil(e)
-        XCTAssertEqual(cal.component(.hour, from: e!.start), 7)
-        XCTAssertEqual(e!.end, now)
-        XCTAssertEqual(e!.breakMinutes, 30)
-    }
-
-    func testClockOutSkipsWhenTodayAlreadyLoggedOrNoHistory() {
-        let now = cal.date(bySettingHour: 17, minute: 0, second: 0, of: day(18))!
-        XCTAssertNil(ClockOutPlanner.shiftEndingNow(entries: [shift(11), shift(18)], now: now, calendar: cal))
-        XCTAssertNil(ClockOutPlanner.shiftEndingNow(entries: [], now: now, calendar: cal))
-    }
-
-    func testClockOutBeforeUsualStartLogsNothing() {
-        let now = cal.date(bySettingHour: 6, minute: 0, second: 0, of: day(18))!
-        XCTAssertNil(ClockOutPlanner.shiftEndingNow(entries: [shift(11)], now: now, calendar: cal))
+    func testTextBossOnlyForTodaysWorkShift() {
+        let now = at(18, 17)
+        func offer(_ e: [WorkEntry], enabled: Bool = true, on: Bool = true, phone: String = "555-0100") -> Bool {
+            CrewTextBoss.shouldOffer(for: e, enabled: enabled, on: on, phone: phone, now: now, calendar: cal)
+        }
+        XCTAssertTrue(offer([shift(18)]))
+        XCTAssertFalse(offer([shift(17)]), "back-filled shift")
+        XCTAssertFalse(offer([shift(18, off: true)]), "day off")
+        XCTAssertFalse(offer([shift(18)], enabled: false), "not switched on by admin")
+        XCTAssertFalse(offer([shift(18)], on: false), "user turned it off")
+        XCTAssertFalse(offer([shift(18)], phone: " "), "no boss picked")
     }
 }

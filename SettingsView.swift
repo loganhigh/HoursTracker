@@ -27,6 +27,7 @@ struct SettingsView: View {
     /// of the stored value reads as `true`, so fresh installs and upgrading
     /// users both get Friends without any migration write.
     @AppStorage(FriendsFeature.storageKey) private var friendsEnabled = true
+    @AppStorage(CrewFeatures.enabledKey) private var crewTextBoss = false
 
     @ObservedObject private var smartNotifier = SmartNotifier.shared
     @ObservedObject private var weeklyNotifier = WeeklyMilestoneNotifier.shared
@@ -266,6 +267,17 @@ struct SettingsView: View {
                             title: "Arrive at Work",
                             subtitle: "Start your live shift when you get there"
                         )
+                    }
+                    if crewTextBoss {
+                        NavigationLink {
+                            CrewTextBossSettingsView()
+                        } label: {
+                            SettingsRowLabel(
+                                icon: "message.fill",
+                                title: "Text your boss",
+                                subtitle: "After you log today's shift"
+                            )
+                        }
                     }
                 } header: {
                     SectionEyebrow("Notifications")

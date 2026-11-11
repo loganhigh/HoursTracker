@@ -1,7 +1,7 @@
 import SwiftUI
 import FirebaseFunctions
 
-/// Edit-user sheet section: turns the crew-only "Clock Out" Shortcuts action
+/// Edit-user sheet section: turns the crew-only "Text your boss" feature
 /// on or off for this user. Applies immediately.
 struct AdminCrewShortcutSection: View {
     let uid: String
@@ -23,7 +23,7 @@ struct AdminCrewShortcutSection: View {
 
     var body: some View {
         Section {
-            Toggle("Clock Out shortcut", isOn: $enabled)
+            Toggle("Text your boss", isOn: $enabled)
                 .disabled(isSaving)
                 .onChange(of: enabled) { old, new in
                     guard old != new else { return }
@@ -37,7 +37,7 @@ struct AdminCrewShortcutSection: View {
         } header: {
             Text("Crew")
         } footer: {
-            Text("Lets them use Hour Tracker's \"Clock Out\" action in the Shortcuts app, e.g. clock out and text the boss in one go. Off for everyone else.")
+            Text("Adds Settings → Text your boss. After they log today's shift, Messages opens with their boss and \"Just leaving the yard now\" filled in. Off for everyone else.")
         }
     }
 
