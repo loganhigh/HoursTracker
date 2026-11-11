@@ -179,10 +179,18 @@ struct CrewTextBossSettingsView: View {
     var body: some View {
         List {
             Section {
-                Toggle(isOn: $on) {
-                    SettingsRowLabel(icon: "message.fill", title: "Text after I log today's shift")
+                VStack(spacing: AppSpacing.xs) {
+                    SettingsIconSquare(icon: "message.fill", tint: AppColors.accent)
+                    Text("Text after I log today's shift")
+                        .appText(.headline)
+                        .foregroundStyle(AppColors.text)
+                    Toggle("Text after I log today's shift", isOn: $on)
+                        .labelsHidden()
+                        .tint(AppColors.accent)
                 }
-                .tint(AppColors.accent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, AppSpacing.xxs)
+                .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
 
                 Button {
                     BossContactPicker.shared.present { pickedName, pickedPhone in
@@ -190,26 +198,36 @@ struct CrewTextBossSettingsView: View {
                         phone = pickedPhone
                     }
                 } label: {
-                    HStack(spacing: AppSpacing.sm) {
-                        SettingsRowLabel(
-                            icon: "person.crop.circle.fill",
-                            title: phone.isEmpty ? "Choose your boss" : name,
-                            subtitle: phone.isEmpty ? "From your contacts" : phone
-                        )
-                        Spacer(minLength: AppSpacing.xs)
-                        SettingsChevron()
+                    VStack(spacing: 2) {
+                        SettingsIconSquare(icon: "person.crop.circle.fill", tint: AppColors.accent)
+                            .padding(.bottom, 4)
+                        Text(phone.isEmpty ? "Choose your boss" : name)
+                            .appText(.headline)
+                            .foregroundStyle(AppColors.text)
+                        Text(phone.isEmpty ? "From your contacts" : phone)
+                            .appText(.caption)
+                            .foregroundStyle(AppColors.subtext)
                     }
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, AppSpacing.xxs)
+                    .overlay(alignment: .trailing) { SettingsChevron() }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             } header: {
                 SectionEyebrow("Text your boss")
             } footer: {
                 Text("When you log a shift for today, Messages opens with your boss and this text filled in. Just tap Send.")
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
             }
 
             Section {
                 TextField(CrewTextBoss.defaultMessage, text: $message, axis: .vertical)
                     .lineLimit(1...4)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
             } header: {
                 SectionEyebrow("Message")
             }
