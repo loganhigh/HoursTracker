@@ -367,6 +367,7 @@ struct HoursHomeView: View {
         guard newPhase == .active else { return }
         // "Next time they use the app" includes coming back from background.
         AnnouncementService.shared.checkForAnnouncement()
+        Task { await CrewFeatures.shared.refresh() }
         guard friendsEnabled else { return }
         guard authService.user?.uid != nil else { return }
         Task { await friendsService.refreshFriendProfiles() }

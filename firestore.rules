@@ -55,19 +55,20 @@ service cloud.firestore {
     // to every client push). The client only ever writes its own mirror copy under
     // users/{uid}/gamification/current — never this doc — so blocking it here costs
     // nothing and stops a self-issued grant from inflating level/prestige/rank.
+    // `clockOutShortcut` is the admin-granted crew feature (Clock Out shortcut).
     // `username` is also server-only: the claimUsername callable reserves it
     // in usernames/{name} inside a transaction, which is what makes handles
     // unique. A client writing the field directly would skip that.
     function noAdminOnlyFieldsCreate() {
       return !request.resource.data.keys()
         .hasAny(['adminFloorLevel', 'adminFloorPrestige', 'adminEquippedTitle',
-                 'adminXPOffset', 'username', 'tipTotal', 'tipCount']);
+                 'adminXPOffset', 'username', 'tipTotal', 'tipCount', 'clockOutShortcut']);
     }
 
     function noAdminOnlyFieldsUpdate() {
       return !request.resource.data.diff(resource.data).affectedKeys()
         .hasAny(['adminFloorLevel', 'adminFloorPrestige', 'adminEquippedTitle',
-                 'adminXPOffset', 'username', 'tipTotal', 'tipCount']);
+                 'adminXPOffset', 'username', 'tipTotal', 'tipCount', 'clockOutShortcut']);
     }
 
     match /publicProfiles/{profileUid} {

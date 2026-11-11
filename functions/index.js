@@ -1125,6 +1125,8 @@ function buildAdminUserRow(uid, userData, profileData, authData, presenceData) {
     // that writes it yet.
     appVersion: String(u.appVersion || ""),
     appBuild: String(u.appBuild || ""),
+    // Crew-only "Clock Out" Shortcuts action, switched on per user by admin.
+    clockOutShortcut: u.clockOutShortcut === true,
     // Tip ledger roll-up (written by notifyAdminOnTip).
     tipCount: Number(u.tipCount) || 0,
     tipTotal: Math.round((Number(u.tipTotal) || 0) * 100) / 100,
@@ -2740,6 +2742,29 @@ exports.adminSetVerified = onCall(
     await db.collection("publicProfiles").doc(targetUid)
       .set({ hasReviewedApp: verified }, { merge: true });
     return { status: "ok", targetUid, verified };
+  }
+);
+
+/**
+ * Admin-only: turn the crew "Clock Out" Shortcuts action on or off for one
+ * user. users/{uid}.clockOutShortcut is server-only (firestore.rules); the
+ * app reads it and the action refuses to run without it.
+ */
+exports.adminSetClockOutShortcut = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE] },
+  async (request) => {
+    assertAdmin(request);
+    const targetUid = request.data?.targetUid;
+    if (!targetUid || typeof targetUid !== "string") {
+      throw new HttpsError("invalid-argument", "targetUid is required.");
+    }
+    if (typeof request.data?.enabled !== "boolean") {
+      throw new HttpsError("invalid-argument", "enabled must be a boolean.");
+    }
+    const enabled = request.data.enabled;
+    await db.collection("users").doc(targetUid)
+      .set({ clockOutShortcut: enabled }, { merge: true });
+    return { status: "ok", targetUid, enabled };
   }
 );
 

@@ -47,6 +47,7 @@ struct AdminUser: Identifiable, Equatable {
     /// in a single currency).
     var tipCount: Int = 0
     var tipTotal: Double = 0
+    var clockOutShortcut: Bool = false
     var tipCurrency: String = ""
     var lastTipAt: Date?
 
@@ -758,6 +759,7 @@ private extension AdminUser {
         user.appBuild = dict["appBuild"] as? String ?? ""
         user.tipCount = int("tipCount") ?? 0
         user.tipTotal = double("tipTotal")
+        user.clockOutShortcut = dict["clockOutShortcut"] as? Bool ?? false
         user.tipCurrency = dict["tipCurrency"] as? String ?? ""
         user.lastTipAt = date("lastTipMs")
         return user
@@ -971,6 +973,12 @@ private struct AdminEditUserSheet: View {
                 AdminSupporterCreditSection(uid: user.uid, passcode: passcode, currentTotal: user.tipTotal) { total in
                     var updated = user
                     updated.tipTotal = total
+                    onSaved(updated)
+                }
+
+                AdminCrewShortcutSection(uid: user.uid, passcode: passcode, enabled: user.clockOutShortcut) { on in
+                    var updated = user
+                    updated.clockOutShortcut = on
                     onSaved(updated)
                 }
 
