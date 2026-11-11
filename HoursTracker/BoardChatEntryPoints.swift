@@ -76,38 +76,38 @@ struct UnreadDot: View {
     }
 }
 
-/// Shown once at the top of the full leaderboard.
+/// Shown on the first visit to the full leaderboard only.
 struct BoardChatIntroBanner: View {
     let onOpen: () -> Void
     let onDismiss: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        VStack(spacing: 6) {
             Image(systemName: "bubble.left.and.bubble.right.fill")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(AppColors.accent)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("New: Board Chat")
-                    .appText(.headline)
-                    .foregroundStyle(AppColors.text)
-                Text("Talk with everyone on the leaderboard. Tag someone with their @username to let them know.")
+            Text("New: Board Chat")
+                .appText(.headline)
+                .foregroundStyle(AppColors.text)
+            Text("Talk with everyone on the leaderboard.")
+                .appText(.subheadline)
+                .foregroundStyle(AppColors.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                Haptics.lightTap()
+                onOpen()
+            } label: {
+                Text("Open chat")
                     .appText(.subheadline)
-                    .foregroundStyle(AppColors.subtext)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button {
-                    Haptics.lightTap()
-                    onOpen()
-                } label: {
-                    Text("Open chat")
-                        .appText(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(AppColors.accent)
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(AppColors.accent)
             }
-            Spacer(minLength: 0)
+            .buttonStyle(.plain)
+            .padding(.top, 2)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .overlay(alignment: .topTrailing) {
             Button {
                 onDismiss()
             } label: {
@@ -118,6 +118,7 @@ struct BoardChatIntroBanner: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss")
+            .offset(x: 6, y: -6)
         }
         .padding(AppSpacing.md)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(AppColors.card))

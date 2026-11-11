@@ -25,8 +25,9 @@ struct GlobalLeaderboardView: View {
     @ObservedObject private var chat = ChatService.shared
     @ObservedObject private var notificationRouter = NotificationRouter.shared
     @State private var showingChat = false
-    /// One-time "New: Board Chat" banner.
+    /// One-time "New: Board Chat" banner: shown on the first visit only.
     @AppStorage("board_chat_intro_seen_v1") private var chatIntroSeen = false
+    @State private var showingChatIntro = false
     @State private var showingInbox = false
     @State private var dmTarget: DirectThreadTarget?
     /// Tracker whose public glimpse sheet is open (any row or podium slot).
@@ -81,17 +82,15 @@ struct GlobalLeaderboardView: View {
             GlobalLeaderboardHeader(
                 onBack: { dismiss() },
                 unreadMessages: chat.unreadDirectCount,
-                chatUnread: chat.hasUnreadGlobal,
-                onChat: { chatIntroSeen = true; showingChat = true },
                 onMessages: { showingInbox = true }
             )
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.bottom, AppSpacing.sm)
 
-            if !chatIntroSeen {
+            if showingChatIntro {
                 BoardChatIntroBanner(
-                    onOpen: { chatIntroSeen = true; showingChat = true },
-                    onDismiss: { withAnimation { chatIntroSeen = true } }
+                    onOpen: { showingChat = true },
+                    onDismiss: { withAnimation { showingChatIntro = false } }
                 )
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.bottom, AppSpacing.sm)
@@ -121,10 +120,13 @@ struct GlobalLeaderboardView: View {
         .navigationDestination(item: $dmTarget) { DirectThreadView(target: $0) }
         .onAppear {
             chat.startInbox()
-            chat.startLatestGlobal()
+            // Board Chat lives on Home now; the board just introduces it once.
+            if !chatIntroSeen {
+                chatIntroSeen = true
+                showingChatIntro = true
+            }
             consumeChatRoute()
         }
-        .onDisappear { chat.stopLatestGlobal() }
         .onChange(of: notificationRouter.openGlobalChat) { _, _ in consumeChatRoute() }
         .onChange(of: notificationRouter.openDirectThread) { _, _ in consumeChatRoute() }
         .task {
