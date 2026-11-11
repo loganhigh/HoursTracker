@@ -217,6 +217,10 @@ struct AddShiftWizardView: View {
 
     @ViewBuilder
     private var whenStep: some View {
+        if shiftKind == .work {
+            ArrivalAddShiftCard(store: store)
+        }
+
         if store.hasMultipleJobs, shiftKind != .holiday {
             JobPickerMenu(store: store, selection: jobID) { jobID = $0 }
                 .frame(maxWidth: .infinity, alignment: .leading)

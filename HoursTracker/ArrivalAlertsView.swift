@@ -124,9 +124,11 @@ struct ArrivalAlertsView: View {
 
 // MARK: - Add / edit one place
 
-private struct ArrivalSiteEditor: View {
+struct ArrivalSiteEditor: View {
     @ObservedObject var store: HoursStore
     let existing: ArrivalSite?
+    /// Called after a successful save (onboarding uses it to move on).
+    var onSaved: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     @State private var name: String
@@ -135,9 +137,10 @@ private struct ArrivalSiteEditor: View {
     @State private var enabled: Bool
     @State private var showingMap = false
 
-    init(store: HoursStore, site: ArrivalSite?) {
+    init(store: HoursStore, site: ArrivalSite?, onSaved: (() -> Void)? = nil) {
         self.store = store
         existing = site
+        self.onSaved = onSaved
         _name = State(initialValue: site?.name ?? "")
         _place = State(initialValue: site?.place ?? ShiftPlace())
         _radius = State(initialValue: site?.radius ?? 150)
@@ -236,6 +239,7 @@ private struct ArrivalSiteEditor: View {
                         if !ArrivalMonitor.shared.isEnabled { ArrivalMonitor.shared.setEnabled(true) }
                         Haptics.success()
                         dismiss()
+                        onSaved?()
                     }
                     .disabled(!canSave)
                 }
