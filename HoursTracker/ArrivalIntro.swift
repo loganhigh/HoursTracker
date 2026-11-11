@@ -17,33 +17,35 @@ struct ArrivalAddShiftCard: View {
     var body: some View {
         if !dismissed && monitor.sites.isEmpty {
             AddShiftPanel(tint: AppColors.accent) {
-                HStack(alignment: .top, spacing: AppSpacing.sm) {
+                VStack(spacing: 6) {
                     Image(systemName: "location.fill")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(AppColors.accent)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 36, height: 36)
                         .background(Circle().fill(AppColors.accent.opacity(0.14)))
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Start shifts when you get to work")
-                            .appText(.headline)
-                            .foregroundStyle(AppColors.text)
-                        Text("Add your work location and get a tap to start your live shift when you arrive, and to clock out when you leave.")
+                    Text("Start shifts when you get to work")
+                        .appText(.headline)
+                        .foregroundStyle(AppColors.text)
+                    Text("Add your work location and get a tap to start your live shift when you arrive, and to clock out when you leave.")
+                        .appText(.subheadline)
+                        .foregroundStyle(AppColors.subtext)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        Haptics.lightTap()
+                        settingUp = true
+                    } label: {
+                        Text("Add work location")
                             .appText(.subheadline)
-                            .foregroundStyle(AppColors.subtext)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button {
-                            Haptics.lightTap()
-                            settingUp = true
-                        } label: {
-                            Text("Add work location")
-                                .appText(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(AppColors.accent)
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.top, 2)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(AppColors.accent)
                     }
-                    Spacer(minLength: 0)
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, AppSpacing.md)
+                .overlay(alignment: .topTrailing) {
                     Button {
                         withAnimation(.easeOut(duration: 0.2)) { dismissed = true }
                     } label: {
@@ -54,6 +56,7 @@ struct ArrivalAddShiftCard: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Dismiss")
+                    .offset(x: 6, y: -6)
                 }
             }
             .sheet(isPresented: $settingUp) {
