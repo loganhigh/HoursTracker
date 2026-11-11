@@ -31,33 +31,28 @@ enum ReviewAskPolicy {
     static let milestoneShifts = 30
     static let levelUpMinShifts = 10
     static let starSheetCooldown: TimeInterval = 120 * 86_400
-    /// After someone taps "Write a review", leave them alone this long.
-    static let wroteCooldown: TimeInterval = 365 * 86_400
     /// Never two asks of any kind within this window.
     static let anyAskGap: TimeInterval = 7 * 86_400
-
-    static func recentlyWrote(_ wroteAt: Date?, now: Date) -> Bool {
-        guard let wroteAt else { return false }
-        return now.timeIntervalSince(wroteAt) < wroteCooldown
-    }
 
     static func askedRecently(_ lastAskAt: Date?, now: Date) -> Bool {
         guard let lastAskAt else { return false }
         return now.timeIntervalSince(lastAskAt) < anyAskGap
     }
 
-    static func shouldAskAfterPrestige(wroteAt: Date?, now: Date) -> Bool {
-        !recentlyWrote(wroteAt, now: now)
+    /// `reviewed`: tapped "Write a review" before, or has the verified
+    /// reviewer badge. Either way, never ask again.
+    static func shouldAskAfterPrestige(reviewed: Bool) -> Bool {
+        !reviewed
     }
 
-    static func shouldAskAtMilestone(workShifts: Int, alreadyAsked: Bool, wroteAt: Date?, lastAskAt: Date?, now: Date) -> Bool {
+    static func shouldAskAtMilestone(workShifts: Int, alreadyAsked: Bool, reviewed: Bool, lastAskAt: Date?, now: Date) -> Bool {
         workShifts >= milestoneShifts && !alreadyAsked
-            && !recentlyWrote(wroteAt, now: now) && !askedRecently(lastAskAt, now: now)
+            && !reviewed && !askedRecently(lastAskAt, now: now)
     }
 
-    static func shouldShowStarSheet(workShifts: Int, lastStarAt: Date?, wroteAt: Date?, lastAskAt: Date?, now: Date) -> Bool {
+    static func shouldShowStarSheet(workShifts: Int, lastStarAt: Date?, reviewed: Bool, lastAskAt: Date?, now: Date) -> Bool {
         guard workShifts >= levelUpMinShifts,
-              !recentlyWrote(wroteAt, now: now),
+              !reviewed,
               !askedRecently(lastAskAt, now: now) else { return false }
         guard let lastStarAt else { return true }
         return now.timeIntervalSince(lastStarAt) >= starSheetCooldown
@@ -83,12 +78,18 @@ final class ReviewPromptCenter: ObservableObject {
         return t > 0 ? Date(timeIntervalSince1970: t) : nil
     }
 
+    /// Tapped "Write a review" on this device, or holds the verified
+    /// reviewer badge (granted from a review screenshot).
+    private var reviewed: Bool {
+        date(Key.wroteAt) != nil || VerifiedStatusService.shared.isVerified
+    }
+
     private func stamp(_ key: String, _ now: Date) {
         defaults.set(now.timeIntervalSince1970, forKey: key)
     }
 
     func afterPrestige(_ prestige: Int, now: Date = Date()) {
-        guard ReviewAskPolicy.shouldAskAfterPrestige(wroteAt: date(Key.wroteAt), now: now) else { return }
+        guard ReviewAskPolicy.shouldAskAfterPrestige(reviewed: reviewed) else { return }
         present(.prestige(prestige), now: now)
     }
 
@@ -96,7 +97,7 @@ final class ReviewPromptCenter: ObservableObject {
         guard pending == nil, ReviewAskPolicy.shouldAskAtMilestone(
             workShifts: workShifts,
             alreadyAsked: defaults.bool(forKey: Key.milestoneAsked),
-            wroteAt: date(Key.wroteAt),
+            reviewed: reviewed,
             lastAskAt: date(Key.lastAskAt),
             now: now
         ) else { return }
@@ -108,7 +109,7 @@ final class ReviewPromptCenter: ObservableObject {
         guard pending == nil, ReviewAskPolicy.shouldShowStarSheet(
             workShifts: workShifts,
             lastStarAt: date(Key.lastStarAt),
-            wroteAt: date(Key.wroteAt),
+            reviewed: reviewed,
             lastAskAt: date(Key.lastAskAt),
             now: now
         ) else { return }
