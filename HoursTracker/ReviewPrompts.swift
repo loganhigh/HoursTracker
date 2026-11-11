@@ -22,7 +22,7 @@ enum ReviewAskReason: Equatable {
     }
 
     var message: String {
-        "A quick written review helps other workers find the app. Tell them what job you do and how you use it."
+        "Help Logan with a written review! It helps new users find the app."
     }
 }
 
