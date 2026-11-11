@@ -87,16 +87,6 @@ struct GlobalLeaderboardView: View {
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.bottom, AppSpacing.sm)
 
-            if showingChatIntro {
-                BoardChatIntroBanner(
-                    onOpen: { showingChat = true },
-                    onDismiss: { withAnimation { showingChatIntro = false } }
-                )
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.bottom, AppSpacing.sm)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
             content
         }
         .background(AppColors.bg.ignoresSafeArea())
@@ -174,6 +164,15 @@ struct GlobalLeaderboardView: View {
             ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: AppSpacing.sm) {
+                    // First item in the list, so it scrolls away with it.
+                    if showingChatIntro {
+                        BoardChatIntroBanner(
+                            onOpen: { showingChat = true },
+                            onDismiss: { withAnimation { showingChatIntro = false } }
+                        )
+                        .transition(.opacity)
+                    }
+
                     GlobalRankHeroCard(rank: displayedMyRank)
                         .cardAppear(index: 0, group: "globalBoard")
 
