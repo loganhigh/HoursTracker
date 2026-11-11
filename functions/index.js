@@ -36,6 +36,7 @@ const usernames = require("./src/social/usernames");
 const chat = require("./src/social/chat");
 const adminAnalytics = require("./src/admin/analytics");
 const winback = require("./src/admin/winback");
+const updatePush = require("./src/admin/updatePush");
 const prestigeReady = require("./src/stats/prestigeReady");
 const { supporterInfo } = require("./src/supporter");
 const { initializeApp } = require("firebase-admin/app");
@@ -2801,9 +2802,43 @@ exports.adminPublishAnnouncement = onCall(
       buttonTitle: kind === "update" ? "Update Now" : "Got it",
       createdAt: FieldValue.serverTimestamp(),
     });
-    return { status: "ok", id };
+    // Optional "New Update!" push, only to devices on an older version.
+    let pushed = 0;
+    if (kind === "update" && request.data?.sendPush === true) {
+      pushed = await sendUpdatePushToOutdated(version);
+    }
+    return { status: "ok", id, pushed };
   }
 );
+
+/** Pushes "New Update!" to every user whose last-reported version is older. Never throws. */
+async function sendUpdatePushToOutdated(version) {
+  const { title, body } = updatePush.updatePushMessage(version);
+  let pushed = 0;
+  try {
+    const snap = await db.collection("users").get();
+    const targets = snap.docs.filter((d) => updatePush.needsUpdatePush(d.data(), version));
+    for (let i = 0; i < targets.length; i += 25) {
+      await Promise.all(targets.slice(i, i + 25).map(async (doc) => {
+        try {
+          await sendPushToUser(doc.id, doc.data(), {
+            title,
+            body,
+            dataPayload: { kind: "appUpdate" },
+            threadId: "app_update",
+          });
+          pushed++;
+        } catch (err) {
+          console.warn(`update push failed uid=${doc.id}:`, err?.message || err);
+        }
+      }));
+    }
+    console.log(`update push v${version}: users=${targets.length}`);
+  } catch (err) {
+    console.warn("update push failed:", err?.message || err);
+  }
+  return pushed;
+}
 
 /** Admin-only: take the current announcement down. */
 exports.adminClearAnnouncement = onCall(

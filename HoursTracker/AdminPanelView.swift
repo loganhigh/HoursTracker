@@ -1543,6 +1543,8 @@ struct AdminAnnouncementView: View {
     /// never see the prompt. Defaults to this (admin's) build; change it when
     /// you're on a TestFlight build that isn't live in the App Store yet.
     @State private var targetVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    /// Also push "New Update! Version X…" to everyone on an older version.
+    @State private var sendUpdatePush = true
     @State private var isPublishing = false
     @State private var isClearing = false
     @State private var statusMessage: String?
@@ -1562,11 +1564,14 @@ struct AdminAnnouncementView: View {
                 if isUpdatePrompt {
                     TextField("Latest App Store version (e.g. 3.4)", text: $targetVersion)
                         .keyboardType(.decimalPad)
+                    Toggle(isOn: $sendUpdatePush) {
+                        Text("Push \"New Update!\" to out-of-date users")
+                    }
                 }
             } header: {
                 Text("Compose")
             } footer: {
-                Text("Only the latest announcement is ever shown: publishing replaces the previous one. It shows once to every user the next time they open the app — except accounts created after you publish, and (for an update) anyone already on the latest version — a card like the country-flag prompt, with \(isUpdatePrompt ? "an Update Now button that opens the App Store listing" : "a Got it button") and Not Now. Publishing again later re-prompts everyone. Write {name} anywhere in the title or message and each user sees their own username there. No push notification is sent.")
+                Text("Only the latest announcement is ever shown: publishing replaces the previous one. It shows once to every user the next time they open the app — except accounts created after you publish, and (for an update) anyone already on the latest version — a card like the country-flag prompt, with \(isUpdatePrompt ? "an Update Now button that opens the App Store listing" : "a Got it button") and Not Now. Publishing again later re-prompts everyone. Write {name} anywhere in the title or message and each user sees their own username there. \(isUpdatePrompt && sendUpdatePush ? "Also sends a push — \"New Update! Version \(targetVersion) is here. Get the latest features.\" — to everyone on an older version. Only publish once the version is live in the App Store." : "No push notification is sent.")")
             }
             .listRowBackground(AppTheme.Colors.card)
 
@@ -1615,17 +1620,20 @@ struct AdminAnnouncementView: View {
         errorMessage = nil
         defer { isPublishing = false }
         do {
-            _ = try await functions.httpsCallable("adminPublishAnnouncement").call([
+            let result = try await functions.httpsCallable("adminPublishAnnouncement").call([
                 "passcode": passcode,
                 "title": title.trimmingCharacters(in: .whitespaces),
                 "message": message.trimmingCharacters(in: .whitespaces),
                 "kind": isUpdatePrompt ? "update" : "info",
                 "version": isUpdatePrompt ? targetVersion.trimmingCharacters(in: .whitespaces) : "",
+                "sendPush": isUpdatePrompt && sendUpdatePush,
             ])
-            // No push: the card reaches everyone on their next open, once,
-            // and skips people already updated. The old blast push went to
-            // every device, updated or not, on every publish.
-            let status = "Published. Every user sees it once on their next app open."
+            // The card reaches everyone on their next open, once. The push
+            // (optional) goes only to users on an older version.
+            var status = "Published. Every user sees it once on their next app open."
+            if let pushed = (result.data as? [String: Any])?["pushed"] as? Int, isUpdatePrompt && sendUpdatePush {
+                status += " Update push sent to \(pushed) out-of-date users."
+            }
             Haptics.success()
             statusMessage = status
         } catch {
