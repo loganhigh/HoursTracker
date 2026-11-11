@@ -76,4 +76,28 @@ final class CatchUpPlannerTests: XCTestCase {
         let afternoon = SmartNotifier.firstShiftNudgeDate(now: at(2, 14), calendar: cal)
         XCTAssertEqual(cal.component(.hour, from: afternoon), 17)
     }
+
+    // MARK: Clock Out shortcut with no live shift
+
+    func testClockOutLogsTodayFromUsualStartToNow() {
+        // Usual Wednesday: 7am, 30m break. Now is Wed Mar 18 at 5:15pm.
+        let entries = [shift(4), shift(9), shift(11)]
+        let now = cal.date(bySettingHour: 17, minute: 15, second: 0, of: day(18))!
+        let e = ClockOutPlanner.shiftEndingNow(entries: entries, now: now, calendar: cal)
+        XCTAssertNotNil(e)
+        XCTAssertEqual(cal.component(.hour, from: e!.start), 7)
+        XCTAssertEqual(e!.end, now)
+        XCTAssertEqual(e!.breakMinutes, 30)
+    }
+
+    func testClockOutSkipsWhenTodayAlreadyLoggedOrNoHistory() {
+        let now = cal.date(bySettingHour: 17, minute: 0, second: 0, of: day(18))!
+        XCTAssertNil(ClockOutPlanner.shiftEndingNow(entries: [shift(11), shift(18)], now: now, calendar: cal))
+        XCTAssertNil(ClockOutPlanner.shiftEndingNow(entries: [], now: now, calendar: cal))
+    }
+
+    func testClockOutBeforeUsualStartLogsNothing() {
+        let now = cal.date(bySettingHour: 6, minute: 0, second: 0, of: day(18))!
+        XCTAssertNil(ClockOutPlanner.shiftEndingNow(entries: [shift(11)], now: now, calendar: cal))
+    }
 }
