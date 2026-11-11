@@ -9,7 +9,6 @@ import Combine
 // - 30th work shift: the same pop-up, once ("Enjoying Hour Tracker?").
 // - Level-ups (10+ shifts): Apple's star sheet, at most every 120 days.
 //   Apple caps that sheet at 3 a year per person anyway.
-// "Not really" goes to support email, so complaints reach us, not the store.
 
 enum ReviewAskReason: Equatable {
     case prestige(Int)
@@ -129,11 +128,6 @@ final class ReviewPromptCenter: ObservableObject {
         AppActions.openAppStoreWriteReview()
     }
 
-    func sendFeedback() {
-        close()
-        AppActions.contactSupportEmail()
-    }
-
     func close() {
         withAnimation(.easeOut(duration: 0.2)) { pending = nil }
     }
@@ -155,13 +149,6 @@ struct ReviewAskOverlay: View {
             }
             .buttonStyle(PrimaryButtonStyle())
             .padding(.top, AppSpacing.xxs)
-
-            Button("Not really? Tell us why") {
-                Haptics.lightTap()
-                center.sendFeedback()
-            }
-            .font(AppTypography.subheadline.weight(.semibold))
-            .foregroundStyle(AppColors.accent)
 
             Button("Not Now") {
                 Haptics.lightTap()
