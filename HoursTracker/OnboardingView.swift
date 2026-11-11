@@ -703,6 +703,10 @@ struct OnboardingView: View {
     // MARK: - Completion (same semantics as the old finishTutorial)
 
     private func finishOnboarding() {
+        // One-off "Log your first shift" push if they leave without one.
+        SmartNotifier.shared.scheduleFirstShiftNudgeIfNeeded(
+            hasShifts: store.entries.contains { !$0.isOffDay }
+        )
         // Sign-in runs last, and the auth path may set `profile_display_name`
         // from the cloud — which would discard the username the user chose
         // two screens earlier. Reassert it here, and push it so the first

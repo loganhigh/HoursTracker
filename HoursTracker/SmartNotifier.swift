@@ -305,6 +305,7 @@ class SmartNotifier: ObservableObject {
                 let entries = HoursStore.current?.entries ?? []
                 self.scheduleDailyReminder(entries: entries)
                 self.scheduleForgotHoursReminderIfNeeded(entries: entries)
+                if entries.contains(where: { !$0.isOffDay }) { self.cancelFirstShiftNudge() }
             }
             self.refreshWorkItem = item
             DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: item)
@@ -419,6 +420,58 @@ class SmartNotifier: ObservableObject {
         }
         guard calendar.component(.hour, from: now) < latestHour else { return nil }
         return UNTimeIntervalNotificationTrigger(timeInterval: 15 * 60, repeats: false)
+    }
+
+    // MARK: - First-shift nudge (one-off)
+
+    /// A quarter of new users finish onboarding and never log a shift. One
+    /// local push about three hours later sends them straight to Add Shift.
+    /// Sent at most once per install; cancelled as soon as any shift exists.
+    private static let firstShiftNudgeIdentifier = "first_shift_nudge"
+    private static let firstShiftNudgeScheduledKey = "first_shift_nudge_scheduled"
+
+    func scheduleFirstShiftNudgeIfNeeded(hasShifts: Bool, now: Date = Date()) {
+        guard !hasShifts,
+              !UserDefaults.standard.bool(forKey: Self.firstShiftNudgeScheduledKey) else { return }
+        Task {
+            guard await notificationManager.hasPermission() else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "Log your first shift"
+            content.body = "Add your first shift to see this week's pay."
+            content.sound = .default
+            content.userInfo = ["kind": "firstShiftNudge"]
+            let fire = Self.firstShiftNudgeDate(now: now, calendar: .current)
+            let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+            let request = UNNotificationRequest(
+                identifier: Self.firstShiftNudgeIdentifier,
+                content: content,
+                trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+            )
+            do {
+                try await UNUserNotificationCenter.current().add(request)
+                UserDefaults.standard.set(true, forKey: Self.firstShiftNudgeScheduledKey)
+            } catch {
+                #if DEBUG
+                print("Failed to schedule first-shift nudge: \(error)")
+                #endif
+            }
+        }
+    }
+
+    /// Three hours out, moved to 10am if that would land overnight.
+    static func firstShiftNudgeDate(now: Date, calendar: Calendar) -> Date {
+        let fire = now.addingTimeInterval(3 * 3600)
+        let hour = calendar.component(.hour, from: fire)
+        guard hour >= 22 || hour < 8 else { return fire }
+        var day = calendar.startOfDay(for: fire)
+        if hour >= 22, let next = calendar.date(byAdding: .day, value: 1, to: day) { day = next }
+        return calendar.date(bySettingHour: 10, minute: 0, second: 0, of: day) ?? fire
+    }
+
+    func cancelFirstShiftNudge() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: [Self.firstShiftNudgeIdentifier]
+        )
     }
 
     // MARK: - "Did you work today?" (forgot hours) reminder

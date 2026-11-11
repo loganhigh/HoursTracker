@@ -64,6 +64,9 @@ struct AppTabView: View {
     @ObservedObject private var crewService = CrewService.shared
     @ObservedObject private var notificationRouter = NotificationRouter.shared
     @ObservedObject private var friendsService = FriendsService.shared
+    @Environment(\.scenePhase) private var scenePhase
+    /// Usual workdays skipped since the last logged day (see CatchUpPlanner).
+    @State private var catchUp: CatchUpBatch?
 
     /// Intercepting selection binding: the "+" item opens the add-shift sheet
     /// instead of becoming the selected tab, and a request for a tab that isn't
@@ -110,6 +113,25 @@ struct AppTabView: View {
             onEnd: { endLiveShift(at: Date()) }
         )
         .animation(AppMotion.Spring.smooth, value: liveShift.activeShift != nil)
+    }
+
+    /// Offer to log skipped usual workdays — once the store has loaded, and
+    /// never on top of another sheet or a push that is routing somewhere.
+    private func checkCatchUp() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            guard catchUp == nil, store.isLoaded, authService.user != nil,
+                  !showingAddShift, !showingSettings,
+                  notificationRouter.arrivalPrompt == nil,
+                  !notificationRouter.openAddShift, !notificationRouter.openYouTab,
+                  !notificationRouter.openPrestigePrompt,
+                  !notificationRouter.openGlobalLeaderboard else { return }
+            let missed = CatchUpPlanner.missedShifts(
+                entries: store.entries,
+                dismissedDayKeys: CatchUpDismissals.keys,
+                liveShiftRunning: liveShift.activeShift != nil
+            )
+            if !missed.isEmpty { catchUp = CatchUpBatch(shifts: missed) }
+        }
     }
 
     private func openYouTabFromPush() {
@@ -182,6 +204,16 @@ struct AppTabView: View {
             if notificationRouter.openYouTab { openYouTabFromPush() }
             if notificationRouter.openAddShift { openAddShiftFromPush() }
             if let date = notificationRouter.clockOutLiveShiftAt { endLiveShift(at: date) }
+            checkCatchUp()
+        }
+        .onChange(of: store.isLoaded) { _, loaded in
+            if loaded { checkCatchUp() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { checkCatchUp() }
+        }
+        .sheet(item: $catchUp) { batch in
+            CatchUpSheet(shifts: batch.shifts, store: store)
         }
         .onChange(of: friendsEnabled) { _, isEnabled in
             // Friends can be the selected tab at the moment it's switched off

@@ -120,8 +120,8 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
                 router.openGlobalLeaderboard = true
             }
         }
-        if let kind = userInfo["kind"] as? String, kind == "winback" {
-            // "Add your recent shifts" — straight to Add Shift.
+        if let kind = userInfo["kind"] as? String, kind == "winback" || kind == "firstShiftNudge" {
+            // "Add your recent shifts" / "Log your first shift" — straight to Add Shift.
             Task { @MainActor in
                 NotificationRouter.shared.openAddShift = true
             }
