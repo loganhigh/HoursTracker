@@ -21,7 +21,7 @@ struct BoardChatHomeRow: View {
         NavigationLink {
             GlobalChatView()
         } label: {
-            HStack(spacing: 12) {
+            VStack(spacing: 6) {
                 Image(systemName: "bubble.left.and.bubble.right.fill")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(AppColors.accent)
@@ -30,23 +30,26 @@ struct BoardChatHomeRow: View {
                     .overlay(alignment: .topTrailing) {
                         if chat.hasUnreadGlobal { UnreadDot().offset(x: 2, y: -2) }
                     }
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text("Board Chat")
-                            .appText(.headline)
-                            .foregroundStyle(AppColors.text)
-                        if let at = chat.latestGlobal?.createdAt {
-                            Text(at, format: .relative(presentation: .named))
-                                .appText(.caption)
-                                .foregroundStyle(AppColors.subtext)
-                        }
+                HStack(spacing: 6) {
+                    Text("Board Chat")
+                        .appText(.headline)
+                        .foregroundStyle(AppColors.text)
+                    if let at = chat.latestGlobal?.createdAt {
+                        Text(at, format: .relative(presentation: .named))
+                            .appText(.caption)
+                            .foregroundStyle(AppColors.subtext)
                     }
-                    Text(preview)
-                        .appText(.subheadline)
-                        .foregroundStyle(chat.hasUnreadGlobal ? AppColors.text : AppColors.subtext)
-                        .lineLimit(1)
                 }
-                Spacer(minLength: 0)
+                Text(preview)
+                    .appText(.subheadline)
+                    .foregroundStyle(chat.hasUnreadGlobal ? AppColors.text : AppColors.subtext)
+                    .lineLimit(1)
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            // Room for the chevron on the right without pulling the text off center.
+            .padding(.horizontal, AppSpacing.lg)
+            .overlay(alignment: .trailing) {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(AppColors.subtext)
