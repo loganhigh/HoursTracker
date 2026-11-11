@@ -92,6 +92,8 @@ struct AdminPanelView: View {
     private let passcode = ""
     @State private var isLoading = false
     @State private var users: [AdminUser] = []
+    /// Pending verified-mark submissions, shown on the inbox row.
+    @State private var pendingVerified: Int?
     @State private var search = ""
     @State private var sort: AdminUserSort = .totalHours
     @State private var filters: Set<AdminUserFilter> = []
@@ -161,7 +163,8 @@ struct AdminPanelView: View {
                 guard isAdmin else { return }
                 async let list: Void = users.isEmpty ? loadUsers() : ()
                 async let stats: Void = analytics == nil ? loadAnalytics() : ()
-                _ = await (list, stats)
+                async let inbox: Void = loadPendingVerifiedCount()
+                _ = await (list, stats, inbox)
             }
             .navigationTitle("Admin")
             .navigationBarTitleDisplayMode(.inline)
@@ -230,8 +233,19 @@ struct AdminPanelView: View {
                             HStack(spacing: 8) {
                                 VerifiedBadgeView(variant: .static, size: 16)
                                 Text("Verified inbox")
+                                Spacer()
+                                if let pendingVerified, pendingVerified > 0 {
+                                    Text("\(pendingVerified) new")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(Capsule().fill(AppTheme.Colors.danger))
+                                }
                             }
                         }
+                        // Back from the inbox: refresh the count.
+                        .onAppear { Task { await loadPendingVerifiedCount() } }
                         .listRowBackground(AppTheme.Colors.card)
 
                         NavigationLink {
@@ -547,6 +561,13 @@ struct AdminPanelView: View {
     }
 
     // MARK: - Networking
+
+    private func loadPendingVerifiedCount() async {
+        guard let result = try? await functions.httpsCallable("adminListVerifiedInbox")
+            .call(["passcode": passcode]) else { return }
+        let data = result.data as? [String: Any] ?? [:]
+        pendingVerified = (data["items"] as? [Any])?.count ?? 0
+    }
 
     private func loadUsers() async {
         isLoading = true

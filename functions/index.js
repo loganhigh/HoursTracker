@@ -2617,6 +2617,23 @@ exports.submitVerifiedProof = onCall(
       submittedAt: FieldValue.serverTimestamp(),
     });
 
+    // Tell the admin there's something to review.
+    if (uid !== ADMIN_UID) {
+      try {
+        const username = String(p.username || u.username || "");
+        const who = username ? `@${username}` : (p.displayName || u.displayName || "Someone");
+        const adminSnap = await db.collection("users").doc(ADMIN_UID).get();
+        await sendPushToUser(ADMIN_UID, adminSnap.data() || {}, {
+          title: "New verified submission",
+          body: `${who} sent their review screenshot. Open Admin → Verified inbox.`,
+          dataPayload: { type: "admin_verified_submission", submitterUid: uid },
+          threadId: "admin_verified",
+        });
+      } catch (err) {
+        console.warn(`verified-submission admin push uid=${uid} failed:`, err?.message || err);
+      }
+    }
+
     return { status: "submitted" };
   }
 );
