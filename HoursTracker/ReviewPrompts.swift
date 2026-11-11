@@ -9,6 +9,8 @@ import Combine
 // - 30th work shift: the same pop-up, once ("Enjoying Hour Tracker?").
 // - Level-ups (10+ shifts): Apple's star sheet, at most every 120 days.
 //   Apple caps that sheet at 3 a year per person anyway.
+// The 30th-shift pop-up is the last ask: once it has shown, or once someone
+// taps "Write a review" (or has the verified reviewer badge), nothing asks again.
 
 enum ReviewAskReason: Equatable {
     case prestige(Int)
@@ -78,10 +80,12 @@ final class ReviewPromptCenter: ObservableObject {
         return t > 0 ? Date(timeIntervalSince1970: t) : nil
     }
 
-    /// Tapped "Write a review" on this device, or holds the verified
-    /// reviewer badge (granted from a review screenshot).
+    /// Done asking for good: tapped "Write a review", holds the verified
+    /// reviewer badge, or has already seen the 30th-shift pop-up (the last
+    /// ask anyone gets).
     private var reviewed: Bool {
         date(Key.wroteAt) != nil || VerifiedStatusService.shared.isVerified
+            || defaults.bool(forKey: Key.milestoneAsked)
     }
 
     private func stamp(_ key: String, _ now: Date) {
