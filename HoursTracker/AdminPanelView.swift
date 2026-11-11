@@ -235,18 +235,6 @@ struct AdminPanelView: View {
                         .listRowBackground(AppTheme.Colors.card)
 
                         NavigationLink {
-                            AdminSuggestionsView(passcode: passcode)
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "lightbulb.fill")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(AppTheme.Colors.accent)
-                                Text("Feature ideas")
-                            }
-                        }
-                        .listRowBackground(AppTheme.Colors.card)
-
-                        NavigationLink {
                             AdminVersionsView(users: users)
                         } label: {
                             HStack(spacing: 8) {
