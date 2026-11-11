@@ -1553,8 +1553,8 @@ struct AdminVerifiedInboxView: View {
 struct AdminAnnouncementView: View {
     let passcode: String
 
-    @State private var title = "Update available!"
-    @State private var message = "A new version of Hour Tracker is out with new features and fixes. Update now to get the latest."
+    @State private var title = AdminAnnouncementView.updateTitle
+    @State private var message = AdminAnnouncementView.updateMessage
     @State private var isUpdatePrompt = true
     /// The version an update prompt asks for — users already on it or newer
     /// never see the prompt. Defaults to this (admin's) build; change it when
@@ -1569,28 +1569,71 @@ struct AdminAnnouncementView: View {
 
     private let functions = Functions.functions(region: "us-central1")
 
+    private static let updateTitle = "Update available!"
+    private static let updateMessage = "A new version of Hour Tracker is out with new features and fixes. Update now to get the latest."
+
+    private var canPublish: Bool {
+        !isPublishing && !isClearing
+            && !title.trimmingCharacters(in: .whitespaces).isEmpty
+            && !message.trimmingCharacters(in: .whitespaces).isEmpty
+            && (!isUpdatePrompt || !targetVersion.trimmingCharacters(in: .whitespaces).isEmpty)
+    }
+
     var body: some View {
         Form {
+            Section {
+                Picker("Type", selection: $isUpdatePrompt) {
+                    Text("App update").tag(true)
+                    Text("Message").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .onChange(of: isUpdatePrompt) { _, isUpdate in
+                    // Swap the starter text, but never wipe what was typed.
+                    if isUpdate, title.isEmpty, message.isEmpty {
+                        title = Self.updateTitle
+                        message = Self.updateMessage
+                    } else if !isUpdate, title == Self.updateTitle, message == Self.updateMessage {
+                        title = ""
+                        message = ""
+                    }
+                }
+            }
+
+            if isUpdatePrompt {
+                Section {
+                    TextField("e.g. 3.8", text: $targetVersion)
+                        .keyboardType(.decimalPad)
+                } header: {
+                    Text("New version")
+                } footer: {
+                    Text("Only publish once this version is live in the App Store.")
+                }
+                .listRowBackground(AppTheme.Colors.card)
+            }
+
             Section {
                 TextField("Title", text: $title)
                 TextField("Message", text: $message, axis: .vertical)
                     .lineLimit(3...8)
-                Toggle(isOn: $isUpdatePrompt) {
-                    Text("Update button (opens the App Store)")
-                }
-                if isUpdatePrompt {
-                    TextField("Latest App Store version (e.g. 3.4)", text: $targetVersion)
-                        .keyboardType(.decimalPad)
-                    Toggle(isOn: $sendUpdatePush) {
-                        Text("Push \"New Update!\" to out-of-date users")
-                    }
-                }
             } header: {
-                Text("Compose")
+                Text("What users see")
             } footer: {
-                Text("Only the latest announcement is ever shown: publishing replaces the previous one. It shows once to every user the next time they open the app — except accounts created after you publish, and (for an update) anyone already on the latest version — a card like the country-flag prompt, with \(isUpdatePrompt ? "an Update Now button that opens the App Store listing" : "a Got it button") and Not Now. Publishing again later re-prompts everyone. Write {name} anywhere in the title or message and each user sees their own username there. \(isUpdatePrompt && sendUpdatePush ? "Also sends a push — \"New Update! Version \(targetVersion) is here. Get the latest features.\" — to everyone on an older version. Only publish once the version is live in the App Store." : "No push notification is sent.")")
+                Text("Tip: write {name} and each user sees their own username.")
             }
             .listRowBackground(AppTheme.Colors.card)
+
+            if isUpdatePrompt {
+                Section {
+                    Toggle("Send a push notification", isOn: $sendUpdatePush)
+                } footer: {
+                    Text(sendUpdatePush
+                         ? "\"New Update! Version \(targetVersion) is here.\" goes to everyone on an older version."
+                         : "No push. They'll see it when they next open the app.")
+                }
+                .listRowBackground(AppTheme.Colors.card)
+            }
 
             Section {
                 Button {
@@ -1598,30 +1641,36 @@ struct AdminAnnouncementView: View {
                 } label: {
                     HStack {
                         if isPublishing { ProgressView() }
-                        Text(isPublishing ? "Publishing…" : "Publish to all users")
+                        Text(isPublishing ? "Publishing…" : "Publish")
                             .fontWeight(.bold)
                     }
+                    .frame(maxWidth: .infinity)
                 }
-                .disabled(isPublishing || isClearing
-                          || title.trimmingCharacters(in: .whitespaces).isEmpty
-                          || message.trimmingCharacters(in: .whitespaces).isEmpty
-                          || (isUpdatePrompt && targetVersion.trimmingCharacters(in: .whitespaces).isEmpty))
-
-                Button(role: .destructive) {
-                    Task { await clear() }
-                } label: {
-                    HStack {
-                        if isClearing { ProgressView() }
-                        Text(isClearing ? "Clearing…" : "Clear current announcement")
-                    }
-                }
-                .disabled(isPublishing || isClearing)
+                .disabled(!canPublish)
             } footer: {
                 if let statusMessage {
                     Text(statusMessage).foregroundStyle(AppTheme.Colors.success)
                 } else if let errorMessage {
                     Text(errorMessage).foregroundStyle(AppTheme.Colors.danger)
+                } else {
+                    Text(isUpdatePrompt
+                         ? "Shows once, with an Update button, to everyone on an older version. Replaces any earlier announcement."
+                         : "Shows once to everyone the next time they open the app. Replaces any earlier announcement.")
                 }
+            }
+            .listRowBackground(AppTheme.Colors.card)
+
+            Section {
+                Button(role: .destructive) {
+                    Task { await clear() }
+                } label: {
+                    HStack {
+                        if isClearing { ProgressView() }
+                        Text(isClearing ? "Removing…" : "Remove current announcement")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .disabled(isPublishing || isClearing)
             }
             .listRowBackground(AppTheme.Colors.card)
         }
@@ -1647,9 +1696,9 @@ struct AdminAnnouncementView: View {
             ])
             // The card reaches everyone on their next open, once. The push
             // (optional) goes only to users on an older version.
-            var status = "Published. Every user sees it once on their next app open."
+            var status = "Published."
             if let pushed = (result.data as? [String: Any])?["pushed"] as? Int, isUpdatePrompt && sendUpdatePush {
-                status += " Update push sent to \(pushed) out-of-date users."
+                status += " Push sent to \(pushed) people on an older version."
             }
             Haptics.success()
             statusMessage = status
@@ -1668,7 +1717,7 @@ struct AdminAnnouncementView: View {
             _ = try await functions.httpsCallable("adminClearAnnouncement")
                 .call(["passcode": passcode])
             Haptics.success()
-            statusMessage = "Announcement cleared."
+            statusMessage = "Announcement removed."
         } catch {
             Haptics.error()
             errorMessage = error.localizedDescription
