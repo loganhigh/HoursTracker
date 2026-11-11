@@ -39,7 +39,7 @@ const winback = require("./src/admin/winback");
 const prestigeReady = require("./src/stats/prestigeReady");
 const { supporterInfo } = require("./src/supporter");
 const { initializeApp } = require("firebase-admin/app");
-const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const { getMessaging } = require("firebase-admin/messaging");
 const { getStorage } = require("firebase-admin/storage");
@@ -3085,6 +3085,47 @@ function validatedChatText(raw) {
   return text;
 }
 
+/**
+ * "All messages" Board Chat subscribers: one summary push, at most every
+ * 30 minutes each, skipped for anyone reading the chat right now, the
+ * sender, people just tagged (they got the mention push) and anyone who
+ * blocked the sender. Never throws — a failed digest must not fail the send.
+ */
+async function notifyBoardChatSubscribers({ senderUid, sender, text, messageId, skipUids }) {
+  try {
+    const subs = await db.collection("users").where("boardChatAlerts", "==", "all").get();
+    const nowMs = Date.now();
+    await Promise.all(subs.docs.map(async (doc) => {
+      const targetUid = doc.id;
+      if (targetUid === senderUid || skipUids.includes(targetUid)) return;
+      const data = doc.data();
+      const readSnap = await db.collection("globalChatReads").doc(targetUid).get();
+      const lastReadAt = readSnap.data()?.lastReadAt;
+      if (!chat.shouldSendDigest({ lastDigestAt: data.boardChatDigestAt, lastReadAt, nowMs })) return;
+      if (await hasBlocked(targetUid, senderUid)) return;
+      let unread = 1;
+      try {
+        const since = lastReadAt || Timestamp.fromMillis(nowMs - 24 * 3600 * 1000);
+        const agg = await db.collection("globalChat").where("createdAt", ">", since).count().get();
+        unread = agg.data().count || 1;
+      } catch (_) { /* count is cosmetic */ }
+      await doc.ref.set({ boardChatDigestAt: FieldValue.serverTimestamp() }, { merge: true });
+      await sendPushToUser(targetUid, data, {
+        title: chat.digestTitle(unread),
+        body: `@${sender.username}: ${chat.pushPreview(text)}`,
+        dataPayload: {
+          type: "board_chat", kind: "boardChat", messageId,
+          fromUid: senderUid, fromUsername: sender.username,
+        },
+        category: "CHAT_REPLY",
+        threadId: "board_chat",
+      });
+    }));
+  } catch (err) {
+    console.warn("notifyBoardChatSubscribers failed:", err?.message || err);
+  }
+}
+
 exports.sendGlobalChatMessage = onCall(
   { region: "us-central1" },
   async (request) => {
@@ -3117,6 +3158,7 @@ exports.sendGlobalChatMessage = onCall(
     await Promise.all(mentioned.map(async (targetUid) => {
       if (await hasBlocked(targetUid, uid)) return;
       const targetSnap = await db.collection("users").doc(targetUid).get();
+      if (chat.boardChatAlertMode(targetSnap.data()) === "off") return;
       await sendPushToUser(targetUid, targetSnap.data(), {
         title: `@${sender.username} mentioned you`,
         body: chat.pushPreview(text),
@@ -3128,6 +3170,8 @@ exports.sendGlobalChatMessage = onCall(
         threadId: "board_chat",
       });
     }));
+
+    await notifyBoardChatSubscribers({ senderUid: uid, sender, text, messageId: ref.id, skipUids: mentioned });
 
     return { id: ref.id };
   }

@@ -168,6 +168,22 @@ final class ChatService: ObservableObject {
     /// uid → when they last had Board Chat open; drives "Seen by N".
     @Published private(set) var globalReadTimes: [String: Date] = [:]
 
+    /// Newest Board Chat message and when this user last had the chat open,
+    /// for the Home preview row and the board's unread dot. Kept by a
+    /// one-document listener so Home never streams the whole room.
+    @Published private(set) var latestGlobal: ChatMessage?
+    @Published private(set) var myGlobalReadAt: Date?
+    private var latestListener: ListenerRegistration?
+    private var myReadListener: ListenerRegistration?
+    private var latestViewers = 0
+
+    /// Something newer than the user's last visit, from someone else.
+    var hasUnreadGlobal: Bool {
+        guard let latest = latestGlobal, latest.uid != myUid, !blockedUids.contains(latest.uid) else { return false }
+        guard let read = myGlobalReadAt else { return true }
+        return latest.createdAt > read
+    }
+
     var unreadDirectCount: Int { threads.filter { !blockedUids.contains($0.otherUid) }.reduce(0) { $0 + $1.unread } }
 
     /// Chat with blocked people filtered out.
@@ -223,6 +239,38 @@ final class ChatService: ObservableObject {
             }
     }
 
+    /// Reference-counted like `startGlobal`: Home and the board can both show it.
+    func startLatestGlobal() {
+        latestViewers += 1
+        guard latestListener == nil, let uid = myUid else { return }
+        latestListener = db.collection("globalChat")
+            .order(by: "createdAt", descending: true)
+            .limit(to: 1)
+            .addSnapshotListener { [weak self] snapshot, _ in
+                guard let doc = snapshot?.documents.first else { return }
+                let message = ChatMessage.parse(doc)
+                Task { @MainActor in self?.latestGlobal = message }
+            }
+        myReadListener = db.collection("globalChatReads").document(uid)
+            .addSnapshotListener { [weak self] snapshot, _ in
+                let read = (snapshot?.data()?["lastReadAt"] as? Timestamp)?.dateValue()
+                Task { @MainActor in
+                    guard let self else { return }
+                    // Never move backwards past a local mark (see markGlobalRead).
+                    if let read, read > (self.myGlobalReadAt ?? .distantPast) { self.myGlobalReadAt = read }
+                }
+            }
+    }
+
+    func stopLatestGlobal() {
+        latestViewers = max(0, latestViewers - 1)
+        guard latestViewers == 0 else { return }
+        latestListener?.remove()
+        latestListener = nil
+        myReadListener?.remove()
+        myReadListener = nil
+    }
+
     /// How many other people have opened Board Chat since `message` landed.
     func seenCount(_ message: ChatMessage) -> Int {
         globalReadTimes.reduce(0) { count, item in
@@ -235,6 +283,9 @@ final class ChatService: ObservableObject {
     /// only when something newer than the last mark has arrived.
     func markGlobalRead() {
         guard let uid = myUid, let newest = globalMessages.last?.createdAt else { return }
+        // The unread dot clears the moment the chat is open, not after the
+        // server write lands.
+        if newest > (myGlobalReadAt ?? .distantPast) { myGlobalReadAt = newest }
         if let mine = globalReadTimes[uid], mine >= newest { return }
         if let last = lastGlobalReadWrite, Date().timeIntervalSince(last) < 15 { return }
         lastGlobalReadWrite = Date()

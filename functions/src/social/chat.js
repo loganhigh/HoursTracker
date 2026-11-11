@@ -99,6 +99,53 @@ function pushPreview(text, max = 160) {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 
+
+// ---------------------------------------------------------------------------
+// Board Chat notification preference (users/{uid}.boardChatAlerts)
+//   "off"      — no Board Chat pushes at all, mentions included
+//   "mentions" — only when someone tags you (the default, and what every
+//                account without the field gets)
+//   "all"      — also a summary push for new messages, at most once per
+//                DIGEST_INTERVAL_MS
+// ---------------------------------------------------------------------------
+
+const BOARD_CHAT_ALERT_MODES = ["off", "mentions", "all"];
+const DIGEST_INTERVAL_MS = 30 * 60 * 1000;
+/** Someone who had the chat open this recently is reading it already. */
+const RECENTLY_READ_MS = 2 * 60 * 1000;
+
+function boardChatAlertMode(userData) {
+  const mode = userData?.boardChatAlerts;
+  return BOARD_CHAT_ALERT_MODES.includes(mode) ? mode : "mentions";
+}
+
+function toMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Whether an "all messages" subscriber gets a summary push right now.
+ * lastDigestAt: when they were last sent one; lastReadAt: when they last had
+ * Board Chat open.
+ */
+function shouldSendDigest({ lastDigestAt, lastReadAt, nowMs }) {
+  const digest = toMillis(lastDigestAt);
+  const read = toMillis(lastReadAt);
+  if (read && nowMs - read < RECENTLY_READ_MS) return false;
+  if (digest && nowMs - digest < DIGEST_INTERVAL_MS) return false;
+  return true;
+}
+
+/** "Board Chat" / "5 new messages in Board Chat". */
+function digestTitle(unreadCount) {
+  const n = Math.max(1, Math.floor(Number(unreadCount) || 1));
+  return n === 1 ? "New message in Board Chat" : `${n > 99 ? "99+" : n} new messages in Board Chat`;
+}
+
 module.exports = {
   MESSAGE_MAX,
   MAX_MENTIONS,
@@ -109,4 +156,9 @@ module.exports = {
   extractMentions,
   directThreadId,
   pushPreview,
+  BOARD_CHAT_ALERT_MODES,
+  DIGEST_INTERVAL_MS,
+  boardChatAlertMode,
+  shouldSendDigest,
+  digestTitle,
 };

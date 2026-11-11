@@ -25,6 +25,8 @@ struct GlobalLeaderboardView: View {
     @ObservedObject private var chat = ChatService.shared
     @ObservedObject private var notificationRouter = NotificationRouter.shared
     @State private var showingChat = false
+    /// One-time "New: Board Chat" banner.
+    @AppStorage("board_chat_intro_seen_v1") private var chatIntroSeen = false
     @State private var showingInbox = false
     @State private var dmTarget: DirectThreadTarget?
     /// Tracker whose public glimpse sheet is open (any row or podium slot).
@@ -79,11 +81,22 @@ struct GlobalLeaderboardView: View {
             GlobalLeaderboardHeader(
                 onBack: { dismiss() },
                 unreadMessages: chat.unreadDirectCount,
-                onChat: { showingChat = true },
+                chatUnread: chat.hasUnreadGlobal,
+                onChat: { chatIntroSeen = true; showingChat = true },
                 onMessages: { showingInbox = true }
             )
                 .padding(.horizontal, AppSpacing.md)
                 .padding(.bottom, AppSpacing.sm)
+
+            if !chatIntroSeen {
+                BoardChatIntroBanner(
+                    onOpen: { chatIntroSeen = true; showingChat = true },
+                    onDismiss: { withAnimation { chatIntroSeen = true } }
+                )
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.bottom, AppSpacing.sm)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
 
             content
         }
@@ -108,8 +121,10 @@ struct GlobalLeaderboardView: View {
         .navigationDestination(item: $dmTarget) { DirectThreadView(target: $0) }
         .onAppear {
             chat.startInbox()
+            chat.startLatestGlobal()
             consumeChatRoute()
         }
+        .onDisappear { chat.stopLatestGlobal() }
         .onChange(of: notificationRouter.openGlobalChat) { _, _ in consumeChatRoute() }
         .onChange(of: notificationRouter.openDirectThread) { _, _ in consumeChatRoute() }
         .task {

@@ -40,3 +40,26 @@ test("a thread id is the same whoever writes first", () => {
 test("cleanMessage trims and collapses blank lines", () => {
   assert.strictEqual(chat.cleanMessage("  hi\r\n\n\n\nthere  "), "hi\n\nthere");
 });
+
+test("board chat alert mode defaults to mentions", () => {
+  assert.equal(chat.boardChatAlertMode(undefined), "mentions");
+  assert.equal(chat.boardChatAlertMode({}), "mentions");
+  assert.equal(chat.boardChatAlertMode({ boardChatAlerts: "bogus" }), "mentions");
+  assert.equal(chat.boardChatAlertMode({ boardChatAlerts: "off" }), "off");
+  assert.equal(chat.boardChatAlertMode({ boardChatAlerts: "all" }), "all");
+});
+
+test("board chat digest is throttled and skips active readers", () => {
+  const now = 1_800_000_000_000;
+  assert.equal(chat.shouldSendDigest({ nowMs: now }), true);
+  assert.equal(chat.shouldSendDigest({ lastDigestAt: now - 10 * 60e3, nowMs: now }), false);
+  assert.equal(chat.shouldSendDigest({ lastDigestAt: now - 31 * 60e3, nowMs: now }), true);
+  assert.equal(chat.shouldSendDigest({ lastReadAt: now - 60e3, nowMs: now }), false);
+  assert.equal(chat.shouldSendDigest({ lastReadAt: { toMillis: () => now - 10 * 60e3 }, nowMs: now }), true);
+});
+
+test("board chat digest title", () => {
+  assert.equal(chat.digestTitle(1), "New message in Board Chat");
+  assert.equal(chat.digestTitle(5), "5 new messages in Board Chat");
+  assert.equal(chat.digestTitle(250), "99+ new messages in Board Chat");
+});

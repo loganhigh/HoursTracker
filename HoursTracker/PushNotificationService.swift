@@ -90,6 +90,9 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
                 if !text.isEmpty {
                     if kind == "directMessage", let fromUid {
                         _ = try? await ChatService.shared.sendDirect(text, toUid: fromUid, toUsername: fromUsername)
+                    } else if kind == "boardChat" {
+                        // Replying to a "new messages" summary: plain message to the room.
+                        try? await ChatService.shared.sendGlobal(text)
                     } else if kind == "chatMention" {
                         // Replying to a tag tags them back so they hear about it.
                         let tagged = fromUsername.isEmpty ? text : "@\(fromUsername) \(text)"
@@ -105,12 +108,12 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
                 NotificationRouter.shared.openGlobalLeaderboard = true
             }
         }
-        if let kind = userInfo["kind"] as? String, kind == "chatMention" || kind == "directMessage" {
+        if let kind = userInfo["kind"] as? String, kind == "chatMention" || kind == "directMessage" || kind == "boardChat" {
             let fromUid = userInfo["fromUid"] as? String
             let title = response.notification.request.content.title
             Task { @MainActor in
                 let router = NotificationRouter.shared
-                if kind == "chatMention" {
+                if kind == "chatMention" || kind == "boardChat" {
                     router.openGlobalChat = true
                 } else if let fromUid {
                     // The push title is the sender's "@handle".
@@ -226,6 +229,7 @@ final class PushNotificationService {
             try await db.collection("users").document(uid).setData([
                 "friendShiftAlerts": SmartNotifier.shared.friendShiftNotificationsEnabled,
                 "leaderboardAlerts": SmartNotifier.shared.leaderboardAlertsEnabled,
+                "boardChatAlerts": SmartNotifier.shared.boardChatAlerts.rawValue,
                 "pushSettingsUpdatedAt": FieldValue.serverTimestamp()
             ], merge: true)
         } catch {
@@ -276,7 +280,8 @@ final class PushNotificationService {
             if let data = try? await db.collection("users").document(uid).getDocument().data() {
                 SmartNotifier.shared.adoptCloudAlertPreferences(
                     friendShift: data["friendShiftAlerts"] as? Bool,
-                    leaderboard: data["leaderboardAlerts"] as? Bool
+                    leaderboard: data["leaderboardAlerts"] as? Bool,
+                    boardChat: data["boardChatAlerts"] as? String
                 )
             }
             #if DEBUG

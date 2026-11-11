@@ -88,6 +88,15 @@ struct NotificationsSheet: View {
                     }
                     .tint(AppColors.accent)
 
+                    Picker(selection: $smartNotifier.boardChatAlerts) {
+                        ForEach(SmartNotifier.BoardChatAlerts.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    } label: {
+                        SettingsRowLabel(icon: "bubble.left.and.bubble.right.fill", title: "Board Chat")
+                    }
+                    .tint(AppColors.accent)
+
                     Toggle(isOn: $smartNotifier.wrappedNotificationEnabled) {
                         SettingsRowLabel(icon: "sparkles.rectangle.stack.fill", title: "Year in review")
                     }
@@ -107,7 +116,7 @@ struct NotificationsSheet: View {
                 } header: {
                     SectionEyebrow("Alerts")
                 } footer: {
-                    Text("Get notified about milestones, progress, daily reminders, motivation quotes, streak alerts, friend shifts (e.g. \"Jacob worked 13h today\"), when someone passes you on the global leaderboard, and \"Did you work today?\".")
+                    Text("Get notified about milestones, progress, daily reminders, motivation quotes, streak alerts, friend shifts (e.g. \"Jacob worked 13h today\"), when someone passes you on the global leaderboard, Board Chat (mentions, or a summary of new messages at most every 30 minutes), and \"Did you work today?\".")
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
                 }

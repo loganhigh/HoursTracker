@@ -841,6 +841,9 @@ struct HoursHomeView: View {
                     .buttonStyle(QuietSectionButtonStyle())
                     .padding(.top, AppSpacing.xxs)
             }
+
+            BoardChatHomeRow()
+                .padding(.top, AppSpacing.xxs)
         }
         .frame(maxWidth: .infinity)
     }

@@ -161,10 +161,45 @@ class SmartNotifier: ObservableObject {
         }
     }
 
+    /// Board Chat pushes: none, only @mentions (default), or also a summary
+    /// of new messages at most every 30 minutes. Sent by the server, so the
+    /// choice lives on users/{uid}.boardChatAlerts.
+    enum BoardChatAlerts: String, CaseIterable, Identifiable {
+        case off, mentions, all
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .off: return "Off"
+            case .mentions: return "Mentions only"
+            case .all: return "All messages"
+            }
+        }
+    }
+
+    private static let boardChatAlertsKey = "notifications_board_chat_mode"
+
+    var boardChatAlerts: BoardChatAlerts {
+        get {
+            UserDefaults.standard.string(forKey: Self.boardChatAlertsKey)
+                .flatMap(BoardChatAlerts.init(rawValue:)) ?? .mentions
+        }
+        set {
+            objectWillChange.send()
+            UserDefaults.standard.set(newValue.rawValue, forKey: Self.boardChatAlertsKey)
+            Task { @MainActor in
+                await PushNotificationService.shared.syncAlertPreferenceToCloud()
+            }
+        }
+    }
+
     /// Takes the account's alert preferences from users/{uid} without pushing
     /// them back (the setters above sync to the cloud; this is the inverse).
-    func adoptCloudAlertPreferences(friendShift: Bool?, leaderboard: Bool?) {
+    func adoptCloudAlertPreferences(friendShift: Bool?, leaderboard: Bool?, boardChat: String? = nil) {
         var changed = false
+        if let mode = boardChat.flatMap(BoardChatAlerts.init(rawValue:)), mode != boardChatAlerts {
+            UserDefaults.standard.set(mode.rawValue, forKey: Self.boardChatAlertsKey)
+            changed = true
+        }
         if let friendShift, friendShift != friendShiftNotificationsEnabled {
             UserDefaults.standard.set(friendShift, forKey: "notifications_friend_shift_enabled")
             changed = true

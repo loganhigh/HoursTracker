@@ -37,6 +37,8 @@ enum GlobalHoursFormat {
 struct GlobalLeaderboardHeader: View {
     let onBack: () -> Void
     var unreadMessages: Int = 0
+    /// New Board Chat messages since the viewer last opened it.
+    var chatUnread: Bool = false
     var onChat: (() -> Void)? = nil
     var onMessages: (() -> Void)? = nil
 
@@ -62,7 +64,8 @@ struct GlobalLeaderboardHeader: View {
             Spacer(minLength: 0)
 
             if let onChat {
-                headerIcon("bubble.left.and.bubble.right.fill", label: "Board chat", action: onChat)
+                headerIcon("bubble.left.and.bubble.right.fill", label: chatUnread ? "Board chat, new messages" : "Board chat",
+                           dot: chatUnread, action: onChat)
             }
             if let onMessages {
                 headerIcon("paperplane.fill", label: unreadMessages > 0 ? "Messages, \(unreadMessages) unread" : "Messages",
@@ -71,7 +74,7 @@ struct GlobalLeaderboardHeader: View {
         }
     }
 
-    private func headerIcon(_ icon: String, label: String, badge: Int = 0, action: @escaping () -> Void) -> some View {
+    private func headerIcon(_ icon: String, label: String, badge: Int = 0, dot: Bool = false, action: @escaping () -> Void) -> some View {
         Button {
             Haptics.lightTap()
             action()
@@ -85,7 +88,9 @@ struct GlobalLeaderboardHeader: View {
                         .fill(AppColors.card.opacity(0.7))
                         .overlay(Circle().stroke(AppColors.stroke, lineWidth: 0.5))
                 )
-                .overlay(alignment: .topTrailing) { UnreadBadge(count: badge) }
+                .overlay(alignment: .topTrailing) {
+                    if badge > 0 { UnreadBadge(count: badge) } else if dot { UnreadDot().offset(x: -1, y: 1) }
+                }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
