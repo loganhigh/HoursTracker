@@ -274,10 +274,17 @@ struct ChatMessageRow: View {
 
     private var mentionsMe: Bool { myUid.map { message.mentions.contains($0) } ?? false }
 
+    /// The photo stamped on the message, else the sender's current board
+    /// photo (messages sent before the server fix carry none).
+    private var avatarURL: String? {
+        if !message.photoURL.isEmpty { return message.photoURL }
+        return TopTrackersService.shared.tracker(for: message.uid)?.photoURL
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: AppSpacing.xs) {
             ProfileAvatarView(name: message.username, size: 34,
-                              photoURL: message.photoURL.isEmpty ? nil : message.photoURL,
+                              photoURL: avatarURL,
                               uid: message.uid)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {

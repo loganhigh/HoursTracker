@@ -3128,7 +3128,10 @@ async function chatSender(uid) {
   return {
     username,
     prestige: Number(profile.prestige) || 0,
-    photoURL: typeof profile.photoURL === "string" ? profile.photoURL : "",
+    // publicProfiles stores the photo as profilePhotoURL; reading photoURL
+    // here left every chat message without one.
+    photoURL: [profile.profilePhotoURL, profile.photoURL]
+      .find((v) => typeof v === "string" && v.trim()) || "",
     // Supporters get the blue name in chat too; carried on the message so
     // readers don't need the sender's profile loaded.
     isSupporter: userSnap.data()?.isSupporter === true || profile.isSupporter === true,
