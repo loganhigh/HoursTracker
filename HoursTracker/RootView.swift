@@ -9,7 +9,7 @@ struct RootView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var cloudSync: CloudSyncManager
-    @AppStorage("has_prompted_rate_after_5") private var hasPromptedRateAfter5 = false
+    @ObservedObject private var reviewPrompts = ReviewPromptCenter.shared
     @State private var showingCountryFlagPrompt = false
     @ObservedObject private var friendsService = FriendsService.shared
     @State private var showingUsernamePrompt = false
@@ -27,6 +27,10 @@ struct RootView: View {
     /// Existing accounts predate usernames. Ask once the server has confirmed
     /// there is none — never on a cache replay, never while onboarding's own
     /// claim is still in flight, and at most once per launch.
+    private var workShiftCount: Int {
+        store.entries.filter { !$0.isOffDay }.count
+    }
+
     private func offerUsernameIfNeeded() {
         guard !didOfferUsername, !showingUsernamePrompt else { return }
         guard authService.user != nil, AppTutorialStorage.isComplete else { return }
@@ -40,12 +44,19 @@ struct RootView: View {
     var body: some View {
         AppTabView()
         .environmentObject(levelUpCoordinator)
-        .onChange(of: store.entries.count) { _, newCount in
-            if newCount >= 5 && !hasPromptedRateAfter5 {
-                hasPromptedRateAfter5 = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    AppActions.rateApp()
-                }
+        .onChange(of: store.entries.count) { _, _ in
+            // "Enjoying Hour Tracker?" once, at the 30th shift.
+            let shifts = workShiftCount
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                reviewPrompts.considerMilestone(workShifts: shifts)
+            }
+        }
+        .onChange(of: levelUpCoordinator.current == nil) { _, closed in
+            // A level-up celebration just closed: Apple's star sheet, rarely.
+            guard closed else { return }
+            let shifts = workShiftCount
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                reviewPrompts.afterLevelUp(workShifts: shifts)
             }
         }
         .sheet(isPresented: $showingUsernamePrompt) {
@@ -78,6 +89,8 @@ struct RootView: View {
                         announcements.markSeen()
                     }
                 }
+            } else if let reason = reviewPrompts.pending {
+                ReviewAskOverlay(reason: reason, center: reviewPrompts)
             }
         }
         // Attached AFTER the prompt overlays: a later .overlay draws above an

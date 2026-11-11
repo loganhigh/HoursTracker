@@ -205,7 +205,14 @@ struct AccountView: View {
         .fullScreenCover(isPresented: $showingPrestigeCelebration) {
             PrestigeCelebrationView(
                 prestige: store.gamificationProfile.prestige,
-                onDismiss: { showingPrestigeCelebration = false }
+                onDismiss: {
+                    showingPrestigeCelebration = false
+                    // Ask for a written review once the cover is gone.
+                    let prestige = store.gamificationProfile.prestige
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        ReviewPromptCenter.shared.afterPrestige(prestige)
+                    }
+                }
             )
             // Clear so the celebration's material backdrop has the real
             // screen behind it to blur.
@@ -519,6 +526,15 @@ struct AccountView: View {
                 openURL(AppLegalURLs.support)
             } label: {
                 AccountNavRow(icon: "envelope.fill", title: "Contact Support")
+            }
+            .buttonStyle(PremiumPressStyle())
+
+            AccountRowHairline()
+
+            Button {
+                AppActions.openAppStoreWriteReview()
+            } label: {
+                AccountNavRow(icon: "star.fill", title: "Write a review", tint: AppColors.gold)
             }
             .buttonStyle(PremiumPressStyle())
         }
