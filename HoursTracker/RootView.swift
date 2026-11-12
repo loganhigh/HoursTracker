@@ -10,6 +10,8 @@ struct RootView: View {
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var cloudSync: CloudSyncManager
     @ObservedObject private var reviewPrompts = ReviewPromptCenter.shared
+    @ObservedObject private var notificationPrompt = NotificationPromptCenter.shared
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showingCountryFlagPrompt = false
     @ObservedObject private var friendsService = FriendsService.shared
     @State private var showingUsernamePrompt = false
@@ -91,6 +93,8 @@ struct RootView: View {
                 }
             } else if let reason = reviewPrompts.pending {
                 ReviewAskOverlay(reason: reason, center: reviewPrompts)
+            } else if let status = notificationPrompt.pending {
+                NotificationsAskOverlay(status: status, center: notificationPrompt)
             }
         }
         // Attached AFTER the prompt overlays: a later .overlay draws above an
@@ -121,6 +125,16 @@ struct RootView: View {
             showingCountryFlagPrompt = true
         }
         .onAppear { scheduleCountryFlagPromptIfNeeded() }
+        .task(id: authService.user?.uid) {
+            // Notifications off: ask again, at most every 14 days. Waits a
+            // few seconds so launch prompts (country, news) go first.
+            guard authService.user != nil, AppTutorialStorage.isComplete else { return }
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            await notificationPrompt.considerAsking()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { notificationPrompt.didBecomeActive() }
+        }
         .onChange(of: authService.user?.uid) { _, _ in
             scheduleCountryFlagPromptIfNeeded()
         }

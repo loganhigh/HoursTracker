@@ -80,13 +80,14 @@ struct OnboardingView: View {
 
     // Setup first, sign-in last: the account is the final step, so the pager
     // ends on it and auth completion ends onboarding.
-    private let pageCount = 8
+    private let pageCount = 9
     private let namePageIndex = 2
     private let photoPageIndex = 3
     private let payPageIndex = 4
     private let companyPageIndex = 5
     private let arrivalPageIndex = 6
-    private let signInPageIndex = 7
+    private let notificationsPageIndex = 7
+    private let signInPageIndex = 8
 
     /// Seeds the payday picker with the next Friday — the most common payday,
     /// and a date the user is more likely to adjust than to type from scratch.
@@ -160,6 +161,7 @@ struct OnboardingView: View {
             case "pay":     lastPage = payPageIndex
             case "company": lastPage = companyPageIndex
             case "arrival": lastPage = arrivalPageIndex
+            case "notifications": lastPage = notificationsPageIndex
             default:     lastPage = signInPageIndex
             }
             while page < lastPage {
@@ -222,10 +224,17 @@ struct OnboardingView: View {
 
             OnboardingArrivalPage(store: store, minHeight: signInPageMinHeight) {
                 withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
-                    page = signInPageIndex
+                    page = notificationsPageIndex
                 }
             }
             .tag(arrivalPageIndex)
+
+            OnboardingNotificationsPage(minHeight: signInPageMinHeight) {
+                withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
+                    page = signInPageIndex
+                }
+            }
+            .tag(notificationsPageIndex)
 
             signInPage
                 .tag(signInPageIndex)

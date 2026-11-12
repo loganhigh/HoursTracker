@@ -1,4 +1,5 @@
 import XCTest
+import UserNotifications
 @testable import HoursTracker
 
 /// Catch-up sheet: which skipped usual workdays get offered, and with what times.
@@ -90,5 +91,15 @@ final class CatchUpPlannerTests: XCTestCase {
         XCTAssertFalse(offer([shift(18)], enabled: false), "not switched on by admin")
         XCTAssertFalse(offer([shift(18)], on: false), "user turned it off")
         XCTAssertFalse(offer([shift(18)], phone: " "), "no boss picked")
+    }
+
+    func testNotificationAskOnlyWhenOffAndNotRecent() {
+        let now = Date()
+        typealias P = NotificationAskPolicy
+        XCTAssertTrue(P.shouldAsk(status: .denied, lastAskAt: nil, now: now))
+        XCTAssertTrue(P.shouldAsk(status: .notDetermined, lastAskAt: now.addingTimeInterval(-15 * 86_400), now: now))
+        XCTAssertFalse(P.shouldAsk(status: .denied, lastAskAt: now.addingTimeInterval(-3 * 86_400), now: now), "asked recently")
+        XCTAssertFalse(P.shouldAsk(status: .authorized, lastAskAt: nil, now: now), "already on")
+        XCTAssertFalse(P.shouldAsk(status: .provisional, lastAskAt: nil, now: now), "quiet delivery counts as on")
     }
 }

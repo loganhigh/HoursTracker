@@ -197,10 +197,17 @@ final class PushNotificationService {
         Task { await registerForPushIfSignedIn() }
     }
 
-    func registerForPushIfSignedIn() async {
+    /// `userAsked`: the person just tapped a "Turn on" button. Otherwise
+    /// someone who chose "Maybe later" isn't hit with Apple's alert cold;
+    /// Home asks them again later instead.
+    func registerForPushIfSignedIn(userAsked: Bool = false) async {
         guard Auth.auth().currentUser != nil else { return }
         guard Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil else { return }
 
+        if !userAsked, NotificationPromptCenter.lastAskAt != nil,
+           await NotificationManager.shared.authorizationStatus() == .notDetermined {
+            return
+        }
         let granted = await NotificationManager.shared.requestPermission()
         guard granted else { return }
 
