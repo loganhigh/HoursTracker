@@ -256,8 +256,9 @@ const NUDGE_EMOJIS = new Set(["👍", "💪", "🔥", "😅", "🙏", "✅"]);
 
 async function sendPushToUser(targetUid, friendData, { title, body, dataPayload, category, threadId }) {
   const tokens = await tokensForUser(targetUid, friendData);
-  if (tokens.length === 0) return;
+  if (tokens.length === 0) return 0;
 
+  let accepted = 0;
   const sends = tokens.map((target) =>
     messaging
       .send({
@@ -275,6 +276,7 @@ async function sendPushToUser(targetUid, friendData, { title, body, dataPayload,
           },
         },
       })
+      .then(() => { accepted++; })
       .catch(async (err) => {
         if (isStaleTargetError(err)) {
           await removeStaleToken(targetUid, target.value, friendData);
@@ -284,6 +286,8 @@ async function sendPushToUser(targetUid, friendData, { title, body, dataPayload,
   );
 
   await Promise.all(sends);
+  /** Devices FCM accepted the push for (0 = nowhere to send it). */
+  return accepted;
 }
 
 exports.notifyFriendsOnShiftLogged = onDocumentCreated(
@@ -2856,26 +2860,30 @@ exports.adminPublishAnnouncement = onCall(
 /** Pushes "New Update!" to every user whose last-reported version is older. Never throws. */
 async function sendUpdatePushToOutdated(version) {
   const { title, body } = updatePush.updatePushMessage(version);
+  // `pushed` counts people with at least one phone FCM accepted the push
+  // for. The rest never allowed notifications or never registered a phone.
   let pushed = 0;
+  let unreachable = 0;
   try {
     const snap = await db.collection("users").get();
     const targets = snap.docs.filter((d) => updatePush.needsUpdatePush(d.data(), version));
     for (let i = 0; i < targets.length; i += 25) {
       await Promise.all(targets.slice(i, i + 25).map(async (doc) => {
         try {
-          await sendPushToUser(doc.id, doc.data(), {
+          const devices = await sendPushToUser(doc.id, doc.data(), {
             title,
             body,
             dataPayload: { kind: "appUpdate" },
             threadId: "app_update",
           });
-          pushed++;
+          if (devices > 0) pushed++;
+          else unreachable++;
         } catch (err) {
           console.warn(`update push failed uid=${doc.id}:`, err?.message || err);
         }
       }));
     }
-    console.log(`update push v${version}: users=${targets.length}`);
+    console.log(`update push v${version}: users=${targets.length} sent=${pushed} unreachable=${unreachable}`);
   } catch (err) {
     console.warn("update push failed:", err?.message || err);
   }
