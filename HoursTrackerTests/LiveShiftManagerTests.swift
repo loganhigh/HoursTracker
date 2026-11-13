@@ -254,10 +254,16 @@ final class LiveShiftManagerTests: XCTestCase {
         manager.discard()
     }
 
-    func testClockInNeverStartsInTheFuture() {
+    func testClockInAllowsScheduledStartUpToSixHoursAhead() {
         let manager = makeManager()
-        manager.clockIn(at: Date().addingTimeInterval(3600))
-        XCTAssertLessThanOrEqual(manager.activeShift!.startDate, Date())
+        let sevenAM = Date().addingTimeInterval(18 * 60)
+        manager.clockIn(at: sevenAM)
+        XCTAssertEqual(manager.activeShift?.startDate, sevenAM, "arrived 6:42, starts 7:00")
+        XCTAssertEqual(manager.activeShift?.elapsedWorked(at: Date()), 0, "clock waits at 0 until the start")
+        manager.discard()
+
+        manager.clockIn(at: Date().addingTimeInterval(10 * 3600))
+        XCTAssertLessThanOrEqual(manager.activeShift!.startDate, Date().addingTimeInterval(6 * 3600 + 1))
         manager.discard()
     }
 
@@ -274,7 +280,7 @@ final class LiveShiftManagerTests: XCTestCase {
         let manager = makeManager()
         let start = Date().addingTimeInterval(-2 * 3600)
         manager.clockIn(at: start)
-        XCTAssertFalse(manager.setStartDate(Date().addingTimeInterval(600)), "future")
+        XCTAssertFalse(manager.setStartDate(Date().addingTimeInterval(7 * 3600)), "over 6h ahead")
         XCTAssertFalse(manager.setStartDate(Date().addingTimeInterval(-25 * 3600)), "over 24h")
         manager.startBreak(at: Date().addingTimeInterval(-3600))
         manager.endBreak(at: Date().addingTimeInterval(-3000))

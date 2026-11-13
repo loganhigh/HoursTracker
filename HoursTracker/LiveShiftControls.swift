@@ -3,7 +3,8 @@ import SwiftUI
 // MARK: - Start sheet (from a tapped "You're at work" push)
 
 /// Starts a live shift with a chosen start time: now, the moment they got
-/// there, or any time in the last 12 hours (arrived early, start at 7).
+/// there, or a picked time from 12 hours back to 6 hours ahead (got there at
+/// 6:42, shift starts at 7).
 struct LiveShiftStartSheet: View {
     let prompt: ArrivalPrompt
     @ObservedObject var store: HoursStore
@@ -22,7 +23,7 @@ struct LiveShiftStartSheet: View {
         switch choice {
         case .now: return Date()
         case .arrived: return prompt.arrivedAt
-        case .custom: return min(customTime, Date())
+        case .custom: return customTime
         }
     }
 
@@ -56,7 +57,7 @@ struct LiveShiftStartSheet: View {
                                detail: choice == .custom ? nil : "e.g. your scheduled start")
                         if choice == .custom {
                             DatePicker("Start time", selection: $customTime,
-                                       in: Date().addingTimeInterval(-12 * 3600)...Date(),
+                                       in: Date().addingTimeInterval(-12 * 3600)...Date().addingTimeInterval(LiveShiftManager.maxFutureStartSeconds),
                                        displayedComponents: [.hourAndMinute])
                                 .datePickerStyle(.wheel)
                                 .labelsHidden()
@@ -217,7 +218,8 @@ struct LiveShiftBar: View {
     private func subtitle(_ shift: LiveShift) -> String {
         var parts: [String] = [shift.isOnBreak ? "On break" : "On shift"]
         if let name = shift.locationName, !name.isEmpty { parts.append(name) }
-        parts.append("since \(shift.startDate.formatted(date: .omitted, time: .shortened))")
+        let time = shift.startDate.formatted(date: .omitted, time: .shortened)
+        parts.append(shift.startDate > Date() ? "starts \(time)" : "since \(time)")
         return parts.joined(separator: " · ")
     }
 

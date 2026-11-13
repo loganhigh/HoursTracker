@@ -250,8 +250,9 @@ struct LiveShiftTrackingView: View {
     /// break if one has been taken.
     private var startRange: ClosedRange<Date> {
         let now = Date()
-        let latest = liveShift.activeShift?.breaks.first?.start ?? now
-        return now.addingTimeInterval(-24 * 3600)...min(latest, now)
+        let ahead = now.addingTimeInterval(LiveShiftManager.maxFutureStartSeconds)
+        let latest = liveShift.activeShift?.breaks.first?.start ?? ahead
+        return now.addingTimeInterval(-24 * 3600)...min(latest, ahead)
     }
 
     private var startEditor: some View {

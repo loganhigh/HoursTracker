@@ -89,6 +89,9 @@ final class LiveShiftManager: ObservableObject {
     /// entries out of stats/sync while leaving the shift active for the
     /// user to resolve.
     private static let maxShiftSeconds: TimeInterval = 24 * 3600
+    /// How far ahead a start can be set: got to work at 6:42, shift starts
+    /// at 7:00. The clock reads 0:00 until then.
+    static let maxFutureStartSeconds: TimeInterval = 6 * 3600
 
     init(defaults: UserDefaults = .standard, storageKey: String = "live_shift_v1") {
         self.defaults = defaults
@@ -108,7 +111,7 @@ final class LiveShiftManager: ObservableObject {
     /// Starts a shift. Ignored when one is already active.
     func clockIn(at date: Date = Date(), place: ShiftPlace? = nil) {
         guard activeShift == nil else { return }
-        var shift = LiveShift(startDate: min(date, Date()), breaks: [], jobID: HoursStore.current?.defaultJobID)
+        var shift = LiveShift(startDate: min(date, Date().addingTimeInterval(Self.maxFutureStartSeconds)), breaks: [], jobID: HoursStore.current?.defaultJobID)
         if let place, !place.isEmpty {
             shift.locationName = place.trimmedName
             shift.latitude = place.latitude
@@ -120,13 +123,13 @@ final class LiveShiftManager: ObservableObject {
     }
 
     /// Moves the start of the running shift (arrived early, or started it
-    /// late). Never into the future, never more than 24 hours back, and
-    /// never after the first break began.
+    /// late, or it begins at the scheduled time). At most 6 hours ahead,
+    /// never more than 24 hours back, and never after the first break began.
     @discardableResult
     func setStartDate(_ date: Date) -> Bool {
         guard var shift = activeShift else { return false }
         let now = Date()
-        var latest = now
+        var latest = now.addingTimeInterval(Self.maxFutureStartSeconds)
         if let firstBreak = shift.breaks.first?.start { latest = min(latest, firstBreak) }
         guard date <= latest, now.timeIntervalSince(date) <= Self.maxShiftSeconds else { return false }
         shift.startDate = date
