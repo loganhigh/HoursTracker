@@ -418,5 +418,18 @@ final class PaySettingsLegacyOvertimeDecodingTests: XCTestCase {
         let s = try JSONDecoder().decode(PaySettings.self, from: data)
         XCTAssertEqual(s.weeklyOvertimeAfterHours, 40)
     }
+}
 
+final class LiveShiftStartSheetTests: XCTestCase {
+    func testUpcomingHourWhenFiveToThirtyMinutesEarly() {
+        let cal = Calendar.current
+        func at(_ h: Int, _ m: Int) -> Date { cal.date(bySettingHour: h, minute: m, second: 0, of: Date())! }
+        XCTAssertEqual(LiveShiftStartSheet.upcomingHourStart(arrivedAt: at(5, 45)), at(6, 0))
+        XCTAssertEqual(LiveShiftStartSheet.upcomingHourStart(arrivedAt: at(5, 40)), at(6, 0))
+        XCTAssertEqual(LiveShiftStartSheet.upcomingHourStart(arrivedAt: at(5, 30)), at(6, 0), "30 min early counts")
+        XCTAssertEqual(LiveShiftStartSheet.upcomingHourStart(arrivedAt: at(6, 42)), at(7, 0))
+        XCTAssertNil(LiveShiftStartSheet.upcomingHourStart(arrivedAt: at(5, 20)), "40 min early")
+        XCTAssertNil(LiveShiftStartSheet.upcomingHourStart(arrivedAt: at(5, 57)), "3 min early")
+        XCTAssertNil(LiveShiftStartSheet.upcomingHourStart(arrivedAt: at(6, 10)), "after the hour")
+    }
 }

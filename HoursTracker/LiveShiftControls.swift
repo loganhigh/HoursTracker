@@ -2,15 +2,16 @@ import SwiftUI
 
 // MARK: - Start sheet (from a tapped "You're at work" push)
 
-/// Starts a live shift with a chosen start time: now, the moment they got
-/// there, or a picked time from 12 hours back to 6 hours ahead (got there at
+/// Starts a live shift with a chosen start time: the next full hour when
+/// they got there 5–30 minutes early, now, the moment they got there, or a
+/// picked time from 12 hours back to 6 hours ahead (got there at
 /// 6:42, shift starts at 7).
 struct LiveShiftStartSheet: View {
     let prompt: ArrivalPrompt
     @ObservedObject var store: HoursStore
     @Environment(\.dismiss) private var dismiss
 
-    private enum StartChoice: Hashable { case now, arrived, custom }
+    private enum StartChoice: Hashable { case hour, now, arrived, custom }
 
     @State private var choice: StartChoice = .now
     @State private var customTime = Date()
@@ -18,9 +19,21 @@ struct LiveShiftStartSheet: View {
     @State private var showingLocationPicker = false
 
     private var arrivedDiffers: Bool { Date().timeIntervalSince(prompt.arrivedAt) >= 60 }
+    /// Got there 5–30 minutes before the top of an hour: that's the start.
+    private var upcomingHour: Date? { LiveShiftStartSheet.upcomingHourStart(arrivedAt: prompt.arrivedAt) }
+
+    /// The next full hour when `arrivedAt` is 5–30 minutes before it
+    /// (5:40 or 5:45 → 6:00), else nil.
+    static func upcomingHourStart(arrivedAt: Date, calendar: Calendar = .current) -> Date? {
+        guard let hour = calendar.nextDate(after: arrivedAt, matching: DateComponents(minute: 0, second: 0),
+                                           matchingPolicy: .nextTime) else { return nil }
+        let minutes = hour.timeIntervalSince(arrivedAt) / 60
+        return (5...30).contains(minutes) ? hour : nil
+    }
 
     private var startDate: Date {
         switch choice {
+        case .hour: return upcomingHour ?? Date()
         case .now: return Date()
         case .arrived: return prompt.arrivedAt
         case .custom: return customTime
@@ -46,6 +59,11 @@ struct LiveShiftStartSheet: View {
                     .padding(.top, AppSpacing.sm)
 
                     AddShiftPanel {
+                        if let upcomingHour {
+                            option(.hour, title: "At \(upcomingHour.formatted(date: .omitted, time: .shortened))",
+                                   detail: "The next full hour")
+                            EntryRowDivider()
+                        }
                         option(.now, title: "Now", detail: Date().formatted(date: .omitted, time: .shortened))
                         if arrivedDiffers {
                             EntryRowDivider()
@@ -106,8 +124,8 @@ struct LiveShiftStartSheet: View {
         }
         .onAppear {
             if let site = ArrivalMonitor.shared.site(id: prompt.siteID) { place = site.place }
-            customTime = prompt.arrivedAt
-            if arrivedDiffers { choice = .arrived }
+            customTime = upcomingHour ?? prompt.arrivedAt
+            if upcomingHour != nil { choice = .hour } else if arrivedDiffers { choice = .arrived }
         }
         .sheet(isPresented: $showingLocationPicker) {
             SavedLocationPickerSheet(place: $place, locations: store.shiftLocationSummaries())
