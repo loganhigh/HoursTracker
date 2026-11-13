@@ -52,7 +52,12 @@
     <a class="button" href="https://apps.apple.com/app/id6758329353">Get Hour Tracker</a>
   </div>
   <script>
-    window.location.replace("https://apps.apple.com/app/id6758329353");
+    // Link-preview loaders (iMessage uses a facebookexternalhit/Twitterbot
+    // user agent) run this page too. Forwarding them made the preview show
+    // the App Store's own card, so only people are sent on.
+    if (!/facebookexternalhit|facebot|twitterbot|bot\b|crawler|spider|preview/i.test(navigator.userAgent)) {
+      window.location.replace("https://apps.apple.com/app/id6758329353");
+    }
   </script>
 </body>
 </html>
