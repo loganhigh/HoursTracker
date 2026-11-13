@@ -16,6 +16,9 @@ struct DirectThreadTarget: Hashable, Identifiable {
 
 struct DirectInboxView: View {
     @ObservedObject private var chat = ChatService.shared
+    // Observed so rows pick up photos once friends / the board load.
+    @ObservedObject private var friends = FriendsService.shared
+    @ObservedObject private var board = TopTrackersService.shared
     @Environment(\.dismiss) private var dismiss
     @State private var openThread: DirectThreadTarget?
     @State private var newHandle = ""
@@ -92,7 +95,8 @@ struct DirectInboxView: View {
 
     private func threadRow(_ thread: DirectThread) -> some View {
         HStack(spacing: AppSpacing.sm) {
-            ProfileAvatarView(name: thread.otherUsername, size: 44, uid: thread.otherUid)
+            ProfileAvatarView(name: thread.otherUsername, size: 44,
+                              photoURL: UserPhotoLookup.url(for: thread.otherUid), uid: thread.otherUid)
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     // Same name styling as Board Chat: supporter blue,
@@ -124,6 +128,7 @@ struct DirectInboxView: View {
 }
 
 struct DirectThreadView: View {
+    @ObservedObject private var board = TopTrackersService.shared
     let target: DirectThreadTarget
 
     @ObservedObject private var chat = ChatService.shared
@@ -251,7 +256,8 @@ struct DirectThreadView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Back")
 
-            ProfileAvatarView(name: target.otherUsername, size: 32, uid: otherUid)
+            ProfileAvatarView(name: target.otherUsername, size: 32,
+                              photoURL: UserPhotoLookup.url(for: otherUid), uid: otherUid)
             PrestigeNameText(name: "@\(target.otherUsername)", prestige: 0,
                              font: AppTypography.headline, uid: otherUid)
                 .lineLimit(1)
@@ -356,5 +362,20 @@ struct DirectThreadView: View {
             }
             isSending = false
         }
+    }
+}
+
+/// A user's profile photo from what's already loaded: a friend's public
+/// profile first, then the leaderboard (which lists everyone). DM threads
+/// don't store photos themselves.
+enum UserPhotoLookup {
+    @MainActor
+    static func url(for uid: String?) -> String? {
+        guard let uid else { return nil }
+        if let url = FriendsService.shared.friends.first(where: { $0.uid == uid })?.profilePhotoURL,
+           !url.isEmpty {
+            return url
+        }
+        return TopTrackersService.shared.tracker(for: uid)?.photoURL
     }
 }
