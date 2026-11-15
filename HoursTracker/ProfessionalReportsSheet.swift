@@ -10,10 +10,13 @@ struct ProfessionalReportsSheet: View {
 
     @AppStorage("company_name") private var companyName: String = ""
     @ObservedObject private var logoManager = CompanyLogoManager.shared
+    @ObservedObject private var premium = PremiumManager.shared
 
     @State private var isExporting = false
     @State private var exportError: String?
     @State private var shareItem: SettingsExportShareItem?
+    @State private var showingYearEnd = false
+    @State private var showingUpgrade = false
 
     private let exportService = ReportExportService()
 
@@ -36,6 +39,31 @@ struct ProfessionalReportsSheet: View {
                     ) {
                         exportMonth()
                     }
+
+                    Button {
+                        if premium.isPremium {
+                            showingYearEnd = true
+                        } else {
+                            Haptics.lightTap()
+                            showingUpgrade = true
+                        }
+                    } label: {
+                        HStack(spacing: AppSpacing.sm) {
+                            SettingsRowLabel(
+                                icon: "doc.text.magnifyingglass",
+                                title: "Year-End Summary",
+                                subtitle: "Hours, overtime and gross pay for tax time"
+                            )
+                            Spacer(minLength: AppSpacing.xs)
+                            if !premium.isPremium {
+                                Image(systemName: "crown.fill")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(AppColors.accent)
+                            }
+                            SettingsChevron()
+                        }
+                    }
+                    .disabled(isExporting)
                 } header: {
                     SectionEyebrow("Professional Reports")
                 } footer: {
@@ -57,6 +85,12 @@ struct ProfessionalReportsSheet: View {
             }
             .sheet(item: $shareItem) { item in
                 ShareSheet(items: [item.url]) { shareItem = nil }
+            }
+            .sheet(isPresented: $showingYearEnd) {
+                YearEndSummarySheet(store: store)
+            }
+            .sheet(isPresented: $showingUpgrade) {
+                PremiumUpgradeView()
             }
             .alert("Export Failed", isPresented: Binding(
                 get: { exportError != nil },

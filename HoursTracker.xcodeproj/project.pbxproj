@@ -38,6 +38,7 @@
 		7A0001DB2F31000100000024 /* JobsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001DA2F31000100000024 /* JobsTests.swift */; };
 		7A0001F22F31000100000099 /* CatchUpPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001F12F31000100000099 /* CatchUpPlannerTests.swift */; };
 		7A0001F42F31000100000099 /* ReviewAskPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001F32F31000100000099 /* ReviewAskPolicyTests.swift */; };
+		7A0001F62F310001000000AA /* YearEndSummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0001F52F310001000000AA /* YearEndSummaryTests.swift */; };
 		7B0001AD2F4000010000000D /* HoursTrackerWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 7B0001A12F40000100000001 /* HoursTrackerWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7C0001AD2F5000010000000D /* HoursTrackerWatchWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7C0001A12F50000100000001 /* HoursTrackerWatchWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		FB004MSG2F90000100000004B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = FB004MSG2F90000100000004 /* FirebaseMessaging */; };
@@ -146,6 +147,7 @@
 		7A0001DA2F31000100000024 /* JobsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobsTests.swift; sourceTree = "<group>"; };
 		7A0001F12F31000100000099 /* CatchUpPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatchUpPlannerTests.swift; sourceTree = "<group>"; };
 		7A0001F32F31000100000099 /* ReviewAskPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewAskPolicyTests.swift; sourceTree = "<group>"; };
+		7A0001F52F310001000000AA /* YearEndSummaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YearEndSummaryTests.swift; sourceTree = "<group>"; };
 		7B0001A12F40000100000001 /* HoursTrackerWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HoursTrackerWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7C0001A12F50000100000001 /* HoursTrackerWatchWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HoursTrackerWatchWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -329,6 +331,7 @@
 				7A0001DA2F31000100000024 /* JobsTests.swift */,
 				7A0001F12F31000100000099 /* CatchUpPlannerTests.swift */,
 				7A0001F32F31000100000099 /* ReviewAskPolicyTests.swift */,
+				7A0001F52F310001000000AA /* YearEndSummaryTests.swift */,
 				7A0001C22F30000100000010 /* WrappedEntryDump.swift */,
 			);
 			path = HoursTrackerTests;
@@ -598,6 +601,7 @@
 				7A0001DB2F31000100000024 /* JobsTests.swift in Sources */,
 				7A0001F22F31000100000099 /* CatchUpPlannerTests.swift in Sources */,
 				7A0001F42F31000100000099 /* ReviewAskPolicyTests.swift in Sources */,
+				7A0001F62F310001000000AA /* YearEndSummaryTests.swift in Sources */,
 				7A0001C32F30000100000010 /* WrappedEntryDump.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
