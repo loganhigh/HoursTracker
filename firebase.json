@@ -2,11 +2,19 @@
   "hosting": {
     "target": "invites",
     "public": "public",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "rewrites": [
       {
         "source": "/f/**",
         "destination": "/f/index.html"
+      },
+      {
+        "source": "/c/**",
+        "destination": "/c/index.html"
       }
     ]
   },

@@ -124,7 +124,7 @@ struct CreateCrewSheet: View {
                             .foregroundStyle(copyConfirmation ? AppColors.positive : AppColors.faint)
                     }
 
-                    if let url = CrewService.inviteURL(code: code) {
+                    if let url = CrewService.shareURL(code: code) {
                         ShareLink(item: url) {
                             HStack(spacing: AppSpacing.sm) {
                                 Image(systemName: "square.and.arrow.up")

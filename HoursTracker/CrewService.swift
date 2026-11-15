@@ -127,6 +127,18 @@ final class CrewService: ObservableObject {
         return components.url
     }
 
+    /// `https://hourtracking.online/c/<code>` — what the share sheet sends.
+    /// A raw custom-scheme link shows no preview in Messages and isn't
+    /// tappable for people without the app; this page previews nicely and
+    /// hands off to `inviteURL(code:)`, or the App Store if not installed.
+    static func shareURL(code: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = AppLegalURLs.shareHost
+        components.path = "/c/\(code)"
+        return components.url
+    }
+
     /// `<scheme>://join-crew?code=XXXXXX` — pre-fills the Join a Crew sheet
     /// with the shared code. Returns false for any URL it doesn't recognize
     /// so the caller falls through to `AuthService.handleIncomingURL` (the

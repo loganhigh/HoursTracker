@@ -7,6 +7,8 @@ enum AppLegalURLs {
     static let support = URL(string: "https://hourtracking.online/support")!
     static let privacyPolicy = URL(string: "https://hourtracking.online/privacy")!
     static let termsOfUse = URL(string: "https://hourtracking.online/terms")!
+    /// Host for shared links (friend /f/, crew /c/, app /get).
+    static let shareHost = "hourtracking.online"
 }
 
 /// Compact legal links — used in Settings and Account.
