@@ -125,7 +125,7 @@ struct NotificationsAskOverlay: View {
     }
 }
 
-/// Onboarding page between "Start your shift when you get to work" and sign-in.
+/// Last onboarding page, after "Start your shift when you get to work".
 struct OnboardingNotificationsPage: View {
     let minHeight: CGFloat
     let onContinue: () -> Void
@@ -204,11 +204,12 @@ struct OnboardingNotificationsPage: View {
         }
         asking = true
         Task {
-            // Signed out here, so this only asks; sign-in registers the device.
-            let granted = await NotificationManager.shared.requestPermission()
+            // Signed in by now (sign-in comes before this page): ask and
+            // register the device in one go.
+            await PushNotificationService.shared.registerForPushIfSignedIn(userAsked: true)
             await refresh()
             asking = false
-            if granted {
+            if isOn {
                 Haptics.success()
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 onContinue()

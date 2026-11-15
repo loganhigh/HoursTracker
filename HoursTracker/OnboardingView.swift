@@ -78,16 +78,26 @@ struct OnboardingView: View {
     /// content centers and tall content still scrolls.
     @State private var signInPageMinHeight: CGFloat = 0
 
-    // Setup first, sign-in last: the account is the final step, so the pager
-    // ends on it and auth completion ends onboarding.
+    // Sign-in comes right after the intro, before the username: the
+    // username is claimed against the account, and an existing account
+    // skips setup so it can't overwrite the settings it already has.
+    // The notifications page is last and finishes onboarding.
     private let pageCount = 9
-    private let namePageIndex = 2
-    private let photoPageIndex = 3
-    private let payPageIndex = 4
-    private let companyPageIndex = 5
-    private let arrivalPageIndex = 6
-    private let notificationsPageIndex = 7
-    private let signInPageIndex = 8
+    private let signInPageIndex = 2
+    private let namePageIndex = 3
+    private let photoPageIndex = 4
+    private let payPageIndex = 5
+    private let companyPageIndex = 6
+    private let arrivalPageIndex = 7
+    private let notificationsPageIndex = 8
+
+    /// An account older than this when it signs in here is an existing one.
+    private static let newAccountWindow: TimeInterval = 15 * 60
+
+    /// Existing account: setup pages are skipped (notifications only).
+    @State private var skipsSetup = false
+    @State private var claimingUsername = false
+    @State private var hasFinished = false
 
     /// Seeds the payday picker with the next Friday — the most common payday,
     /// and a date the user is more likely to adjust than to type from scratch.
@@ -115,6 +125,16 @@ struct OnboardingView: View {
             }
         }
         .onChange(of: page) { _, newPage in
+            // The pager swipes freely; keep people on the right side of
+            // sign-in (and out of setup an existing account skips).
+            if newPage > signInPageIndex && !hasAdvanced {
+                page = signInPageIndex
+                return
+            }
+            if hasAdvanced && newPage < (skipsSetup ? notificationsPageIndex : namePageIndex) {
+                page = skipsSetup ? notificationsPageIndex : namePageIndex
+                return
+            }
             Haptics.lightTap()
             advanceIfReady()
         }
@@ -141,8 +161,7 @@ struct OnboardingView: View {
                     onCancel: { self.pendingCropImage = nil },
                     onConfirm: { cropped in
                         self.pendingCropImage = nil
-                        // Signed out at this point, so this only writes the
-                        // local copy; finishOnboarding uploads it after auth.
+                        // finishOnboarding uploads it if this didn't.
                         Task { try? await photoManager.setPhoto(cropped) }
                     }
                 )
@@ -210,6 +229,9 @@ struct OnboardingView: View {
             }
             .tag(1)
 
+            signInPage
+                .tag(signInPageIndex)
+
             scrollablePage { namePage }
                 .tag(namePageIndex)
 
@@ -230,14 +252,9 @@ struct OnboardingView: View {
             .tag(arrivalPageIndex)
 
             OnboardingNotificationsPage(minHeight: signInPageMinHeight) {
-                withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
-                    page = signInPageIndex
-                }
+                finishOnboarding()
             }
             .tag(notificationsPageIndex)
-
-            signInPage
-                .tag(signInPageIndex)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .animation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion), value: page)
@@ -249,7 +266,7 @@ struct OnboardingView: View {
         VStack(spacing: AppSpacing.md) {
             OnboardingPageIndicator(count: pageCount, current: page)
 
-            if page < namePageIndex {
+            if page < signInPageIndex {
                 Button(page == 0 ? "Get Started" : "Continue") {
                     Haptics.lightTap()
                     withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
@@ -386,8 +403,8 @@ struct OnboardingView: View {
                     saveUsernameAndContinue()
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(usernameDraft.isEmpty)
-                .opacity(usernameDraft.isEmpty ? 0.6 : 1)
+                .disabled(usernameDraft.isEmpty || claimingUsername)
+                .opacity(usernameDraft.isEmpty || claimingUsername ? 0.6 : 1)
             }
             .padding(.horizontal, AppSpacing.xl)
 
@@ -398,6 +415,7 @@ struct OnboardingView: View {
     private var canonicalUsernameDraft: String { Username.normalize(usernameDraft) }
 
     private func saveUsernameAndContinue() {
+        guard !claimingUsername else { return }
         let username = canonicalUsernameDraft
         if let problem = Username.problem(with: username) {
             nameValidationMessage = problem
@@ -405,14 +423,32 @@ struct OnboardingView: View {
             return
         }
         // The username IS the name: it's what friends, the leaderboard and
-        // every other surface show. Stored locally only — there is no account
-        // yet at this point in the flow; `finishOnboarding` claims it once
-        // auth completes (uniqueness can only be checked signed in).
+        // every other surface show. Signed in by now, so claim it right away
+        // and say so if it's taken.
         UserDefaults.standard.set(username, forKey: "profile_display_name")
-        UserDefaults.standard.set(username, forKey: "pending_username")
-        Haptics.success()
-        withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
-            page = photoPageIndex
+        claimingUsername = true
+        Task {
+            defer { claimingUsername = false }
+            do {
+                try await FriendsService.shared.claimUsername(username)
+                UserDefaults.standard.removeObject(forKey: "pending_username")
+            } catch FriendsError.usernameTaken {
+                nameValidationMessage = "That username is taken. Try another."
+                Haptics.error()
+                return
+            } catch FriendsError.invalidUsername(let reason) {
+                nameValidationMessage = reason
+                Haptics.error()
+                return
+            } catch {
+                // Offline or a server hiccup: keep it pending and claim it
+                // when onboarding finishes (Home asks again if that fails).
+                UserDefaults.standard.set(username, forKey: "pending_username")
+            }
+            Haptics.success()
+            withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
+                page = photoPageIndex
+            }
         }
     }
 
@@ -706,29 +742,35 @@ struct OnboardingView: View {
     /// Level-triggered advance check. Runs on every relevant event; fires at
     /// most once (`hasAdvanced`), never while auth is in-flight, and never on
     /// failure/cancel (isSignedIn stays false — AuthSignInOptionsView already
-    /// surfaces `lastError` quietly). Advances to the name page rather than
-    /// completing — the name page owns completion.
+    /// surfaces `lastError` quietly). A new account goes on to the username;
+    /// an existing one skips setup (its username, pay and job settings come
+    /// from the cloud) and only sees the notifications page.
     @MainActor
     private func advanceIfReady() {
         guard !hasAdvanced else { return }
-        guard page >= signInPageIndex else { return }
+        guard page == signInPageIndex else { return }
         guard authService.isSignedIn, !authService.isSigningIn else { return }
         hasAdvanced = true
         Haptics.success()
-        finishOnboarding()
+        let created = FirstWeekGoal.accountCreated ?? .distantPast
+        skipsSetup = Date().timeIntervalSince(created) > Self.newAccountWindow
+        withAnimation(AppMotion.animation(AppMotion.Spring.smooth, reduceMotion: reduceMotion)) {
+            page = skipsSetup ? notificationsPageIndex : namePageIndex
+        }
     }
 
     // MARK: - Completion (same semantics as the old finishTutorial)
 
     private func finishOnboarding() {
+        guard !hasFinished else { return }
+        hasFinished = true
         // One-off "Log your first shift" push if they leave without one.
         SmartNotifier.shared.scheduleFirstShiftNudgeIfNeeded(
             hasShifts: store.entries.contains { !$0.isOffDay }
         )
-        // Sign-in runs last, and the auth path may set `profile_display_name`
-        // from the cloud — which would discard the username the user chose
-        // two screens earlier. Reassert it here, and push it so the first
-        // thing the server publishes is the chosen handle.
+        // A cloud pull after sign-in may set `profile_display_name` back to
+        // an older value; reassert a handle chosen here that hasn't been
+        // claimed yet, and push it so the server publishes it.
         let chosen = UserDefaults.standard.string(forKey: "pending_username") ?? ""
         if !chosen.isEmpty, Username.problem(with: chosen) == nil {
             UserDefaults.standard.set(chosen, forKey: "profile_display_name")

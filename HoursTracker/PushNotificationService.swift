@@ -204,7 +204,9 @@ final class PushNotificationService {
         guard Auth.auth().currentUser != nil else { return }
         guard Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil else { return }
 
-        if !userAsked, NotificationPromptCenter.lastAskAt != nil,
+        // Never pop Apple's alert cold: not after an earlier ask, and not
+        // during onboarding, whose notifications page explains it first.
+        if !userAsked, NotificationPromptCenter.lastAskAt != nil || !AppTutorialStorage.isComplete,
            await NotificationManager.shared.authorizationStatus() == .notDetermined {
             return
         }
