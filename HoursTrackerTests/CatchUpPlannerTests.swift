@@ -103,3 +103,36 @@ final class CatchUpPlannerTests: XCTestCase {
         XCTAssertFalse(P.shouldAsk(status: .provisional, lastAskAt: nil, now: now), "quiet delivery counts as on")
     }
 }
+
+/// Home's "Log 3 days this week" card for new accounts.
+final class FirstWeekGoalTests: XCTestCase {
+    private let cal: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "America/Edmonton")!
+        return c
+    }()
+
+    private func day(_ d: Int, hour: Int = 9) -> Date {
+        cal.date(from: DateComponents(year: 2026, month: 11, day: d, hour: hour))!
+    }
+
+    func testCountsDistinctLoggedDaysInFirstWeekOnly() throws {
+        let created = day(10, hour: 22)
+        let shifts = [day(9), day(10, hour: 7), day(10, hour: 15), day(12), day(17)]
+        let p = try XCTUnwrap(FirstWeekGoal.progress(accountCreated: created, shiftDates: shifts, now: day(12, hour: 18), calendar: cal))
+        XCTAssertEqual(p.days.count, 7)
+        XCTAssertEqual(p.todayIndex, 2)
+        XCTAssertEqual(p.loggedCount, 2, "Nov 10 counted once, Nov 9 (before signup) and Nov 17 (after week) ignored")
+        XCTAssertFalse(p.isComplete)
+        XCTAssertEqual(p.daysLeft, 5)
+    }
+
+    func testCompleteAtThreeDaysAndHiddenAfterWeek() throws {
+        let created = day(10)
+        let p = try XCTUnwrap(FirstWeekGoal.progress(accountCreated: created, shiftDates: [day(10), day(11), day(13)], now: day(13), calendar: cal))
+        XCTAssertTrue(p.isComplete)
+        XCTAssertNotNil(FirstWeekGoal.progress(accountCreated: created, shiftDates: [], now: day(16, hour: 23), calendar: cal))
+        XCTAssertNil(FirstWeekGoal.progress(accountCreated: created, shiftDates: [], now: day(17), calendar: cal))
+        XCTAssertNil(FirstWeekGoal.progress(accountCreated: created, shiftDates: [], now: day(9), calendar: cal))
+    }
+}

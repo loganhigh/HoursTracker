@@ -488,6 +488,13 @@ struct HoursHomeView: View {
         wrappedCardDismissed = WrappedAvailability.hasDismissedHomeCard(year: offeredYear)
     }
 
+    /// The "Log 3 days this week" card, only during an account's first week.
+    private var firstWeekProgress: FirstWeekGoal.Progress? {
+        guard authService.user != nil, let created = FirstWeekGoal.accountCreated else { return nil }
+        let shiftDates = store.entries.filter { !$0.isOffDay }.map(\.date)
+        return FirstWeekGoal.progress(accountCreated: created, shiftDates: shiftDates)
+    }
+
     private var authSubscriptionKey: String {
         authService.user?.uid ?? "signed_out"
     }
@@ -523,6 +530,14 @@ struct HoursHomeView: View {
 
                 TodayHeroCard(store: store)
                     .cardAppear(index: 1)
+
+                if let firstWeek = firstWeekProgress {
+                    FirstWeekGoalCard(progress: firstWeek) {
+                        logShiftBurst &+= 1
+                        showingAdd = true
+                    }
+                    .cardAppear(index: 2)
+                }
 
                 HomeStatTriplet(store: store)
                     .cardAppear(index: 2)
