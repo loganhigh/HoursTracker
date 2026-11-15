@@ -369,12 +369,10 @@ class SmartNotifier: ObservableObject {
         let hour = dailyReminderHour
 
         Task {
-            // Request permission if not yet determined; use it if already granted
-            var hasPermission = await notificationManager.hasPermission()
-            if !hasPermission {
-                hasPermission = await notificationManager.requestPermission()
-            }
-            guard hasPermission else { return }
+            // Only when already allowed. Asking is owned by the onboarding
+            // notifications page and the Home card (NotificationsPrompt);
+            // asking here fired Apple's alert cold on the welcome screen.
+            guard await notificationManager.hasPermission() else { return }
 
             await removePendingDailyReminders()
 
