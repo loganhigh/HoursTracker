@@ -62,13 +62,15 @@ service cloud.firestore {
     function noAdminOnlyFieldsCreate() {
       return !request.resource.data.keys()
         .hasAny(['adminFloorLevel', 'adminFloorPrestige', 'adminEquippedTitle',
-                 'adminXPOffset', 'username', 'tipTotal', 'tipCount', 'clockOutShortcut']);
+                 'adminXPOffset', 'username', 'tipTotal', 'tipCount', 'clockOutShortcut',
+                 'referredBy', 'referredAt', 'referralCount']);
     }
 
     function noAdminOnlyFieldsUpdate() {
       return !request.resource.data.diff(resource.data).affectedKeys()
         .hasAny(['adminFloorLevel', 'adminFloorPrestige', 'adminEquippedTitle',
-                 'adminXPOffset', 'username', 'tipTotal', 'tipCount', 'clockOutShortcut']);
+                 'adminXPOffset', 'username', 'tipTotal', 'tipCount', 'clockOutShortcut',
+                 'referredBy', 'referredAt', 'referralCount']);
     }
 
     match /publicProfiles/{profileUid} {

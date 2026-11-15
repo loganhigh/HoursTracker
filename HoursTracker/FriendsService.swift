@@ -138,6 +138,9 @@ final class FriendsService: ObservableObject {
     /// Friend sheet reads this to pre-fill the username field for whoever
     /// opens an invite link shared via iMessage.
     @Published var pendingAddUsername: String?
+    /// Friends who joined from this user's invite link (server-owned
+    /// `referralCount`, credited by claimReferral).
+    @Published private(set) var myReferralCount = 0
 
     private let db = Firestore.firestore()
     private lazy var functions = Functions.functions(region: "us-central1")
@@ -195,6 +198,7 @@ final class FriendsService: ObservableObject {
                     guard error == nil else { return }
                     let name = Username.normalize(snapshot?.data()?["username"] as? String ?? "")
                     self.myUsername = name.isEmpty ? nil : name
+                    self.myReferralCount = (snapshot?.data()?["referralCount"] as? NSNumber)?.intValue ?? 0
                     // Only a server-confirmed snapshot settles the question;
                     // a cache replay on a fresh install has no username yet.
                     if snapshot?.metadata.isFromCache == false {
@@ -461,7 +465,9 @@ final class FriendsService: ObservableObject {
     /// two of you immediately — that only happens when the other person had
     /// already sent you a request, so both sides have opted in.
     @discardableResult
-    func sendFriendRequest(toUsername rawUsername: String, myUid: String, myName: String) async throws -> Bool {
+    /// `viaInvite`: the username came from their invite link, so a new
+    /// account credits them with the referral.
+    func sendFriendRequest(toUsername rawUsername: String, myUid: String, myName: String, viaInvite: Bool = false) async throws -> Bool {
         let username = Username.normalize(rawUsername)
         if let problem = Username.problem(with: username, moderation: { _ in false }) {
             throw FriendsError.invalidUsername(problem)
@@ -471,7 +477,7 @@ final class FriendsService: ObservableObject {
         }
         do {
             let result = try await functions.httpsCallable("sendFriendRequest")
-                .call(["username": username, "myName": myName])
+                .call(["username": username, "myName": myName, "viaInvite": viaInvite])
             let payload = result.data as? [String: Any]
             let autoAccepted = payload?["autoAccepted"] as? Bool ?? false
             if autoAccepted {
@@ -979,15 +985,15 @@ final class FriendsService: ObservableObject {
 
     // MARK: - Deep link (iMessage invite)
 
-    /// `https://hourtracker-sms.web.app/f/<username>` — a short, presentable
-    /// link on a dedicated Firebase Hosting site (free `*.web.app` domain,
-    /// no custom domain needed). The page at `public/f/index.html`
+    /// `https://hourtracking.online/f/<username>` — a short, presentable
+    /// link on the Hour Tracker website (Netlify; the old
+    /// hourtracker-sms.web.app links keep working). The page at `f/index.html`
     /// immediately redirects into the app via the custom scheme below,
     /// falling back to the App Store listing if the app isn't installed.
     static func inviteURL(username: String) -> URL? {
         var components = URLComponents()
         components.scheme = "https"
-        components.host = "hourtracker-sms.web.app"
+        components.host = AppLegalURLs.shareHost
         components.path = "/f/\(username)"
         return components.url
     }

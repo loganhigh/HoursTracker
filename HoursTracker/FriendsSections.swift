@@ -22,6 +22,8 @@ struct UsernameCard: View {
     let onSetUsername: () -> Void
     /// Own displayed prestige — Ascended ranks (P11+) get the marked name.
     var prestige: Int = 0
+    /// Friends who joined from this user's invite link.
+    var referralCount: Int = 0
 
     var body: some View {
         VStack(spacing: AppSpacing.md) {
@@ -71,6 +73,11 @@ struct UsernameCard: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(AppColors.accent)
                         .padding(.top, 4)
+
+                        Text(ReferralTier.progressLine(count: referralCount))
+                            .appText(.caption)
+                            .foregroundStyle(AppColors.subtext)
+                            .multilineTextAlignment(.center)
                     }
                 } else {
                     Button(action: onSetUsername) {

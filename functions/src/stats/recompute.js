@@ -11,6 +11,7 @@ const { makeCalendar, resolveUserTimeZone } = require("./localCalendar");
 const { sanitizeBadgeSummaries } = require("./badgeSanity");
 const { typicalGapDays } = require("../admin/winback");
 const { supporterInfo, withSupporterBadge } = require("../supporter");
+const { withReferralBadge } = require("../social/referrals");
 
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 
@@ -1217,9 +1218,10 @@ async function recomputeUserStats(db, uid, options = {}) {
   );
   // The Supporter badge is the server's call (it knows who tipped): any
   // client-sent copy is dropped and the real one added for supporters.
-  const unlockedBadgeSummaries = withSupporterBadge(
-    badgeSanity.badges,
-    privacy.shareBadges && userData.isSupporter === true
+  // Invite badges are the server's call too (referralCount is server-owned).
+  const unlockedBadgeSummaries = withReferralBadge(
+    withSupporterBadge(badgeSanity.badges, privacy.shareBadges && userData.isSupporter === true),
+    privacy.shareBadges ? userData.referralCount : 0
   );
   if (badgeSanity.dropped.length > 0) {
     console.log(
@@ -1245,6 +1247,8 @@ async function recomputeUserStats(db, uid, options = {}) {
     isSupporter: userData.isSupporter === true,
     // Perks by total tipped (colour choice, Legend name style, photo ring).
     supporter: supporterInfo(userData),
+    // Friends brought in from invite links (claimReferral).
+    referralCount: Math.max(0, Math.floor(Number(userData.referralCount) || 0)),
     // The public handle. Server-owned (claimUsername), so it rides along
     // unmoderated — it was validated and filtered when it was claimed.
     username: userData.username || null,

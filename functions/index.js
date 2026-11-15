@@ -39,6 +39,7 @@ const winback = require("./src/admin/winback");
 const updatePush = require("./src/admin/updatePush");
 const prestigeReady = require("./src/stats/prestigeReady");
 const { supporterInfo } = require("./src/supporter");
+const referrals = require("./src/social/referrals");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
@@ -3470,6 +3471,13 @@ exports.sendFriendRequest = onCall(
       throw new HttpsError("permission-denied", "This user isn't accepting invites.");
     }
 
+    // Opened from the target's invite link: credit them for bringing a new
+    // user. Best effort; never blocks the friend request.
+    if (request.data?.viaInvite === true && username) {
+      await claimReferral(myUid, myName, targetUid, targetData).catch((err) =>
+        console.warn(`claimReferral uid=${myUid} referrer=${targetUid} failed`, err));
+    }
+
     const myRequestRef = db.collection("users").doc(targetUid)
       .collection("friendRequests").doc(myUid);
     const theirRequestRef = db.collection("users").doc(myUid)
@@ -3509,6 +3517,42 @@ exports.sendFriendRequest = onCall(
     return { ok: true, targetUid, autoAccepted: false };
   }
 );
+
+/**
+ * Records `myUid` as referred by `referrerUid` (once, within the new
+ * account's first two weeks), bumps the referrer's count on users +
+ * publicProfiles, and tells them. Returns true when credit was given.
+ */
+async function claimReferral(myUid, myName, referrerUid, referrerData) {
+  const authUser = await auth.getUser(myUid);
+  const accountCreatedMs = Date.parse(authUser.metadata.creationTime || "");
+  const myRef = db.collection("users").doc(myUid);
+  const referrerRef = db.collection("users").doc(referrerUid);
+  const credited = await db.runTransaction(async (tx) => {
+    const mine = await tx.get(myRef);
+    const ok = referrals.canClaimReferral({
+      myUid,
+      referrerUid,
+      accountCreatedMs,
+      nowMs: Date.now(),
+      alreadyReferredBy: mine.data()?.referredBy,
+    });
+    if (!ok) return false;
+    tx.set(myRef, { referredBy: referrerUid, referredAt: FieldValue.serverTimestamp() }, { merge: true });
+    tx.set(referrerRef, { referralCount: FieldValue.increment(1) }, { merge: true });
+    tx.set(db.collection("publicProfiles").doc(referrerUid),
+      { referralCount: FieldValue.increment(1) }, { merge: true });
+    return true;
+  });
+  if (!credited) return false;
+  console.log(`referral uid=${myUid} referrer=${referrerUid}`);
+  await sendPushToUser(referrerUid, referrerData, {
+    title: "Your invite worked 🎉",
+    body: `${myName} joined Hour Tracker from your invite`,
+    dataPayload: { type: "referral", fromUid: myUid, fromName: myName },
+  });
+  return true;
+}
 
 /**
  * Creates the two-sided friendship (legacy friend links + friendships pair

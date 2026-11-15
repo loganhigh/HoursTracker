@@ -24,6 +24,8 @@ struct FriendsView: View {
     @ObservedObject private var verifiedStatus = VerifiedStatusService.shared
     @State private var showingVerifiedProofSheet = false
     @State private var usernameInput = ""
+    /// Username that arrived through an invite link, for referral credit.
+    @State private var inviteUsername: String?
     @State private var actionMessage: String?
     @State private var actionMessageIsError = false
     @State private var copyConfirmation = false
@@ -130,6 +132,7 @@ struct FriendsView: View {
         .onChange(of: friendsService.pendingAddUsername) { _, newValue in
             guard let newValue else { return }
             usernameInput = newValue
+            inviteUsername = newValue
             showingAddFriend = true
             friendsService.pendingAddUsername = nil
         }
@@ -145,7 +148,8 @@ struct FriendsView: View {
                             onCopy: { copyUsername() },
                             onAdd: { Task { await sendRequest() } },
                             onSetUsername: { showingUsernameSheet = true },
-                            prestige: store.displayedPrestige
+                            prestige: store.displayedPrestige,
+                            referralCount: friendsService.myReferralCount
                         )
                         .owlStanding(.buddies)
                         notifyCaption
@@ -421,7 +425,10 @@ struct FriendsView: View {
             isSending = false
         }
         do {
-            let connected = try await friendsService.sendFriendRequest(toUsername: username, myUid: uid, myName: myName)
+            let connected = try await friendsService.sendFriendRequest(
+                toUsername: username, myUid: uid, myName: myName,
+                viaInvite: username == inviteUsername
+            )
             // Always report success, even if our own 15s watchdog already
             // fired and displayed "timed out" — a slow network doesn't mean
             // the call failed, and the request may have landed on the
