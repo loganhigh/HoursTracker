@@ -2,7 +2,7 @@ import PDFKit
 import SwiftUI
 
 /// Hour Tracker Pro — pick a calendar year, preview its year-end summary PDF
-/// and share it. Presented from Reports (`ProfessionalReportsSheet`).
+/// and share it. Presented from Settings → Data & Backup.
 struct YearEndSummarySheet: View {
     @ObservedObject var store: HoursStore
 

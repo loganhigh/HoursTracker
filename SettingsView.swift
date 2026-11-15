@@ -17,6 +17,8 @@ struct SettingsView: View {
     @State private var showingCutoffPicker = false
     @State private var showingNotificationsSheet = false
     @State private var showingDataExportSheet = false
+    @State private var showingYearEndSummary = false
+    @State private var showingYearEndUpgrade = false
     @State private var showingRestoreBackupConfirm = false
     @State private var showBackupSavedAlert = false
     @State private var showRestoreSuccessAlert = false
@@ -332,10 +334,29 @@ struct SettingsView: View {
                         }
                     }
 
-                    // Professional Reports removed from Settings for now —
-                    // revisit later. ProfessionalReportsSheet and the upgrade
-                    // paywall it gated are untouched; restore the row to
-                    // re-enable.
+                    Button {
+                        if premium.isPremium {
+                            showingYearEndSummary = true
+                        } else {
+                            Haptics.lightTap()
+                            showingYearEndUpgrade = true
+                        }
+                    } label: {
+                        HStack(spacing: AppSpacing.sm) {
+                            SettingsRowLabel(
+                                icon: "doc.text.magnifyingglass",
+                                title: "Year-End Summary",
+                                subtitle: "Hours, overtime and gross pay for tax time"
+                            )
+                            Spacer(minLength: AppSpacing.xs)
+                            if !premium.isPremium {
+                                Image(systemName: "crown.fill")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(AppColors.accent)
+                            }
+                            SettingsChevron()
+                        }
+                    }
                 } header: {
                     SectionEyebrow("Data & Backup")
                 } footer: {
@@ -476,6 +497,12 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingDataExportSheet) {
                 DataExportSheet(store: store)
+            }
+            .sheet(isPresented: $showingYearEndSummary) {
+                YearEndSummarySheet(store: store)
+            }
+            .sheet(isPresented: $showingYearEndUpgrade) {
+                PremiumUpgradeView()
             }
             .sheet(isPresented: $showingPremiumSheet) {
                 PremiumUpgradeView()
