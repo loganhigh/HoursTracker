@@ -154,6 +154,15 @@ struct WatchHomeView: View {
                 stat("Month", WatchStyle.hours(snapshot.monthHours + (inMonth ? liveHours : 0)))
             }
             .padding(.vertical, 6)
+            if let pay = snapshot.projectedPayText {
+                Text("\(pay) projected this cheque")
+                    .font(.system(.footnote, design: .rounded, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(WatchStyle.accent)
+                    .frame(maxWidth: .infinity)
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
+            }
         }
     }
 

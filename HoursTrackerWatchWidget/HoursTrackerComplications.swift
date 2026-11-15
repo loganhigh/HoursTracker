@@ -116,6 +116,7 @@ struct ComplicationView: View {
                     .font(.title3.weight(.semibold))
                     .widgetLabel {
                         Text(snapshot.liveShift.map { "Break · \($0.workedText(at: entry.date))" }
+                             ?? snapshot.projectedPayText.map { "\($0) cheque" }
                              ?? "\(hours(snapshot.chequeHours)) cheque")
                     }
             }
@@ -132,7 +133,8 @@ struct ComplicationView: View {
                     Text("⏱ \(live.timerStart(at: entry.date), style: .timer) on shift")
                 }
             } else if snapshot.signedIn {
-                Text("\(hours(snapshot.chequeHours)) this cheque")
+                Text(snapshot.projectedPayText.map { "\(hours(snapshot.chequeHours)) · \($0) cheque" }
+                     ?? "\(hours(snapshot.chequeHours)) this cheque")
             } else {
                 Text("Hour Tracker")
             }
@@ -165,7 +167,11 @@ struct ComplicationView: View {
                     .widgetAccentable()
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     stat(hours(snapshot.chequeHours), "Cheque")
-                    stat(hours(snapshot.monthHours), "Month")
+                    if let pay = snapshot.projectedPayText {
+                        stat(pay, "Projected")
+                    } else {
+                        stat(hours(snapshot.monthHours), "Month")
+                    }
                 }
                 Text(snapshot.signedIn ? "Tap to clock in" : "Open on iPhone to sign in")
                     .font(.system(size: 12))
@@ -211,6 +217,7 @@ extension WatchSnapshot {
         var snapshot = WatchSnapshot.empty
         snapshot.signedIn = true
         snapshot.chequeHours = 59.5
+        snapshot.projectedPay = 2140
         snapshot.monthHours = 140
         return snapshot
     }

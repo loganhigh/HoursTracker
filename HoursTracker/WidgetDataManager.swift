@@ -3,6 +3,13 @@ import WidgetKit
 
 // MARK: - Widget Data Model
 
+// Must stay in sync with HoursTrackerWidget/WidgetData.swift.
+/// Projected pay for the current cheque, handed to the widgets and watch.
+struct PayProjection: Equatable {
+    let amount: Double
+    let currencyCode: String
+}
+
 struct WidgetData: Codable {
     let hoursThisCheque: Double
     let hoursThisMonth: Double
@@ -11,7 +18,24 @@ struct WidgetData: Codable {
     let lastUpdated: Date
     let currentStreak: Int
     let prestige: Int
-    
+    /// Paid hours on worked (non-off-day) entries dated today.
+    let todayHours: Double
+    /// True when any entry (worked or day off) exists for today.
+    let todayLogged: Bool
+    /// True when today's only entries are off days.
+    let todayIsOffDay: Bool
+    /// Start of the day the today* fields describe. A snapshot written
+    /// yesterday must not report today as logged after midnight.
+    let dataDay: Date?
+    /// The week window (honouring "Week starts on") `hoursThisWeek` covers.
+    let weekStart: Date?
+    let weekEnd: Date?
+    /// Weekly OT threshold when weekly overtime rules are on; nil otherwise.
+    let weeklyTarget: Double?
+    /// The current cheque's projected pay (nil when there's nothing to project).
+    let projectedPay: Double?
+    let currencyCode: String?
+
     static var empty: WidgetData {
         WidgetData(
             hoursThisCheque: 0,
@@ -26,6 +50,8 @@ struct WidgetData: Codable {
 
     enum CodingKeys: String, CodingKey {
         case hoursThisCheque, hoursThisMonth, hoursThisWeek, nextPayday, lastUpdated, currentStreak, prestige
+        case todayHours, todayLogged, todayIsOffDay, dataDay, weekStart, weekEnd, weeklyTarget
+        case projectedPay, currencyCode
     }
 
     init(
@@ -35,7 +61,16 @@ struct WidgetData: Codable {
         nextPayday: Date?,
         lastUpdated: Date,
         currentStreak: Int,
-        prestige: Int
+        prestige: Int,
+        todayHours: Double = 0,
+        todayLogged: Bool = false,
+        todayIsOffDay: Bool = false,
+        dataDay: Date? = nil,
+        weekStart: Date? = nil,
+        weekEnd: Date? = nil,
+        weeklyTarget: Double? = nil,
+        projectedPay: Double? = nil,
+        currencyCode: String? = nil
     ) {
         self.hoursThisCheque = hoursThisCheque
         self.hoursThisMonth = hoursThisMonth
@@ -44,6 +79,15 @@ struct WidgetData: Codable {
         self.lastUpdated = lastUpdated
         self.currentStreak = currentStreak
         self.prestige = prestige
+        self.todayHours = todayHours
+        self.todayLogged = todayLogged
+        self.todayIsOffDay = todayIsOffDay
+        self.dataDay = dataDay
+        self.weekStart = weekStart
+        self.weekEnd = weekEnd
+        self.weeklyTarget = weeklyTarget
+        self.projectedPay = projectedPay
+        self.currencyCode = currencyCode
     }
 
     init(from decoder: Decoder) throws {
@@ -55,6 +99,15 @@ struct WidgetData: Codable {
         lastUpdated = try container.decode(Date.self, forKey: .lastUpdated)
         currentStreak = try container.decodeIfPresent(Int.self, forKey: .currentStreak) ?? 0
         prestige = try container.decodeIfPresent(Int.self, forKey: .prestige) ?? 0
+        todayHours = try container.decodeIfPresent(Double.self, forKey: .todayHours) ?? 0
+        todayLogged = try container.decodeIfPresent(Bool.self, forKey: .todayLogged) ?? false
+        todayIsOffDay = try container.decodeIfPresent(Bool.self, forKey: .todayIsOffDay) ?? false
+        dataDay = try container.decodeIfPresent(Date.self, forKey: .dataDay)
+        weekStart = try container.decodeIfPresent(Date.self, forKey: .weekStart)
+        weekEnd = try container.decodeIfPresent(Date.self, forKey: .weekEnd)
+        weeklyTarget = try container.decodeIfPresent(Double.self, forKey: .weeklyTarget)
+        projectedPay = try container.decodeIfPresent(Double.self, forKey: .projectedPay)
+        currencyCode = try container.decodeIfPresent(String.self, forKey: .currencyCode)
     }
 }
 
@@ -75,13 +128,14 @@ class WidgetDataManager {
     
     // MARK: - Update Widget Data
     
-    func updateWidgetData(entries: [WorkEntry], paySettings: PaySettings, prestige: Int) {
+    func updateWidgetData(entries: [WorkEntry], paySettings: PaySettings, prestige: Int, projection: PayProjection?) {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self else { return }
             let widgetData = self.calculateWidgetData(
                 entries: entries,
                 paySettings: paySettings,
-                prestige: prestige
+                prestige: prestige,
+                projection: projection
             )
             self.saveWidgetData(widgetData)
             DispatchQueue.main.async {
@@ -93,7 +147,8 @@ class WidgetDataManager {
     private func calculateWidgetData(
         entries: [WorkEntry],
         paySettings: PaySettings,
-        prestige: Int
+        prestige: Int,
+        projection: PayProjection?
     ) -> WidgetData {
         let calendar = Calendar.current
         let now = Date()
@@ -120,6 +175,17 @@ class WidgetDataManager {
             .filter { $0.date >= weekStart && $0.date < weekEnd && !$0.isOffDay }
             .reduce(0) { $0 + $1.paidHours }
 
+        // Today: logged at all (a day off counts — the user made the call),
+        // and paid hours on worked entries.
+        let todayEntries = entries.filter { calendar.isDate($0.date, inSameDayAs: now) }
+        let todayWorked = todayEntries.filter { !$0.isOffDay }
+        let todayHours = todayWorked.reduce(0) { $0 + $1.paidHours }
+
+        // Weekly target only exists when weekly overtime rules are on.
+        let usesWeeklyOT = paySettings.overtimeType == .weekly || paySettings.overtimeType == .dailyAndWeekly
+        let weeklyTarget: Double? = usesWeeklyOT && paySettings.weeklyOvertimeThreshold > 0
+            ? paySettings.weeklyOvertimeThreshold : nil
+
         // Calculate current streak
         let currentStreak = calculateCurrentStreak(entries: entries)
         
@@ -130,7 +196,16 @@ class WidgetDataManager {
             nextPayday: paySettings.nextPayday,
             lastUpdated: Date(),
             currentStreak: currentStreak,
-            prestige: max(0, min(prestige, GamificationLevelCalculator.maxPrestige))
+            prestige: max(0, min(prestige, GamificationLevelCalculator.maxPrestige)),
+            todayHours: todayHours,
+            todayLogged: !todayEntries.isEmpty,
+            todayIsOffDay: !todayEntries.isEmpty && todayWorked.isEmpty,
+            dataDay: calendar.startOfDay(for: now),
+            weekStart: weekStart,
+            weekEnd: weekEnd,
+            weeklyTarget: weeklyTarget,
+            projectedPay: projection?.amount,
+            currencyCode: projection?.currencyCode
         )
     }
     
@@ -223,5 +298,23 @@ class WidgetDataManager {
         print("WidgetDataManager: All widgets reloaded")
         #endif
         #endif
+    }
+}
+
+// MARK: - Widget deep link
+
+/// Routes the widgets' "Log today" tap (`<app scheme>://log-today`, built in
+/// HoursTrackerWidget/WidgetTodayStatus.swift) into the existing Add Shift
+/// flow via the same router flag win-back pushes raise. AppTabView consumes
+/// it on change and on appear, so a cold launch from the widget works too.
+enum WidgetDeepLink {
+    static let logTodayHost = "log-today"
+
+    @MainActor
+    @discardableResult
+    static func handleIncomingURL(_ url: URL) -> Bool {
+        guard url.host == logTodayHost else { return false }
+        NotificationRouter.shared.openAddShift = true
+        return true
     }
 }

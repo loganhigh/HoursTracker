@@ -102,7 +102,8 @@ struct HoursTrackerApp: App {
                 WidgetDataManager.shared.updateWidgetData(
                     entries: store.allEntriesIncludingArchive(),
                     paySettings: store.paySettings,
-                    prestige: store.gamificationProfile.prestige
+                    prestige: store.gamificationProfile.prestige,
+                    projection: store.widgetPayProjection()
                 )
                 WidgetDataManager.shared.reloadAllWidgets()
             }
@@ -165,6 +166,9 @@ private struct AppRootView: View {
             // Sign-In's OAuth redirect — check the app-specific host first,
             // then fall through to the OAuth handler.
             if CrewService.handleIncomingURL(url) {
+                return
+            }
+            if WidgetDeepLink.handleIncomingURL(url) {
                 return
             }
             if FriendsService.handleIncomingURL(url) {

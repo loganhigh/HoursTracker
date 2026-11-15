@@ -85,6 +85,19 @@ struct WatchSnapshot: Codable, Equatable {
     /// fetched on demand with `.requestMonth` to keep the snapshot small.
     var months: [WatchMonth]
     var generatedAt: Date
+    /// Projected pay for the current cheque (nil when nothing to project).
+    var projectedPay: Double? = nil
+    var currencyCode: String? = nil
+
+    /// "~$2,140", or nil when there's no projection.
+    var projectedPayText: String? {
+        guard let projectedPay, projectedPay > 0 else { return nil }
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.currencyCode = currencyCode ?? Locale.current.currency?.identifier ?? "USD"
+        f.maximumFractionDigits = 0
+        return "~" + (f.string(from: NSNumber(value: projectedPay.rounded())) ?? "$\(Int(projectedPay.rounded()))")
+    }
 
     static let empty = WatchSnapshot(
         signedIn: false, liveShift: nil, chequeHours: 0, monthHours: 0,

@@ -9,6 +9,20 @@ enum WidgetFormatting {
         if hours >= 10 { return String(format: "%.0f\(suffix)", hours) }
         return String(format: "%.1f\(suffix)", hours)
     }
+
+    /// Whole-unit money ("$2,140"); "$12.4k" from 10,000 up so it fits.
+    static func money(_ amount: Double, currencyCode: String?) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.currencyCode = currencyCode ?? Locale.current.currency?.identifier ?? "USD"
+        f.maximumFractionDigits = 0
+        if amount >= 10_000 {
+            f.maximumFractionDigits = 1
+            let short = f.string(from: NSNumber(value: amount / 1000)) ?? "\(Int(amount / 1000))"
+            return short + "k"
+        }
+        return f.string(from: NSNumber(value: amount.rounded())) ?? "$\(Int(amount.rounded()))"
+    }
 }
 
 extension View {

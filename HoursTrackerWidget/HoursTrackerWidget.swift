@@ -18,9 +18,19 @@ struct Provider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> Void) {
-        let entry = SimpleEntry(date: Date(), widgetData: WidgetData.load())
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
-        completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
+        let now = Date()
+        let data = WidgetData.load()
+        let cal = Calendar.current
+        // A second entry at the next midnight flips "today" to not-logged
+        // (and resets the week across a week boundary) on time, even if the
+        // app doesn't run. The app reloads timelines whenever shifts change.
+        let midnight = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now)) ?? now.addingTimeInterval(86_400)
+        let entries = [
+            SimpleEntry(date: now, widgetData: data),
+            SimpleEntry(date: midnight, widgetData: data)
+        ]
+        let refresh = min(cal.date(byAdding: .minute, value: 30, to: now) ?? midnight, midnight)
+        completion(Timeline(entries: entries, policy: .after(refresh)))
     }
 }
 
@@ -37,11 +47,14 @@ struct HoursTrackerWidgetEntryView: View {
     @Environment(\.widgetFamily) var family
 
     var body: some View {
-        switch family {
-        case .systemSmall:  SmallWidgetView(entry: entry)
-        case .systemMedium: MediumWidgetView(entry: entry)
-        default:            SmallWidgetView(entry: entry)
+        Group {
+            switch family {
+            case .systemSmall:  SmallWidgetView(entry: entry)
+            case .systemMedium: MediumWidgetView(entry: entry)
+            default:            SmallWidgetView(entry: entry)
+            }
         }
+        .logTodayURL(entry.dayState)
     }
 }
 
@@ -51,6 +64,7 @@ struct SmallWidgetView: View {
     var entry: Provider.Entry
 
     var body: some View {
+        let state = entry.dayState
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 Image(systemName: "clock.fill")
@@ -59,32 +73,38 @@ struct SmallWidgetView: View {
                     .font(.system(size: 10, weight: .black))
                     .tracking(1)
                     .widgetFittingText(minScale: 0.7)
+                Spacer(minLength: 2)
+                if entry.widgetData.currentStreak > 0 {
+                    Text("🔥\(entry.widgetData.currentStreak)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .widgetFittingText(minScale: 0.7)
+                }
             }
             .foregroundStyle(.white.opacity(0.7))
 
-            Text(formatHours(entry.widgetData.hoursThisCheque))
+            Text(formatHours(state.weekHours))
                 .font(.system(size: 38, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .widgetFittingText(minScale: 0.45)
 
-            Text("this pay cheque")
+            Text(weekCaption(state))
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.65))
                 .widgetFittingText(minScale: 0.7)
 
-            if entry.widgetData.currentStreak > 0 {
-                HStack(spacing: 3) {
-                    Text("🔥")
-                        .font(.system(size: 11))
-                    Text("\(entry.widgetData.currentStreak)d streak")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.8))
-                        .widgetFittingText(minScale: 0.7)
-                }
-            }
+            Spacer(minLength: 0)
+
+            TodayStatusPill(state: state)
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    private func weekCaption(_ state: WidgetDayState) -> String {
+        if let target = state.weeklyTarget {
+            return "of \(formatHours(target)) this week"
+        }
+        return "this week"
     }
 }
 
@@ -94,6 +114,7 @@ struct MediumWidgetView: View {
     var entry: Provider.Entry
 
     var body: some View {
+        let state = entry.dayState
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
@@ -117,8 +138,12 @@ struct MediumWidgetView: View {
                         .foregroundStyle(.white.opacity(0.8))
                         .widgetFittingText(minScale: 0.7)
                 }
+
+                Spacer(minLength: 0)
+
+                TodayStatusPill(state: state, fontSize: 12)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
 
             Rectangle()
                 .fill(.white.opacity(0.2))
@@ -126,7 +151,7 @@ struct MediumWidgetView: View {
                 .padding(.vertical, 8)
 
             VStack(alignment: .leading, spacing: 10) {
-                mediumStat(label: "This Week", value: formatHours(entry.widgetData.hoursThisWeek))
+                mediumStat(label: "This Week", value: weekValue(state))
                 mediumStat(label: "Month", value: formatHours(entry.widgetData.hoursThisMonth))
                 if let payday = entry.widgetData.nextPayday {
                     // Calendar days, not elapsed 24h intervals: counting from
@@ -141,6 +166,12 @@ struct MediumWidgetView: View {
             .padding(.leading, 16)
         }
         .padding(16)
+    }
+
+    /// "32h", or "32/40h" against the weekly overtime threshold.
+    private func weekValue(_ state: WidgetDayState) -> String {
+        guard let target = state.weeklyTarget else { return formatHours(state.weekHours) }
+        return "\(formatHours(state.weekHours).dropLast())/\(formatHours(target))"
     }
 
     private func mediumStat(label: String, value: String) -> some View {
@@ -178,7 +209,7 @@ struct HoursTrackerWidget: Widget {
                 }
         }
         .configurationDisplayName("Work Hours")
-        .description("Track your hours at a glance.")
+        .description("This week's hours, with a one-tap reminder to log today.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }

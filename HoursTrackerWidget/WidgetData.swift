@@ -10,6 +10,23 @@ struct WidgetData: Codable {
     let lastUpdated: Date
     let currentStreak: Int
     let prestige: Int
+    /// Paid hours on worked (non-off-day) entries dated today.
+    let todayHours: Double
+    /// True when any entry (worked or day off) exists for today.
+    let todayLogged: Bool
+    /// True when today's only entries are off days.
+    let todayIsOffDay: Bool
+    /// Start of the day the today* fields describe. A snapshot written
+    /// yesterday must not report today as logged after midnight.
+    let dataDay: Date?
+    /// The week window (honouring "Week starts on") `hoursThisWeek` covers.
+    let weekStart: Date?
+    let weekEnd: Date?
+    /// Weekly OT threshold when weekly overtime rules are on; nil otherwise.
+    let weeklyTarget: Double?
+    /// The current cheque's projected pay (nil when there's nothing to project).
+    let projectedPay: Double?
+    let currencyCode: String?
 
     static var empty: WidgetData {
         WidgetData(
@@ -25,6 +42,8 @@ struct WidgetData: Codable {
 
     enum CodingKeys: String, CodingKey {
         case hoursThisCheque, hoursThisMonth, hoursThisWeek, nextPayday, lastUpdated, currentStreak, prestige
+        case todayHours, todayLogged, todayIsOffDay, dataDay, weekStart, weekEnd, weeklyTarget
+        case projectedPay, currencyCode
     }
 
     init(
@@ -34,7 +53,16 @@ struct WidgetData: Codable {
         nextPayday: Date?,
         lastUpdated: Date,
         currentStreak: Int,
-        prestige: Int
+        prestige: Int,
+        todayHours: Double = 0,
+        todayLogged: Bool = false,
+        todayIsOffDay: Bool = false,
+        dataDay: Date? = nil,
+        weekStart: Date? = nil,
+        weekEnd: Date? = nil,
+        weeklyTarget: Double? = nil,
+        projectedPay: Double? = nil,
+        currencyCode: String? = nil
     ) {
         self.hoursThisCheque = hoursThisCheque
         self.hoursThisMonth = hoursThisMonth
@@ -43,6 +71,15 @@ struct WidgetData: Codable {
         self.lastUpdated = lastUpdated
         self.currentStreak = currentStreak
         self.prestige = prestige
+        self.todayHours = todayHours
+        self.todayLogged = todayLogged
+        self.todayIsOffDay = todayIsOffDay
+        self.dataDay = dataDay
+        self.weekStart = weekStart
+        self.weekEnd = weekEnd
+        self.weeklyTarget = weeklyTarget
+        self.projectedPay = projectedPay
+        self.currencyCode = currencyCode
     }
 
     init(from decoder: Decoder) throws {
@@ -54,6 +91,15 @@ struct WidgetData: Codable {
         lastUpdated = try container.decode(Date.self, forKey: .lastUpdated)
         currentStreak = try container.decodeIfPresent(Int.self, forKey: .currentStreak) ?? 0
         prestige = try container.decodeIfPresent(Int.self, forKey: .prestige) ?? 0
+        todayHours = try container.decodeIfPresent(Double.self, forKey: .todayHours) ?? 0
+        todayLogged = try container.decodeIfPresent(Bool.self, forKey: .todayLogged) ?? false
+        todayIsOffDay = try container.decodeIfPresent(Bool.self, forKey: .todayIsOffDay) ?? false
+        dataDay = try container.decodeIfPresent(Date.self, forKey: .dataDay)
+        weekStart = try container.decodeIfPresent(Date.self, forKey: .weekStart)
+        weekEnd = try container.decodeIfPresent(Date.self, forKey: .weekEnd)
+        weeklyTarget = try container.decodeIfPresent(Double.self, forKey: .weeklyTarget)
+        projectedPay = try container.decodeIfPresent(Double.self, forKey: .projectedPay)
+        currencyCode = try container.decodeIfPresent(String.self, forKey: .currencyCode)
     }
 
     // Loads latest data from the shared App Group UserDefaults

@@ -307,7 +307,8 @@ final class HoursStore: ObservableObject {
         WidgetDataManager.shared.updateWidgetData(
             entries: allEntriesIncludingArchive(),
             paySettings: paySettings,
-            prestige: gamificationProfile.prestige
+            prestige: gamificationProfile.prestige,
+            projection: widgetPayProjection()
         )
 
         // Re-upload only genuinely local-only entries (offline-created) plus
@@ -358,7 +359,8 @@ final class HoursStore: ObservableObject {
         WidgetDataManager.shared.updateWidgetData(
             entries: allEntriesIncludingArchive(),
             paySettings: paySettings,
-            prestige: gamificationProfile.prestige
+            prestige: gamificationProfile.prestige,
+            projection: widgetPayProjection()
         )
     }
 
@@ -387,7 +389,8 @@ final class HoursStore: ObservableObject {
         WidgetDataManager.shared.updateWidgetData(
             entries: allEntriesIncludingArchive(),
             paySettings: paySettings,
-            prestige: gamificationProfile.prestige
+            prestige: gamificationProfile.prestige,
+            projection: widgetPayProjection()
         )
     }
 
@@ -540,6 +543,7 @@ final class HoursStore: ObservableObject {
         let yearArchivesKey = self.yearArchivesKey
         let gamificationKey = self.gamificationKey
         let prestigeCopy = gamificationCopy.prestige
+        let projectionCopy = widgetPayProjection()
 
         // PaySettings and GamificationProfile have main-actor-isolated Encodable
         // conformances, so they must be encoded on the main actor (they're tiny,
@@ -582,7 +586,8 @@ final class HoursStore: ObservableObject {
             WidgetDataManager.shared.updateWidgetData(
                 entries: entriesCopy + yearArchivesCopy.flatMap(\.entries),
                 paySettings: settingsCopy,
-                prestige: prestigeCopy
+                prestige: prestigeCopy,
+                projection: projectionCopy
             )
         }
     }
@@ -1952,7 +1957,8 @@ final class HoursStore: ObservableObject {
         WidgetDataManager.shared.updateWidgetData(
             entries: allEntriesIncludingArchive(),
             paySettings: paySettings,
-            prestige: gamificationProfile.prestige
+            prestige: gamificationProfile.prestige,
+            projection: widgetPayProjection()
         )
 
         for entry in toAdd {
@@ -2114,6 +2120,19 @@ final class HoursStore: ObservableObject {
         )
     }
 
+    /// The current cheque's projected pay for the widgets and the watch:
+    /// the trained prediction when past cheque totals exist, otherwise the
+    /// sum of each shift's own estimate. nil when there's nothing to show.
+    func widgetPayProjection() -> PayProjection? {
+        let cycle = currentPayCycle()
+        let amount = chequeProjection(for: cycle)?.amount
+            ?? PayCycleEngine.entries(scopedEntries, in: cycle)
+                .filter { !$0.isOffDay }
+                .reduce(0) { $0 + payBreakdown(for: $1).pay }
+        guard amount > 0 else { return nil }
+        return PayProjection(amount: amount, currencyCode: scopedPaySettings.currencyCode)
+    }
+
     /// Cloud copy of the totals arriving from the listener. Replaces local
     /// wholesale — the doc is last-writer-wins, and an unchanged map is
     /// dropped early so the echo of this device's own write is a no-op.
@@ -2156,6 +2175,7 @@ final class HoursStore: ObservableObject {
         let yearArchivesKey = self.yearArchivesKey
         let gamificationKey = self.gamificationKey
         let prestigeCopy = gamificationCopy.prestige
+        let projectionCopy = widgetPayProjection()
         // Same pre-load guard as saveLocallyOnly(): see the comment there.
         let settingsAndHistoryLoaded = isLoaded
 
@@ -2204,7 +2224,8 @@ final class HoursStore: ObservableObject {
             WidgetDataManager.shared.updateWidgetData(
                 entries: entriesCopy + yearArchivesCopy.flatMap(\.entries),
                 paySettings: settingsCopy,
-                prestige: prestigeCopy
+                prestige: prestigeCopy,
+                projection: projectionCopy
             )
         }
 
@@ -2406,7 +2427,8 @@ final class HoursStore: ObservableObject {
                 WidgetDataManager.shared.updateWidgetData(
                     entries: self.allEntriesIncludingArchive(),
                     paySettings: self.paySettings,
-                    prestige: self.gamificationProfile.prestige
+                    prestige: self.gamificationProfile.prestige,
+                    projection: self.widgetPayProjection()
                 )
                 if self.cloudSync.isCloudAvailable && !self.cloudSync.hasAppliedRemoteEntries {
                     self.cloudSync.pullFromCloud()

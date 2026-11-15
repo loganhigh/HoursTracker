@@ -90,11 +90,13 @@ final class WatchSyncService: NSObject {
         }
         let places = store.shiftLocationSummaries().prefix(8).map(\.name)
 
+        let projection = signedIn ? store.widgetPayProjection() : nil
         return WatchSnapshot(
             signedIn: signedIn, liveShift: live, chequeHours: cheque, monthHours: month,
             chequeStart: cycle.start, chequeEnd: cycle.end,
             templates: templates, places: places, recentShifts: Array(recent),
-            months: months, generatedAt: now
+            months: months, generatedAt: now,
+            projectedPay: projection?.amount, currencyCode: projection?.currencyCode
         )
     }
 
@@ -146,10 +148,12 @@ final class WatchSyncService: NSObject {
         let live: WatchLiveShift?
         let cheque: Double
         let month: Double
+        let pay: String?
         init(_ s: WatchSnapshot) {
             live = s.liveShift
             cheque = (s.chequeHours * 10).rounded() / 10
             month = (s.monthHours * 10).rounded() / 10
+            pay = s.projectedPayText
         }
     }
 
