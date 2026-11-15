@@ -195,7 +195,6 @@ private struct ScenePhaseFriendsRefreshObserver: View {
 struct HoursHomeView: View {
     @EnvironmentObject private var store: HoursStore
     @EnvironmentObject private var authService: AuthService
-    @EnvironmentObject private var premium: PremiumManager
     @EnvironmentObject private var tabRouter: TabRouter
     @ObservedObject private var friendsService = FriendsService.shared
     @ObservedObject private var statsListener = StatsListenerService.shared

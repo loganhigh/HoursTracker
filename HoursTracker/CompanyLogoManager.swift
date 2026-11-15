@@ -4,7 +4,7 @@ import Combine
 import FirebaseAuth
 import FirebaseStorage
 
-/// Owns the local company logo (Hour Tracker Pro branding for PDF reports)
+/// Owns the local company logo (branding for PDF reports)
 /// and uploads it to Firebase Storage. Mirrors `ProfilePhotoManager`'s
 /// pattern exactly — resize/compress locally, persist to documentDirectory,
 /// upload to Storage, cache the download URL in UserDefaults.

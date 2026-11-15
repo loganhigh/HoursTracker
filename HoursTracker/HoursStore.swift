@@ -82,7 +82,7 @@ final class HoursStore: ObservableObject {
     @Published var certificateEntries: [CertificateEntry] = []
     @Published var awardEntries: [AwardEntry] = []
     /// Saved shift patterns offered by the Add Shift wizard. Local-only, and
-    /// Pro-gated at the UI layer — see `ShiftTemplatesSettingsView`.
+    /// Managed in `ShiftTemplatesSettingsView`.
     @Published var shiftTemplates: [ShiftTemplate] = []
     @Published var gamificationProfile: GamificationProfile = .defaultProfile
     @Published var gamificationEventMessage: String?
@@ -1211,7 +1211,7 @@ final class HoursStore: ObservableObject {
         UserDefaults.standard.set(data, forKey: awardsKey)
     }
 
-    // MARK: - Shift templates (Hour Tracker Pro)
+    // MARK: - Shift templates
     //
     // Local-only: a template is a convenience for filling
     // the Add Shift wizard, never part of an entry, so nothing here reaches

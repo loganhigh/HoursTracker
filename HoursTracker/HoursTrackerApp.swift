@@ -50,7 +50,6 @@ struct HoursTrackerApp: App {
         PushNotificationService.shared.configureIfNeeded()
         // After the store exists: a watch command can be what launched us.
         WatchSyncService.shared.activate()
-        PremiumManager.shared.configure()
     }
 
     var body: some Scene {
@@ -63,7 +62,6 @@ struct HoursTrackerApp: App {
                 .environmentObject(startupCoordinator)
                 .environmentObject(sessionManager)
                 .environmentObject(localization)
-                .environmentObject(PremiumManager.shared)
                 .environmentObject(liveShiftManager)
                 .adaptiveTheme(prestige: store.gamificationProfile.prestige)
                 // Appearance: user-selectable (Settings → Appearance). `nil`
@@ -72,7 +70,6 @@ struct HoursTrackerApp: App {
                 .preferredColorScheme(.dark)
                 .background(AppTheme.Colors.bg.ignoresSafeArea())
                 .onChange(of: authService.user?.uid) { _, newUID in
-                    PremiumManager.shared.identify(uid: newUID)
                     if newUID != nil {
                         if networkMonitor.isConnected, cloudSync.isCloudAvailable {
                             cloudSync.pullFromCloud()

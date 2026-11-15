@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Applying one fills the Add Shift wizard's time/break/location fields; it
 /// never creates an entry by itself, so a template can be renamed or deleted
-/// without touching logged shifts. Hour Tracker Pro only.
+/// without touching logged shifts.
 ///
 /// Times are minutes-from-midnight rather than `Date`s: a template has no
 /// calendar day, and storing wall-clock minutes keeps it stable across time

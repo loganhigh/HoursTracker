@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Add Shift entry point (Hour Tracker Pro — router)
+// MARK: - Add Shift entry point (router)
 //
 // The single way a shift gets into the log, live-tracked or manual. Home's
 // "Add Shift" button (and every other add-shift affordance) presents this

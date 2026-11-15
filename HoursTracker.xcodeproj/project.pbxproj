@@ -163,7 +163,7 @@
 		39EC39A82F20CA7D00130B57 /* Exceptions for "HoursTracker" folder in "HoursTracker" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				HourTrackerPro.storekit,
+				HourTracker.storekit,
 				Info.plist,
 			);
 			target = 39EC39A42F20CA7D00130B56 /* HoursTracker */;

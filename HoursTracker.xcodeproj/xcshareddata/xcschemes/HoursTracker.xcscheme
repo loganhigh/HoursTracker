@@ -56,7 +56,7 @@
          </TestableReference>
       </Testables>
       <StoreKitConfigurationFileReference
-         identifier = "../../HoursTracker/HourTrackerPro.storekit">
+         identifier = "../../HoursTracker/HourTracker.storekit">
       </StoreKitConfigurationFileReference>
    </TestAction>
    <LaunchAction
@@ -80,7 +80,7 @@
          </BuildableReference>
       </BuildableProductRunnable>
       <StoreKitConfigurationFileReference
-         identifier = "../../HoursTracker/HourTrackerPro.storekit">
+         identifier = "../../HoursTracker/HourTracker.storekit">
       </StoreKitConfigurationFileReference>
    </LaunchAction>
    <ProfileAction

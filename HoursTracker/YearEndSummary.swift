@@ -1,6 +1,6 @@
 import Foundation
 
-/// Hour Tracker Pro — one calendar year of the user's own entries rolled up
+/// One calendar year of the user's own entries rolled up
 /// for tax time: hours by kind, stat holidays, gross pay, per job and per
 /// month. Pure aggregation over `Shift` values so it's unit-testable; the
 /// pay figures on each `Shift` come from `HoursStore.payBreakdown(for:)`

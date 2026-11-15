@@ -1,7 +1,7 @@
 import AppIntents
 import Foundation
 
-// MARK: - Siri / Shortcuts (Hour Tracker Pro)
+// MARK: - Siri / Shortcuts
 //
 // `AddShiftIntent` is the headline voice flow — "Hey Siri, add a shift today
 // from 8am to 4pm" logs the entry outright, no app UI. It runs without
@@ -9,9 +9,6 @@ import Foundation
 // in Siri; it still needs the live `HoursStore` (see `HoursStore.current`)
 // so the save goes through the same path as a manually-entered shift, which
 // means the app must have been launched at least once since boot.
-
-private let needsProDialog: IntentDialog =
-    "Siri Shortcuts need Hour Tracker Pro. Open Hour Tracker to upgrade."
 
 private let needsLaunchDialog: IntentDialog =
     "Open Hour Tracker once, then try again."
@@ -37,9 +34,6 @@ struct AddShiftIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        guard PremiumManager.shared.isPremium else {
-            return .result(dialog: needsProDialog)
-        }
         guard let store = HoursStore.current else {
             return .result(dialog: needsLaunchDialog)
         }
@@ -99,9 +93,6 @@ struct HoursThisWeekIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        guard PremiumManager.shared.isPremium else {
-            return .result(dialog: needsProDialog)
-        }
         guard let store = HoursStore.current else {
             return .result(dialog: needsLaunchDialog)
         }

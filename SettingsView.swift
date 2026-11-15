@@ -18,12 +18,10 @@ struct SettingsView: View {
     @State private var showingNotificationsSheet = false
     @State private var showingDataExportSheet = false
     @State private var showingYearEndSummary = false
-    @State private var showingYearEndUpgrade = false
     @State private var showingRestoreBackupConfirm = false
     @State private var showBackupSavedAlert = false
     @State private var showRestoreSuccessAlert = false
     @State private var backupErrorMessage: String?
-    @State private var showingPremiumSheet = false
     @AppStorage("auto_yearly_reset_enabled") private var autoYearlyResetEnabled = true
     /// Master switch for the Friends/social experience on this device. Absence
     /// of the stored value reads as `true`, so fresh installs and upgrading
@@ -33,7 +31,6 @@ struct SettingsView: View {
 
     @ObservedObject private var smartNotifier = SmartNotifier.shared
     @ObservedObject private var weeklyNotifier = WeeklyMilestoneNotifier.shared
-    @ObservedObject private var premium = PremiumManager.shared
 
     private var paydayDate: Date {
         let span = PayCycleEngine.spanDays(for: settings.payPeriodType)
@@ -291,37 +288,6 @@ struct SettingsView: View {
                 .listRowBackground(AppColors.card.opacity(0.55))
                 .listRowSeparatorTint(AppColors.stroke)
 
-                // MARK: - Hour Tracker Pro
-                // The only Pro surface that shows regardless of entitlement, so
-                // it is the one that has to be switched off explicitly. Every
-                // other Pro affordance in Settings is an `if !premium.isPremium`
-                // crown badge, which disappears on its own once the kill switch
-                // pins the entitlement open.
-                if MonetizationConfig.isProEnabled {
-                    Section {
-                        Button {
-                            Haptics.lightTap()
-                            showingPremiumSheet = true
-                        } label: {
-                            HStack(spacing: AppSpacing.sm) {
-                                SettingsRowLabel(
-                                    icon: "crown.fill",
-                                    title: "Hour Tracker Pro",
-                                    subtitle: premium.isPremium
-                                        ? (premium.activeSubscription?.settingsStatusLine ?? "Active")
-                                        : "Live tracking, Dynamic Island, templates, reports"
-                                )
-                                Spacer(minLength: AppSpacing.xs)
-                                SettingsChevron()
-                            }
-                        }
-                    } header: {
-                        SectionEyebrow("Hour Tracker Pro")
-                    }
-                    .listRowBackground(AppColors.card.opacity(0.55))
-                    .listRowSeparatorTint(AppColors.stroke)
-                }
-
                 // MARK: - Data & Backup
                 Section {
                     Button {
@@ -335,12 +301,7 @@ struct SettingsView: View {
                     }
 
                     Button {
-                        if premium.isPremium {
-                            showingYearEndSummary = true
-                        } else {
-                            Haptics.lightTap()
-                            showingYearEndUpgrade = true
-                        }
+                        showingYearEndSummary = true
                     } label: {
                         HStack(spacing: AppSpacing.sm) {
                             SettingsRowLabel(
@@ -349,11 +310,6 @@ struct SettingsView: View {
                                 subtitle: "Hours, overtime and gross pay for tax time"
                             )
                             Spacer(minLength: AppSpacing.xs)
-                            if !premium.isPremium {
-                                Image(systemName: "crown.fill")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(AppColors.accent)
-                            }
                             SettingsChevron()
                         }
                     }
@@ -500,12 +456,6 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingYearEndSummary) {
                 YearEndSummarySheet(store: store)
-            }
-            .sheet(isPresented: $showingYearEndUpgrade) {
-                PremiumUpgradeView()
-            }
-            .sheet(isPresented: $showingPremiumSheet) {
-                PremiumUpgradeView()
             }
             // Crew sheets and the join-crew deep-link consumption are paused
             // with the Teams section. A pending join code from a deep link is

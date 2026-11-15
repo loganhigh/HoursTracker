@@ -2,7 +2,7 @@ import UIKit
 
 /// A `YearEndSummary` rendered as a letter-size, multi-page PDF in the same
 /// look as `PayPeriodStatement` (brand header, detail pairs, summary tiles,
-/// zebra tables, page footer). Pro → Reports → Year-End Summary.
+/// zebra tables, page footer). Settings → Year-End Summary.
 struct YearEndSummaryDocument {
     let summary: YearEndSummary
     let employee: String?

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Hour Tracker Pro — branded PDF exports (weekly/monthly), presented from
+/// Branded PDF exports (weekly/monthly), presented from
 /// Settings → "Professional Reports". Sits alongside the free "Download My
 /// Data" path (`DataExportSheet`) without touching it. Reuses `ShareSheet`
 /// and `SettingsExportShareItem` from SettingsSheets.swift.

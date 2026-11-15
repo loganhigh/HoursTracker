@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Shift Templates management (Settings · Hour Tracker Pro)
+// MARK: - Shift Templates management (Settings)
 //
 // Save the shifts you work over and over — "Morning Shift, 6:00 AM – 5:00 PM"
 // — then fill the Add Shift wizard from one in a single tap. Deleting a
@@ -9,12 +9,10 @@ import SwiftUI
 
 struct ShiftTemplatesSettingsView: View {
     @ObservedObject var store: HoursStore
-    @ObservedObject private var premium = PremiumManager.shared
 
     @State private var editingTemplate: ShiftTemplate?
     @State private var isAddingNew = false
     @State private var pendingDelete: ShiftTemplate?
-    @State private var showingPaywall = false
 
     var body: some View {
         ZStack {
@@ -29,8 +27,7 @@ struct ShiftTemplatesSettingsView: View {
 
                     ForEach(store.shiftTemplatesByRecency) { template in
                         Button {
-                            guard requirePro() else { return }
-                            editingTemplate = template
+                                editingTemplate = template
                         } label: {
                             HStack(spacing: AppSpacing.sm) {
                                 SettingsRowLabel(
@@ -56,25 +53,17 @@ struct ShiftTemplatesSettingsView: View {
                     }
 
                     Button {
-                        guard requirePro() else { return }
                         isAddingNew = true
                     } label: {
                         HStack(spacing: AppSpacing.sm) {
                             SettingsRowLabel(icon: "plus", title: "Add Template", titleTint: AppColors.accent)
                             Spacer(minLength: AppSpacing.xs)
-                            if !premium.isPremium {
-                                Image(systemName: "crown.fill")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(AppColors.accent)
-                            }
                         }
                     }
                 } header: {
                     SectionEyebrow("Shift Templates")
                 } footer: {
-                    Text(premium.isPremium
-                         ? "Saved on this device. Picking a template when you add a shift fills in its times, break, and location."
-                         : "Shift Templates are part of Hour Tracker Pro.")
+                    Text("Saved on this device. Picking a template when you add a shift fills in its times, break, and location.")
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
                 }
@@ -93,9 +82,6 @@ struct ShiftTemplatesSettingsView: View {
         .sheet(isPresented: $isAddingNew) {
             ShiftTemplateEditorSheet(store: store, existing: nil)
         }
-        .sheet(isPresented: $showingPaywall) {
-            PremiumUpgradeView()
-        }
         .alert("Delete this template?", isPresented: Binding(
             get: { pendingDelete != nil },
             set: { if !$0 { pendingDelete = nil } }
@@ -111,16 +97,6 @@ struct ShiftTemplatesSettingsView: View {
         } message: {
             Text("Shifts you've already logged are not affected.")
         }
-    }
-
-    /// Returns true when the action may proceed; otherwise opens the paywall.
-    private func requirePro() -> Bool {
-        guard premium.isPremium else {
-            Haptics.lightTap()
-            showingPaywall = true
-            return false
-        }
-        return true
     }
 }
 

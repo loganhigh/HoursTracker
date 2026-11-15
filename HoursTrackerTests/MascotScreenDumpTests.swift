@@ -318,7 +318,6 @@ final class MascotScreenDumpTests: XCTestCase {
         .background(AppColors.bg)
         let screens: [(String, AnyView)] = [
             ("tip-jar", AnyView(TipJarView())),
-            ("paywall", AnyView(PremiumUpgradeView())),
             ("welcome-back", AnyView(WelcomeBackView(onFinished: {}))),
             ("name-colours", AnyView(names)),
         ]
@@ -361,7 +360,6 @@ final class MascotScreenDumpTests: XCTestCase {
             let hosted = view
                 .environmentObject(store)
                 .environmentObject(AuthService.shared)
-                .environmentObject(PremiumManager.shared)
                 .environmentObject(TabRouter())
                 .environmentObject(LevelUpCoordinator())
                 .environmentObject(LiveShiftManager.shared)
@@ -436,7 +434,6 @@ final class MascotScreenDumpTests: XCTestCase {
             let hosted = Self.tabShell(.home)
                 .environmentObject(store)
                 .environmentObject(AuthService.shared)
-                .environmentObject(PremiumManager.shared)
                 .environmentObject(TabRouter())
                 .environmentObject(LevelUpCoordinator())
                 .environmentObject(LiveShiftManager.shared)
