@@ -60,11 +60,27 @@ struct SupporterThanksWall: View {
     }
 
     private func load() async {
-        defer { loaded = true }
-        guard let snap = try? await Firestore.firestore().collection("publicProfiles")
+        let query = Firestore.firestore().collection("publicProfiles")
             .whereField("isSupporter", isEqualTo: true)
             .limit(to: 300)
-            .getDocuments() else { return }
+        // Cached copy first so the wall shows instantly on return visits.
+        if let cached = try? await query.getDocuments(source: .cache), !cached.documents.isEmpty {
+            apply(cached)
+            loaded = true
+        }
+        // A server read can stall for a long time on a flaky connection and
+        // left the spinner going forever. Give up waiting after 8 seconds.
+        // The fetch runs on its own (it can't be cancelled), and the wall
+        // still fills in if it lands after the cutoff.
+        Task { @MainActor in
+            if let fresh = try? await query.getDocuments(source: .server) { apply(fresh) }
+            loaded = true
+        }
+        try? await Task.sleep(nanoseconds: 8_000_000_000)
+        loaded = true
+    }
+
+    private func apply(_ snap: QuerySnapshot) {
         var list: [(uid: String, name: String)] = []
         for doc in snap.documents {
             let data = doc.data()
