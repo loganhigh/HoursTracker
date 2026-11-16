@@ -49,7 +49,9 @@ struct SettingsRowLabel: View {
                     .appText(.headline)
                     .foregroundStyle(titleTint)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    // Shrinks to fit rather than cutting off with "…".
+                    .minimumScaleFactor(0.55)
+                    .allowsTightening(true)
                 if let subtitle {
                     Text(subtitle)
                         .appText(.caption)

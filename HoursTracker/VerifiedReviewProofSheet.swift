@@ -101,7 +101,7 @@ struct VerifiedReviewProofSheet: View {
 
             Text(isVerified
                  ? "Your mark shows beside your name everywhere other trackers can see you."
-                 : "Leave a review, submit a screenshot of it, and we'll add the mark beside your name.")
+                 : "Write a review on the App Store, send us a screenshot of it, and we'll add the mark beside your name. We appreciate stars, but it's the written review that earns the mark.")
                 .font(AppTypography.subheadline.weight(.medium))
                 .foregroundStyle(AppColors.subtext)
                 .multilineTextAlignment(.center)
@@ -124,7 +124,7 @@ struct VerifiedReviewProofSheet: View {
             stepRow(
                 number: 1,
                 title: "Write your review",
-                detail: "Opens the App Store review page.",
+                detail: "A few words, not just stars. Opens the App Store.",
                 isDone: false
             ) {
                 Button {
@@ -144,7 +144,7 @@ struct VerifiedReviewProofSheet: View {
             stepRow(
                 number: 2,
                 title: "Screenshot it",
-                detail: "Side button + volume up.",
+                detail: "Make sure your written review shows. Side button + volume up.",
                 isDone: false
             ) { EmptyView() }
 

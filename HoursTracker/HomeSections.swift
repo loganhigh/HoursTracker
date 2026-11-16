@@ -301,13 +301,6 @@ struct HomeStatTriplet: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            // With more than one job, choose whose cheque Home shows (or all).
-            if store.hasMultipleJobs {
-                JobPickerMenu(store: store, selection: store.chequeJobScope, includesAll: true, title: "Cheque") {
-                    store.chequeJobScope = $0
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-            }
             HStack(spacing: 10) {
                 HomeStatTile(icon: "clock", band: "WEEK", label: "This week", hours: weekHours, tone: 0)
                 HomeStatTile(icon: "banknote", band: "CHEQUE", label: "This cheque", hours: chequeHours, tone: 1)

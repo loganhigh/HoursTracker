@@ -350,7 +350,7 @@ struct VerifiedReviewNote: View {
         if isVerified {
             return Text("Thanks for reviewing — your ") + seal + Text(" is live!")
         }
-        return Text("(Users who review the app receive a ") + seal + Text(" beside their name!)")
+        return Text("(Write a review of the app to get a ") + seal + Text(" beside your name!)")
     }
 
     var body: some View {
@@ -370,6 +370,6 @@ struct VerifiedReviewNote: View {
         .buttonStyle(.plain)
         // Nothing left to earn once it's granted, so the row goes read-only.
         .disabled(isVerified)
-        .accessibilityHint(isVerified ? "" : "Opens the App Store to write a review")
+        .accessibilityHint(isVerified ? "" : "Shows how to earn the mark with a written App Store review")
     }
 }

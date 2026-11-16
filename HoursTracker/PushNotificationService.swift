@@ -108,6 +108,11 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
                 NotificationRouter.shared.openAdminNewUsers = true
             }
         }
+        if let type = userInfo["type"] as? String, type == "admin_verified_submission" {
+            Task { @MainActor in
+                NotificationRouter.shared.openAdminVerifiedInbox = true
+            }
+        }
         if let kind = userInfo["kind"] as? String, kind == "leaderboardRank" {
             Task { @MainActor in
                 NotificationRouter.shared.openGlobalLeaderboard = true
@@ -164,6 +169,8 @@ final class NotificationRouter: ObservableObject {
     /// Raised by the admin's "New Hour Tracker user!" push; Home opens the
     /// admin console on New Users and lowers it.
     @Published var openAdminNewUsers = false
+    /// Admin tapped "New verified submission": open Admin on Verified inbox.
+    @Published var openAdminVerifiedInbox = false
     /// Raised with the board by a chat-mention push; the board opens the chat.
     @Published var openGlobalChat = false
     /// Set with the board by a direct-message push; the board opens the thread.

@@ -223,7 +223,7 @@ struct AddShiftWizardView: View {
 
         if store.hasMultipleJobs, shiftKind != .holiday {
             JobPickerMenu(store: store, selection: jobID) { jobID = $0 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
         }
 
         if shiftKind == .work, !store.shiftTemplates.isEmpty {

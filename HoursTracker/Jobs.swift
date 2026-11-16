@@ -153,26 +153,25 @@ extension HoursStore {
 
     // MARK: Cheque scope
 
-    /// What Home's cheque card (and the pay cycle screens) show: one job's id,
-    /// or `allJobsScope`. Always the main job when there is only one.
+    /// What Home's cheque card (and the pay cycle screens) show: every job
+    /// together once there's more than one (Home no longer has a per-job
+    /// switcher — the job is picked per shift in Add Shift). Always the main
+    /// job when there is only one.
     var chequeJobScope: String {
-        get {
-            guard hasMultipleJobs else { return JobProfile.primaryID }
-            let saved = UserDefaults.standard.string(forKey: Self.chequeScopeKey) ?? JobProfile.primaryID
-            if saved == Self.allJobsScope { return saved }
-            return job(id: saved).id
-        }
+        get { hasMultipleJobs ? Self.allJobsScope : JobProfile.primaryID }
         set {
             objectWillChange.send()
             UserDefaults.standard.set(newValue, forKey: Self.chequeScopeKey)
         }
     }
 
-    /// The job a new shift defaults to: the one on Home's cheque card, or the
-    /// main job when the card shows every job.
+    /// The job a new shift defaults to: the job of the most recently dated
+    /// shift (someone working asphalt all summer keeps getting asphalt),
+    /// else the main job.
     var defaultJobID: String {
-        let scope = chequeJobScope
-        return scope == Self.allJobsScope ? JobProfile.primaryID : scope
+        guard hasMultipleJobs else { return JobProfile.primaryID }
+        let latest = entries.filter { !$0.isOffDay }.max { $0.date < $1.date }
+        return latest.map { jobID(of: $0) } ?? JobProfile.primaryID
     }
 
     /// Schedule the cheque screens use: the chosen job's, or the main job's

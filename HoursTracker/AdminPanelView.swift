@@ -89,11 +89,14 @@ struct AdminPanelView: View {
 
     /// Opened from the new-user push: push New Users once analytics load.
     var startOnNewUsers = false
+    /// Opened from the verified-submission push: go straight to the inbox.
+    var startOnVerifiedInbox = false
 
     /// Kept only as inert plumbing to the callables' legacy parameter — the
     /// server now authorizes purely on the signed-in admin uid.
     private let passcode = ""
     @State private var showingNewUsers = false
+    @State private var showingVerifiedInbox = false
     @State private var isLoading = false
     @State private var users: [AdminUser] = []
     /// Pending verified-mark submissions, shown on the inbox row.
@@ -179,6 +182,16 @@ struct AdminPanelView: View {
             }
             .onChange(of: analytics != nil) { _, loaded in
                 if loaded, startOnNewUsers { showingNewUsers = true }
+            }
+            .navigationDestination(isPresented: $showingVerifiedInbox) {
+                AdminVerifiedInboxView(passcode: passcode) { approvedUid in
+                    if let idx = users.firstIndex(where: { $0.uid == approvedUid }) {
+                        users[idx].hasReviewedApp = true
+                    }
+                }
+            }
+            .onAppear {
+                if startOnVerifiedInbox { showingVerifiedInbox = true }
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -1572,7 +1585,7 @@ struct AdminAnnouncementView: View {
     /// never see the prompt. Defaults to this (admin's) build; change it when
     /// you're on a TestFlight build that isn't live in the App Store yet.
     @State private var targetVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-    /// Also push "New Update! Version X…" to everyone on an older version.
+    /// Also push "Download the latest update vX!" to everyone on an older version.
     @State private var sendUpdatePush = true
     @State private var isPublishing = false
     @State private var isClearing = false
@@ -1641,7 +1654,7 @@ struct AdminAnnouncementView: View {
                     Toggle("Send a push notification", isOn: $sendUpdatePush)
                 } footer: {
                     Text(sendUpdatePush
-                         ? "\"New Update! Version \(targetVersion) is here.\" goes to everyone on an older version."
+                         ? "\"Download the latest update v\(targetVersion)!\" goes to everyone on an older version. Tapping it opens the App Store."
                          : "No push. They'll see it when they next open the app.")
                 }
                 .listRowBackground(AppTheme.Colors.card)

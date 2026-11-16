@@ -170,7 +170,7 @@ struct EntryEditorView: View {
                         if !isEditing { presetsRow }
                         if store.hasMultipleJobs {
                             JobPickerMenu(store: store, selection: jobID) { jobID = $0 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .frame(maxWidth: .infinity, alignment: .center)
                         }
                         dateCard
                         if needsTimes {

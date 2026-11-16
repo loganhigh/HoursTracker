@@ -257,6 +257,7 @@ struct HoursHomeView: View {
     @State private var showingAdminPanel = false
     /// Admin opened from the new-user push: land on New Users.
     @State private var adminStartsOnNewUsers = false
+    @State private var adminStartsOnVerifiedInbox = false
 
     private var todayEntry: WorkEntry? {
         let cal = Calendar.current
@@ -408,12 +409,16 @@ struct HoursHomeView: View {
         }
     }
 
-    /// Tapped "New Hour Tracker user!": open Admin straight on New Users.
+    /// Tapped "New Hour Tracker user!" or "New verified submission": open
+    /// Admin straight on New Users or the Verified inbox.
     private func openAdminFromNewUserPush() {
         // Cold launch: wait for sign-in to load (retried on uid change).
         guard DeveloperConfig.isCEO(uid: authService.user?.uid) else { return }
+        let verified = notificationRouter.openAdminVerifiedInbox
         notificationRouter.openAdminNewUsers = false
-        adminStartsOnNewUsers = true
+        notificationRouter.openAdminVerifiedInbox = false
+        adminStartsOnNewUsers = !verified
+        adminStartsOnVerifiedInbox = verified
         if showingAdminPanel {
             // Already open: close and reopen so it lands on New Users.
             showingAdminPanel = false
@@ -767,17 +772,28 @@ struct HoursHomeView: View {
         } message: {
             Text("Log your shifts each day. Your hours and pay are calculated automatically. Monthly totals appear here once you have entries.")
         }
-        .sheet(isPresented: $showingAdminPanel, onDismiss: { adminStartsOnNewUsers = false }) {
-            AdminPanelView(startOnNewUsers: adminStartsOnNewUsers)
+        .sheet(isPresented: $showingAdminPanel, onDismiss: {
+            adminStartsOnNewUsers = false
+            adminStartsOnVerifiedInbox = false
+        }) {
+            AdminPanelView(startOnNewUsers: adminStartsOnNewUsers,
+                           startOnVerifiedInbox: adminStartsOnVerifiedInbox)
         }
         .onChange(of: notificationRouter.openAdminNewUsers) { _, isOpen in
             if isOpen { openAdminFromNewUserPush() }
         }
+        .onChange(of: notificationRouter.openAdminVerifiedInbox) { _, isOpen in
+            if isOpen { openAdminFromNewUserPush() }
+        }
         .onAppear {
-            if notificationRouter.openAdminNewUsers { openAdminFromNewUserPush() }
+            if notificationRouter.openAdminNewUsers || notificationRouter.openAdminVerifiedInbox {
+                openAdminFromNewUserPush()
+            }
         }
         .onChange(of: authService.user?.uid) { _, _ in
-            if notificationRouter.openAdminNewUsers { openAdminFromNewUserPush() }
+            if notificationRouter.openAdminNewUsers || notificationRouter.openAdminVerifiedInbox {
+                openAdminFromNewUserPush()
+            }
         }
         .sheet(isPresented: $showingVerifiedProofSheet) {
             VerifiedReviewProofSheet(

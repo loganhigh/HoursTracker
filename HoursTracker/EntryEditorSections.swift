@@ -324,6 +324,7 @@ struct EntryShiftTypeSection: View {
 
     private func segment(_ option: (EntryEditorView.ShiftKind, String, String)) -> some View {
         let isSelected = kind == option.0
+        let style = segmentStyle(option.0, isSelected: isSelected)
         return Button {
             guard !isSelected else { return }
             Haptics.lightTap()
@@ -339,12 +340,44 @@ struct EntryShiftTypeSection: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.6) // "Off day" / "Holiday" stay whole at AX sizes
             }
-            .foregroundStyle(isSelected ? AppColors.accent : AppColors.subtext)
+            .foregroundStyle(style.text)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
-            .entryQuietChip(isSelected: isSelected)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                    .fill(style.fill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                            .stroke(style.stroke, lineWidth: isSelected ? 1.2 : 1)
+                    )
+            )
+            .contentShape(RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// Off day selected = red, Holiday selected = light green. While either is
+    /// on, Work turns a soft sky blue so the way back to a work shift stands
+    /// out. Work selected keeps the usual accent.
+    private static let offDayRed = Color(red: 1.0, green: 0.36, blue: 0.36)
+    private static let holidayGreen = Color(red: 0.52, green: 0.88, blue: 0.62)
+    private static let workBlue = Color(red: 0.42, green: 0.70, blue: 1.0)
+
+    private func segmentStyle(_ option: EntryEditorView.ShiftKind, isSelected: Bool)
+        -> (text: Color, fill: Color, stroke: Color) {
+        switch option {
+        case .offDay where isSelected:
+            return (Self.offDayRed, Self.offDayRed.opacity(0.18), Self.offDayRed.opacity(0.6))
+        case .holiday where isSelected:
+            return (Self.holidayGreen, Self.holidayGreen.opacity(0.18), Self.holidayGreen.opacity(0.6))
+        case .work where isSelected:
+            return (AppColors.accent, AppColors.accent.opacity(0.12), AppColors.accent.opacity(0.25))
+        case .work:
+            return (Self.workBlue, Self.workBlue.opacity(0.10), Self.workBlue.opacity(0.35))
+        default:
+            return (AppColors.subtext, AppColors.card, AppColors.stroke)
+        }
     }
 }
 

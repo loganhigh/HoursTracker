@@ -19,6 +19,6 @@ test("only out-of-date or unknown versions get the push", () => {
 
 test("message names the version", () => {
   const m = updatePushMessage("3.8");
-  assert.equal(m.title, "New Update!");
-  assert.match(m.body, /Version 3\.8/);
+  assert.equal(m.title, "Download the latest update v3.8!");
+  assert.match(m.body, /App Store/);
 });

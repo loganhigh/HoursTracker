@@ -64,19 +64,20 @@ struct GlobalPodiumRow: View {
                         uid: entry.uid
                     )
                         .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .allowsTightening(true)
+                        .layoutPriority(1)
                     if VerifiedTracker.isVerified(reviewed: entry.hasReviewedApp) {
                         // Only three of these on screen, so they can shimmer.
                         VerifiedBadgeView(variant: .shimmer, size: 14)
                     }
                     if let flag = flagEmoji(for: entry) {
-                        Text(flag).font(.system(size: 13))
+                        Text(flag).font(.system(size: 13)).fixedSize()
                     }
                     if isMe {
                         YouChip()
                     }
                 }
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
 
                 HStack(spacing: 5) {
                     Text(entry.hoursHidden ? "Hours hidden" : GlobalHoursFormat.hours(entry.hours))
@@ -250,6 +251,9 @@ struct GlobalTrackerRow: View {
                         uid: tracker.uid
                     )
                         .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .allowsTightening(true)
+                        .layoutPriority(1)
                     if VerifiedTracker.isVerified(reviewed: tracker.hasReviewedApp) {
                         // Static in the list: the board scrolls hundreds of
                         // rows, and a shimmer each would be one clock per row.
@@ -262,28 +266,24 @@ struct GlobalTrackerRow: View {
                             currentUid: currentUid
                         )
                     ) {
-                        Text(flag).font(.system(size: 14))
-                    }
-                    if isOnline || lastActive != nil {
-                        // After the flag: when they last opened the app.
-                        Text(isOnline ? "Active now" : PresenceService.lastActiveText(lastActive!))
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(isOnline ? AppColors.positive : AppColors.faint)
-                            .lineLimit(1)
-                            .fixedSize()
+                        Text(flag).font(.system(size: 14)).fixedSize()
                     }
                     if isMe { YouChip() }
                 }
 
-                if !tracker.detailLine.isEmpty {
-                    // A long job title shrinks rather than getting cut off
-                    // mid-word — "Heavy Equipment Operator" still reads whole.
-                    Text(tracker.detailLine)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.faint)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .allowsTightening(true)
+                // Level, job title, then when they last opened the app, on
+                // one line. If it won't fit, last-seen drops first, then the
+                // line shrinks — never cut off with "…".
+                let presence = isOnline ? "Active now" : lastActive.map { PresenceService.lastActiveText($0) }
+                if !tracker.detailLine.isEmpty || presence != nil {
+                    ViewThatFits(in: .horizontal) {
+                        detailText(presence: presence).lineLimit(1)
+                        detailText(presence: nil).lineLimit(1)
+                        detailText(presence: nil)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                            .allowsTightening(true)
+                    }
                 }
             }
 
@@ -330,6 +330,18 @@ struct GlobalTrackerRow: View {
 /// "↑ 2" / "↓ 1" beside the hours while a live reorder is fresh. Appears with
 /// a small spring, and disappears when TopTrackersService clears its movement
 /// batch (~2.6s) — nothing on the board carries a permanent arrow.
+extension GlobalTrackerRow {
+    /// "Level 22 • P1 • Rigging · 3h ago" with last-seen in its own colour.
+    func detailText(presence: String?) -> Text {
+        let detail = tracker.detailLine
+        let sep = !detail.isEmpty && presence != nil ? " · " : ""
+        return (Text(detail).foregroundColor(AppColors.faint)
+            + Text(sep).foregroundColor(AppColors.faint)
+            + Text(presence ?? "").foregroundColor(isOnline ? AppColors.positive : AppColors.faint))
+            .font(.system(size: 12, weight: .medium))
+    }
+}
+
 struct RankMovementChip: View {
     let delta: Int
 

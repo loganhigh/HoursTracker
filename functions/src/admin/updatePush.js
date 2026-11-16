@@ -23,8 +23,8 @@ function needsUpdatePush(userData, version) {
 
 function updatePushMessage(version) {
   return {
-    title: "New Update!",
-    body: `Version ${version} is here. Get the latest features.`,
+    title: `Download the latest update v${version}!`,
+    body: "Tap to get it on the App Store.",
   };
 }
 
