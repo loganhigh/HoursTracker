@@ -46,6 +46,7 @@ struct AccountView: View {
     /// tab appears. nil when no year clears the data bar.
     @State private var wrappedStats: WrappedYearStats?
     @State private var showingWrapped = false
+    @State private var showingYearEndSummary = false
     @State private var showingVerifiedProofSheet = false
     @ObservedObject private var photoManager = ProfilePhotoManager.shared
     @ObservedObject private var chat = ChatService.shared
@@ -146,6 +147,9 @@ struct AccountView: View {
         .scrollContentBackground(.hidden)
         .background(AppColors.bg.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showingYearEndSummary) {
+            YearEndSummarySheet(store: store)
+        }
         .sheet(isPresented: $showingSettings) {
             SettingsView(store: store, settings: $store.paySettings)
                 .environmentObject(authService)
@@ -522,6 +526,20 @@ struct AccountView: View {
 
     private var navigationCard: some View {
         AccountRowsCard {
+            Button {
+                Haptics.lightTap()
+                showingYearEndSummary = true
+            } label: {
+                AccountNavRow(
+                    icon: "doc.text.magnifyingglass",
+                    title: "Year-End Summary",
+                    subtitle: "Hours, overtime and gross pay for tax time"
+                )
+            }
+            .buttonStyle(PremiumPressStyle())
+
+            AccountRowHairline()
+
             Button {
                 openURL(AppLegalURLs.support)
             } label: {

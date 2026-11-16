@@ -11,7 +11,6 @@ struct SettingsView: View {
     @State private var showingDeleteConfirm = false
     @State private var showingNotificationsSheet = false
     @State private var showingDataExportSheet = false
-    @State private var showingYearEndSummary = false
     @State private var showingRestoreBackupConfirm = false
     @State private var showBackupSavedAlert = false
     @State private var showRestoreSuccessAlert = false
@@ -122,20 +121,6 @@ struct SettingsView: View {
                     } label: {
                         HStack(spacing: AppSpacing.sm) {
                             SettingsRowLabel(icon: "square.and.arrow.down", title: "Download My Data")
-                            Spacer(minLength: AppSpacing.xs)
-                            SettingsChevron()
-                        }
-                    }
-
-                    Button {
-                        showingYearEndSummary = true
-                    } label: {
-                        HStack(spacing: AppSpacing.sm) {
-                            SettingsRowLabel(
-                                icon: "doc.text.magnifyingglass",
-                                title: "Year-End Summary",
-                                subtitle: "Hours, overtime and gross pay for tax time"
-                            )
                             Spacer(minLength: AppSpacing.xs)
                             SettingsChevron()
                         }
@@ -254,9 +239,6 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingDataExportSheet) {
                 DataExportSheet(store: store)
-            }
-            .sheet(isPresented: $showingYearEndSummary) {
-                YearEndSummarySheet(store: store)
             }
             // Crew sheets and the join-crew deep-link consumption are paused
             // with the Teams section. A pending join code from a deep link is
