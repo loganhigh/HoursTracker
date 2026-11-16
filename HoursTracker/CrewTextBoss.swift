@@ -40,6 +40,16 @@ final class CrewFeatures {
 
 enum CrewTextBoss {
     static let defaultMessage = "Just leaving the yard now"
+    /// The crew's boss. Used until someone picks a different contact, so
+    /// crew switched on by the admin get the text without opening Settings.
+    static let defaultPhone = "(403) 333-6576"
+    static let defaultName = "Boss"
+
+    /// The saved boss number, or the crew default.
+    static func phone(_ defaults: UserDefaults = .standard) -> String {
+        let saved = (defaults.string(forKey: Key.phone) ?? "").trimmingCharacters(in: .whitespaces)
+        return saved.isEmpty ? defaultPhone : saved
+    }
 
     enum Key {
         static let on = "crew_text_boss_on_v1"
@@ -61,7 +71,7 @@ enum CrewTextBoss {
     @MainActor
     static func offerIfNeeded(after saved: [WorkEntry], then: @escaping () -> Void) {
         let d = UserDefaults.standard
-        let phone = d.string(forKey: Key.phone) ?? ""
+        let phone = phone(d)
         guard shouldOffer(for: saved,
                           enabled: CrewFeatures.shared.textBossEnabled,
                           on: d.object(forKey: Key.on) as? Bool ?? true,
@@ -201,10 +211,10 @@ struct CrewTextBossSettingsView: View {
                     VStack(spacing: 2) {
                         SettingsIconSquare(icon: "person.crop.circle.fill", tint: AppColors.accent)
                             .padding(.bottom, 4)
-                        Text(phone.isEmpty ? "Choose your boss" : name)
+                        Text(phone.isEmpty ? CrewTextBoss.defaultName : (name.isEmpty ? phone : name))
                             .appText(.headline)
                             .foregroundStyle(AppColors.text)
-                        Text(phone.isEmpty ? "From your contacts" : phone)
+                        Text(phone.isEmpty ? "\(CrewTextBoss.defaultPhone) · tap to change" : phone)
                             .appText(.caption)
                             .foregroundStyle(AppColors.subtext)
                     }

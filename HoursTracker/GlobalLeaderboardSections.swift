@@ -263,37 +263,35 @@ struct GlobalStatsStrip: View {
         )
     }
 
-    /// Live-counter treatment: a pulsing dot in place of the icon square, and
-    /// a count that rolls its digits when a refreshed count lands.
+    /// Live-counter treatment: a pulsing dot in place of the icon, and a
+    /// count that rolls its digits when a refreshed count lands.
     private var activeUsersTile: some View {
-        HStack(spacing: 8) {
+        VStack(spacing: 4) {
             LivePulseDot()
                 .frame(width: 28, height: 28)
-
-            VStack(alignment: .leading, spacing: 0) {
-                Group {
-                    if let activeNow {
-                        Text(activeNow, format: .number.grouping(.automatic))
-                            .contentTransition(.numericText())
-                            .animation(.snappy, value: activeNow)
-                    } else {
-                        Text("—")
-                    }
+            Group {
+                if let activeNow {
+                    Text(activeNow, format: .number.grouping(.automatic))
+                        .contentTransition(.numericText())
+                        .animation(.snappy, value: activeNow)
+                } else {
+                    Text("—")
                 }
-                .font(.system(size: 15, weight: .heavy, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(AppColors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                Text("Active Users")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(AppColors.faint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
             }
+            .font(.system(size: 17, weight: .heavy, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(AppColors.text)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            Text("Active Users")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.faint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 6)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 4)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(activeNow.map { "\($0) active users" } ?? "Active users loading")
     }
@@ -301,11 +299,12 @@ struct GlobalStatsStrip: View {
     private var divider: some View {
         Rectangle()
             .fill(AppColors.stroke)
-            .frame(width: 0.5, height: 34)
+            .frame(width: 0.5, height: 56)
     }
 
+    /// Icon, number, label — stacked and centred in its quarter of the grid.
     private func tile(icon: String, value: String, label: String) -> some View {
-        HStack(spacing: 8) {
+        VStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(AppColors.accent)
@@ -314,23 +313,22 @@ struct GlobalStatsStrip: View {
                     RoundedRectangle(cornerRadius: AppRadius.xs, style: .continuous)
                         .fill(AppColors.accent.opacity(0.14))
                 )
-
-            VStack(alignment: .leading, spacing: 0) {
-                Text(value)
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                Text(label)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(AppColors.faint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
+            Text(value)
+                .font(.system(size: 17, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.faint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 6)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 }
 

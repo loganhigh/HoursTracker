@@ -293,10 +293,16 @@ struct JobEditorView: View {
 
     private var companySection: some View {
         Section {
-            TextField("Company name", text: $draft.name)
-                .textInputAutocapitalization(.words)
-            TextField("Role (e.g. Foreman, Server)", text: $occupation)
-                .textInputAutocapitalization(.words)
+            LabeledContent("Company") {
+                TextField("Company name", text: $draft.name)
+                    .textInputAutocapitalization(.words)
+                    .multilineTextAlignment(.trailing)
+            }
+            LabeledContent("Role") {
+                TextField("e.g. Foreman", text: $occupation)
+                    .textInputAutocapitalization(.words)
+                    .multilineTextAlignment(.trailing)
+            }
             Toggle("Start date", isOn: $hasStartDate.animation())
                 .tint(AppColors.accent)
             if hasStartDate {
@@ -329,12 +335,13 @@ struct JobEditorView: View {
 
     // MARK: Leaderboard title (main job's role is the board title)
 
+    /// Roles across all your jobs; only worth offering when there's a choice.
     private var jobTitles: [String] {
         var seen = Set<String>()
-        return store.jobs
-            .map { $0.id == JobProfile.primaryID ? trimmedName : $0.name }
+        let roles = ([occupation] + store.paySettings.additionalJobs.map { $0.occupation ?? "" })
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && $0 != "Main job" && seen.insert($0.lowercased()).inserted }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+        return roles.count > 1 ? roles : []
     }
 
     private var leaderboardTitleSection: some View {
@@ -366,7 +373,7 @@ struct JobEditorView: View {
         } header: {
             SectionEyebrow("Leaderboard title")
         } footer: {
-            Text("Your role shows under your name on the global leaderboard. Tap one of your jobs to use it instead.")
+            Text("Your role shows under your name on the global leaderboard. Tap another job's role to show that instead.")
                 .appText(.caption)
                 .foregroundStyle(AppColors.subtext)
         }
