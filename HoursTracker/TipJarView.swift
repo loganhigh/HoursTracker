@@ -25,6 +25,28 @@ final class TipJarManager: ObservableObject {
     @Published private(set) var didTip = false
     @Published var errorMessage: String?
 
+    private var updatesTask: Task<Void, Never>?
+
+    /// Called once at launch. Tips that finish outside the purchase call
+    /// (Ask to Buy, a bank check, the app closing mid-purchase) arrive via
+    /// Transaction.updates; without this they were never recorded or
+    /// finished. The ledger dedupes by transaction id.
+    func startListening() {
+        guard updatesTask == nil else { return }
+        updatesTask = Task { @MainActor in
+            for await result in StoreKit.Transaction.unfinished { await Self.handle(result) }
+            for await result in StoreKit.Transaction.updates { await Self.handle(result) }
+        }
+    }
+
+    private static func handle(_ result: VerificationResult<StoreKit.Transaction>) async {
+        guard case .verified(let transaction) = result else { return }
+        if TipLedger.isTip(transaction.productID) {
+            SupporterRegistry.shared.recordTip(transaction: transaction)
+        }
+        await transaction.finish()
+    }
+
     func load() async {
         guard products.isEmpty else { return }
         isLoading = true

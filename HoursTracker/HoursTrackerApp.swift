@@ -49,6 +49,7 @@ struct HoursTrackerApp: App {
 
         store.configureCloudSync(authService: AuthService.shared)
         PushNotificationService.shared.configureIfNeeded()
+        TipJarManager.shared.startListening()
         // After the store exists: a watch command can be what launched us.
         WatchSyncService.shared.activate()
     }
