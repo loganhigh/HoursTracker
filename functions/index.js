@@ -2131,9 +2131,19 @@ async function clearAdminProgressionSet(db, targetUid) {
  * adminDaily snapshots (written by dailyStatsRefresh) become the cheap
  * history source and this assembly stays confined to explicit admin taps.
  */
+// Only the users-doc fields buildAdminUserRow reads. Full user docs carry
+// large progression/anchor payloads; fetching them all made Admin take ~1 min.
+const ADMIN_USER_FIELDS = [
+  "displayName", "username", "friendCode", "level", "prestige", "totalHours",
+  "adminFloorLevel", "adminFloorPrestige", "adminEquippedTitle", "countryCode",
+  "hasReviewedApp", "appVersion", "appBuild", "clockOutShortcut", "tipCount",
+  "tipTotal", "tipCurrency", "lastTipAt", "typicalGapDays",
+];
+
 async function assembleAdminRows() {
+  const startedMs = Date.now();
   const [usersSnap, profilesSnap, presenceSnap, authUsers] = await Promise.all([
-    db.collection("users").get(),
+    db.collection("users").select(...ADMIN_USER_FIELDS).get(),
     db.collection("publicProfiles").get(),
     db.collection("presence").get(),
     listAllAuthUsers(),
@@ -2169,6 +2179,7 @@ async function assembleAdminRows() {
     );
   }
 
+  console.log(`assembleAdminRows: ${rows.length} rows in ${Date.now() - startedMs}ms`);
   return {
     rows,
     firestoreCount: usersSnap.size,

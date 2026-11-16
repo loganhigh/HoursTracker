@@ -391,6 +391,21 @@ struct HoursHomeView: View {
     /// when the user turns Friends off, so listeners stop immediately rather
     /// than at the next sign-out. Uses each service's own `stopListening()` —
     /// no service internals are touched.
+    /// Pushes the global board. If the flag is already (stale) true — set by a
+    /// push or card while another screen covered Home — flip it off first so
+    /// the change registers and the board actually appears.
+    private func openFullLeaderboard() {
+        Haptics.lightTap()
+        guard notificationRouter.openGlobalLeaderboard else {
+            notificationRouter.openGlobalLeaderboard = true
+            return
+        }
+        notificationRouter.openGlobalLeaderboard = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            notificationRouter.openGlobalLeaderboard = true
+        }
+    }
+
     private func stopSocialSubscriptions() {
         friendsService.stopListening()
         topTrackers.stopListening()
@@ -890,7 +905,11 @@ struct HoursHomeView: View {
             .homeCard()
 
             if !topTrackers.topTrackers.isEmpty {
-                NavigationLink("See the full leaderboard") { GlobalLeaderboardView() }
+                // Same destination as the push route (one presentation path).
+                // A plain NavigationLink alongside the isPresented destination
+                // could go dead until relaunch once the router flag got stuck;
+                // re-arming the flag always pushes the board.
+                Button("See the full leaderboard") { openFullLeaderboard() }
                     .buttonStyle(QuietSectionButtonStyle())
                     .padding(.top, AppSpacing.xxs)
             }
