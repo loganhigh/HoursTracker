@@ -147,6 +147,8 @@ struct AdminActivityBreakdown {
     var lists: [AdminActivityBucket: [AdminInsightUser]] = [:]
     var boardCutoffDays = 30
 
+    nonisolated init() {}
+
     var total: Int { counts.values.reduce(0, +) }
     func count(_ b: AdminActivityBucket) -> Int { counts[b] ?? 0 }
 }
