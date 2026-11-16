@@ -191,7 +191,6 @@ struct JobEditorView: View {
     var body: some View {
         Form {
             companySection
-            if isMain, !jobTitles.isEmpty { leaderboardTitleSection }
 
             Section {
                 HStack {
@@ -333,53 +332,6 @@ struct JobEditorView: View {
         return trimmedName.isEmpty ? tenure : "\(tenure) at \(trimmedName)"
     }
 
-    // MARK: Leaderboard title (main job's role is the board title)
-
-    /// Roles across all your jobs; only worth offering when there's a choice.
-    private var jobTitles: [String] {
-        var seen = Set<String>()
-        let roles = ([occupation] + store.paySettings.additionalJobs.map { $0.occupation ?? "" })
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
-        return roles.count > 1 ? roles : []
-    }
-
-    private var leaderboardTitleSection: some View {
-        Section {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(jobTitles, id: \.self) { title in
-                        let selected = occupation.trimmingCharacters(in: .whitespacesAndNewlines)
-                            .caseInsensitiveCompare(title) == .orderedSame
-                        Button {
-                            Haptics.lightTap()
-                            occupation = String(title.prefix(80))
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: selected ? "checkmark" : "briefcase.fill")
-                                    .font(.system(size: 11, weight: .bold))
-                                Text(title).lineLimit(1)
-                            }
-                            .appText(.subheadline)
-                            .foregroundStyle(selected ? AppColors.textOnAccent : AppColors.accent)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Capsule().fill(selected ? AppColors.accent : AppColors.accentMuted))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        } header: {
-            SectionEyebrow("Leaderboard title")
-        } footer: {
-            Text("Your role shows under your name on the global leaderboard. Tap another job's role to show that instead.")
-                .appText(.caption)
-                .foregroundStyle(AppColors.subtext)
-        }
-        .listRowBackground(AppColors.card.opacity(0.55))
-    }
-
     private var cycleFooter: String {
         let cycle = PayCycleEngine.currentCycle(settings: draft.settings)
         let df = DateFormatter()
@@ -413,6 +365,7 @@ struct JobEditorView: View {
             job.startDate = hasStartDate ? Calendar.current.startOfDay(for: startDate) : nil
         }
         store.updateJob(job)
-        if isMain { store.syncProfileSnapshotToCloud() }
+        // The leaderboard title can be any job's role, so republish on edits.
+        if isMain || store.boardTitleJobID == job.id { store.syncProfileSnapshotToCloud() }
     }
 }

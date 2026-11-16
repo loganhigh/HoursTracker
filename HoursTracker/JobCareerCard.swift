@@ -18,6 +18,7 @@ struct JobCareerCards: View {
         let all = store.allEntriesIncludingArchive().filter { !$0.isOffDay }
         let multiple = store.hasMultipleJobs
         VStack(spacing: AppSpacing.xl) {
+            BoardTitlePickerCard(store: store)
             ForEach(store.jobs) { job in
                 let isMain = job.id == JobProfile.primaryID
                 let entries = multiple ? all.filter { store.jobID(of: $0) == job.id } : all
@@ -216,5 +217,74 @@ private struct EditJobButton: View {
             )
         }
         .buttonStyle(PremiumPressStyle())
+    }
+}
+
+/// "Shown on the leaderboard": pick which job's role sits under your name on
+/// the global board — say asphalt in summer, rigging in winter. Only shown
+/// once two or more jobs have a role.
+struct BoardTitlePickerCard: View {
+    @ObservedObject var store: HoursStore
+    @AppStorage("company_occupation") private var mainRole = ""
+
+    private var options: [(id: String, role: String, company: String)] {
+        _ = mainRole // re-render when the main role changes
+        return store.jobs.compactMap { job in
+            let role = store.role(ofJob: job.id)
+            return role.isEmpty ? nil : (job.id, role, job.name)
+        }
+    }
+
+    var body: some View {
+        let options = options
+        if options.count > 1 {
+            let selected = store.boardTitleJobID
+            SectionCard(
+                title: "Leaderboard title",
+                subtitle: "Shown under your name on the global leaderboard",
+                trailing: nil,
+                centerHeader: true
+            ) {
+                VStack(spacing: AppSpacing.xs) {
+                    ForEach(options, id: \.id) { option in
+                        let isOn = option.id == selected
+                        Button {
+                            guard !isOn else { return }
+                            Haptics.lightTap()
+                            withAnimation(AppMotion.Spring.snappy) { store.boardTitleJobID = option.id }
+                        } label: {
+                            HStack(spacing: AppSpacing.sm) {
+                                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundStyle(isOn ? AppColors.accent : AppColors.faint)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(option.role)
+                                        .appText(.headline)
+                                        .foregroundStyle(AppColors.text)
+                                    Text(option.company)
+                                        .appText(.caption)
+                                        .foregroundStyle(AppColors.subtext)
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, AppSpacing.sm)
+                            .background(
+                                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                                    .fill(isOn ? AppColors.accent.opacity(0.12) : AppColors.card2.opacity(0.6))
+                            )
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PremiumPressStyle())
+                        .accessibilityAddTraits(isOn ? .isSelected : [])
+                    }
+                    Text("Changes show on the leaderboard within about 15 minutes.")
+                        .appText(.caption)
+                        .foregroundStyle(AppColors.faint)
+                        .padding(.top, 2)
+                }
+                .padding(.vertical, AppSpacing.xs)
+            }
+        }
     }
 }

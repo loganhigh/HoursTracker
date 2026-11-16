@@ -118,6 +118,39 @@ extension HoursStore {
         entries.filter { !$0.isOffDay && jobID(of: $0) == id }.count
     }
 
+    // MARK: Leaderboard title
+
+    static let boardTitleJobKey = "board_title_job_id_v1"
+
+    /// A job's role (main: company_occupation; others: their own).
+    func role(ofJob id: String) -> String {
+        if id == JobProfile.primaryID {
+            return (UserDefaults.standard.string(forKey: "company_occupation") ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return (paySettings.additionalJobs.first { $0.id == id }?.occupation ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The job whose role shows under your name on the global board
+    /// (e.g. asphalt in summer, rigging in winter). Main job by default, and
+    /// whenever the chosen job is gone or has no role.
+    var boardTitleJobID: String {
+        get {
+            let saved = UserDefaults.standard.string(forKey: Self.boardTitleJobKey) ?? JobProfile.primaryID
+            let id = job(id: saved).id
+            return role(ofJob: id).isEmpty ? JobProfile.primaryID : id
+        }
+        set {
+            objectWillChange.send()
+            UserDefaults.standard.set(newValue, forKey: Self.boardTitleJobKey)
+            syncProfileSnapshotToCloud()
+        }
+    }
+
+    /// The title published to the leaderboard.
+    var boardTitle: String { role(ofJob: boardTitleJobID) }
+
     // MARK: Cheque scope
 
     /// What Home's cheque card (and the pay cycle screens) show: one job's id,

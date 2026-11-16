@@ -1970,8 +1970,9 @@ private struct ProfileSnapshotInputs {
         let privacy = SocialPrivacyStore.shared.flags
         let companyName = UserDefaults.standard.string(forKey: "company_name")?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let companyOccupation = UserDefaults.standard.string(forKey: "company_occupation")?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // The role chosen for the leaderboard (any job's), not only the main
+        // job's — it's the title shown beside the name on the global board.
+        let companyOccupation = store.boardTitle
         let companyStartTS = UserDefaults.standard.double(forKey: "company_start_date_ts")
         let companyStartDate = companyStartTS > 0 ? Date(timeIntervalSince1970: companyStartTS) : nil
         let companyEntries: [WorkEntry] = {
