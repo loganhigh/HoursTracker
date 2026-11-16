@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 import FirebaseCore
 
 @main
@@ -68,6 +69,11 @@ struct HoursTrackerApp: App {
                 // follows the system scheme; tokens are scheme-dynamic so no
                 // restamping is needed on flips.
                 .preferredColorScheme(.dark)
+                // Every screen is laid out for the standard text size; a
+                // bigger (or smaller) Text Size in iPhone Settings broke
+                // tiles, rows and pills. Pin it so the app always looks as
+                // designed. Sheets and full-screen covers inherit this.
+                .dynamicTypeSize(.large)
                 .background(AppTheme.Colors.bg.ignoresSafeArea())
                 .onChange(of: authService.user?.uid) { _, newUID in
                     if newUID != nil {
@@ -86,6 +92,10 @@ struct HoursTrackerApp: App {
         }
         .onChange(of: scenePhase) { _, newPhase in
             if case .active = newPhase {
+                // Reminders set the icon badge to 1 and nothing cleared it,
+                // so a "1" sat on the icon forever. Opening the app means
+                // it's been seen: clear it.
+                UNUserNotificationCenter.current().setBadgeCount(0)
                 PresenceService.shared.startHeartbeating()
                 BoardReturnCenter.shared.appBecameActive()
                 // The Live Activity's money figure only moves while the app
