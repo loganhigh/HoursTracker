@@ -36,12 +36,13 @@ const usernames = require("./src/social/usernames");
 const chat = require("./src/social/chat");
 const adminAnalytics = require("./src/admin/analytics");
 const winback = require("./src/admin/winback");
+const boardActivity = require("./src/leaderboard/boardActivity");
 const updatePush = require("./src/admin/updatePush");
 const prestigeReady = require("./src/stats/prestigeReady");
 const { supporterInfo } = require("./src/supporter");
 const referrals = require("./src/social/referrals");
 const { initializeApp } = require("firebase-admin/app");
-const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
+const { getFirestore, FieldValue, FieldPath, Timestamp } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const { getMessaging } = require("firebase-admin/messaging");
 const { getStorage } = require("firebase-admin/storage");
@@ -2993,12 +2994,14 @@ exports.winbackDaily = onSchedule(
     const stateSnap = await db.collection("_winback").get();
     const stateByUid = new Map(stateSnap.docs.map((d) => [d.id, d.data() || {}]));
     let sent = 0;
+    const pushedToday = new Set();
     for (const row of rows) {
       const state = stateByUid.get(row.uid) || null;
       const decision = winback.winbackDecision(row, state, now);
       if (!decision.send) continue;
       try {
         if (await sendWinbackPush(row.uid, row, decision.send)) sent++;
+        pushedToday.add(row.uid);
         await db.collection("_winback").doc(row.uid).set({
           quietSinceMs: decision.quietSinceMs,
           stage: decision.send,
@@ -3008,9 +3011,88 @@ exports.winbackDaily = onSchedule(
         console.warn(`winback send failed uid=${row.uid}:`, err?.message || err);
       }
     }
-    console.log(`winbackDaily: sent=${sent} users=${rows.length}`);
+    // Keep-your-spot: people on the board who are 27–29 days quiet get one
+    // push before they drop off at 30 (see leaderboard/boardActivity.js).
+    let warned = 0;
+    try {
+      const [boardSnap, hoursSnap, presenceSnap] = await Promise.all([
+        db.collection("leaderboards").doc("global").get(),
+        db.collection("boardHours").get(),
+        db.collection("presence").get(),
+      ]);
+      const rankByUid = new Map(((boardSnap.data() || {}).all || []).map((r) => [r.uid, r.rank]));
+      const presenceByUid = new Map(presenceSnap.docs.map((d) => [d.id, d.data()?.lastActiveAt || null]));
+      const profileShiftByUid = new Map(rows.map((r) => [r.uid, r.lastShiftMs || 0]));
+      for (const doc of hoursSnap.docs) {
+        const uid = doc.id;
+        const h = doc.data() || {};
+        if (pushedToday.has(uid)) continue;
+        const decision = boardActivity.boardWarningDecision({
+          activityMs: boardActivity.lastActivityMs({
+            presenceMs: presenceByUid.get(uid),
+            lastShiftMs: h.lastShiftMs,
+            profileLastShift: profileShiftByUid.get(uid),
+          }),
+          onBoard: (Number(h.hours) || 0) > 0,
+          warnedQuietSinceMs: stateByUid.get(uid)?.boardWarnQuietSinceMs,
+          nowMs: now,
+        });
+        if (!decision.send) continue;
+        try {
+          const userSnap = await db.collection("users").doc(uid).get();
+          if (!userSnap.exists || !leaderboardAlertsEnabled(userSnap.data())) continue;
+          const msg = boardActivity.boardWarningMessage(rankByUid.get(uid), decision.daysLeft);
+          await sendPushToUser(uid, userSnap.data(), {
+            title: msg.title,
+            body: msg.body,
+            dataPayload: { kind: "leaderboardRank" },
+            threadId: "winback",
+          });
+          await db.collection("_winback").doc(uid).set({
+            boardWarnQuietSinceMs: decision.quietSinceMs,
+            lastBoardWarnMs: now,
+          }, { merge: true });
+          warned++;
+        } catch (err) {
+          console.warn(`board warning failed uid=${uid}:`, err?.message || err);
+        }
+      }
+    } catch (err) {
+      console.warn("winbackDaily: board warning pass failed:", err?.message || err);
+    }
+    console.log(`winbackDaily: sent=${sent} boardWarned=${warned} users=${rows.length}`);
   }
 );
+
+/**
+ * Called by the app on launch after a long absence. If the caller was left
+ * off the leaderboard for inactivity (or came back since the last rebuild),
+ * re-rank them now and return their rank for the welcome-back card.
+ * Only ever touches the caller's own row.
+ */
+exports.rejoinLeaderboard = onCall({ region: "us-central1" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in first.");
+  const uid = request.auth.uid;
+  const inactiveRef = db.collection("_leaderboardPrivate").doc("inactive");
+  const state = (await inactiveRef.get()).data() || {};
+  const wasHidden = Boolean(state.uids && state.uids[uid]);
+  const returned = state.returned && state.returned[uid];
+  const recentReturn = returned && Date.now() - (Number(returned.atMs) || 0) < boardActivity.RETURNED_TTL_MS;
+  if (!wasHidden && !recentReturn) return { returned: false };
+
+  if (wasHidden) {
+    // They're in the app now: stamp presence so the patch sees them as active.
+    await db.collection("presence").doc(uid).set({ lastActiveAt: FieldValue.serverTimestamp() }, { merge: true });
+    await applyLeaderboardDeltaForUser(db, uid);
+  }
+  const board = (await db.collection("leaderboards").doc("global").get()).data() || {};
+  const row = (Array.isArray(board.all) ? board.all : []).find((r) => r.uid === uid);
+  await inactiveRef.update(
+    new FieldPath("uids", uid), FieldValue.delete(),
+    new FieldPath("returned", uid), FieldValue.delete()
+  ).catch(() => {});
+  return { returned: true, rank: row?.rank || returned?.rank || null };
+});
 
 /** Admin-only: nudge one at-risk user now (once a week per user). */
 exports.adminSendWinbackNudge = onCall(

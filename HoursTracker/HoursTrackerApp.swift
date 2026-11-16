@@ -87,6 +87,7 @@ struct HoursTrackerApp: App {
         .onChange(of: scenePhase) { _, newPhase in
             if case .active = newPhase {
                 PresenceService.shared.startHeartbeating()
+                BoardReturnCenter.shared.appBecameActive()
                 // The Live Activity's money figure only moves while the app
                 // runs; bring it up to date every time we come forward.
                 LiveShiftManager.shared.refreshActivity()

@@ -46,8 +46,69 @@ function withoutUids(rows, droppedUids) {
     .map((r, i) => ({ ...r, rank: i + 1 }));
 }
 
+// ── Day-27 warning ────────────────────────────────────────────────────────
+// One push per quiet stretch, a few days before someone drops off:
+// "Log a shift to keep your spot on the leaderboard."
+
+const WARN_AT_DAYS = 27;
+const DAY_MS = 86_400_000;
+const BOARD_DAYS = BOARD_INACTIVE_MS / DAY_MS;
+
+/**
+ * Whether to send the keep-your-spot push today. `warnedQuietSinceMs` is the
+ * quiet stretch already warned about (from _winback/{uid}), so a stretch is
+ * warned once; coming back starts a new stretch.
+ */
+function boardWarningDecision({ activityMs, onBoard, warnedQuietSinceMs, nowMs }) {
+  const quietSinceMs = toMs(activityMs);
+  const none = { send: false, quietSinceMs, daysLeft: 0 };
+  if (!onBoard || quietSinceMs <= 0) return none;
+  if (warnedQuietSinceMs && Number(warnedQuietSinceMs) === quietSinceMs) return none;
+  const days = Math.floor((nowMs - quietSinceMs) / DAY_MS);
+  if (days < WARN_AT_DAYS || days >= BOARD_DAYS) return none;
+  return { send: true, quietSinceMs, daysLeft: BOARD_DAYS - days };
+}
+
+function boardWarningMessage(rank, daysLeft) {
+  const left = daysLeft === 1 ? "tomorrow" : `in ${daysLeft} days`;
+  return {
+    title: `Your leaderboard spot ends ${left}`,
+    body: Number(rank) > 0
+      ? `You're #${rank} on the leaderboard. Log a shift or open Hour Tracker to keep your spot.`
+      : "Log a shift or open Hour Tracker to stay on the leaderboard.",
+  };
+}
+
+// ── Coming back ───────────────────────────────────────────────────────────
+// _leaderboardPrivate/inactive = { uids: {uid: hiddenSinceMs},
+//   returned: {uid: {rank, atMs}} }. A uid that was hidden and is ranked
+// again lands in `returned` until the app shows the welcome-back card.
+
+const RETURNED_TTL_MS = 3 * DAY_MS;
+
+/** Next inactive-state doc after a full rebuild. */
+function nextInactiveState(prev, inactiveUids, rankByUid, nowMs) {
+  const prevUids = (prev && prev.uids) || {};
+  const uids = {};
+  for (const uid of inactiveUids) uids[uid] = Number(prevUids[uid]) || nowMs;
+  const returned = {};
+  for (const [uid, r] of Object.entries((prev && prev.returned) || {})) {
+    if (nowMs - (Number(r?.atMs) || 0) < RETURNED_TTL_MS && !inactiveUids.has(uid)) returned[uid] = r;
+  }
+  for (const uid of Object.keys(prevUids)) {
+    if (inactiveUids.has(uid)) continue;
+    returned[uid] = { rank: rankByUid.get(uid) || null, atMs: nowMs };
+  }
+  return { uids, returned };
+}
+
 module.exports = {
   BOARD_INACTIVE_MS,
+  WARN_AT_DAYS,
+  RETURNED_TTL_MS,
+  boardWarningDecision,
+  boardWarningMessage,
+  nextInactiveState,
   toMs,
   lastActivityMs,
   isInactiveForBoard,

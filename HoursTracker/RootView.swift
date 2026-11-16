@@ -201,6 +201,7 @@ struct HoursHomeView: View {
     @ObservedObject private var topTrackers = TopTrackersService.shared
     @ObservedObject private var notificationRouter = NotificationRouter.shared
     @ObservedObject private var verifiedStatus = VerifiedStatusService.shared
+    @ObservedObject private var boardReturn = BoardReturnCenter.shared
     @State private var showingVerifiedProofSheet = false
     @EnvironmentObject private var levelUpCoordinator: LevelUpCoordinator
 
@@ -529,6 +530,16 @@ struct HoursHomeView: View {
 
                 TodayHeroCard(store: store)
                     .cardAppear(index: 1)
+
+                if let comeback = boardReturn.pending {
+                    BoardReturnCard(info: comeback) {
+                        boardReturn.dismiss()
+                        notificationRouter.openGlobalLeaderboard = true
+                    } onDismiss: {
+                        boardReturn.dismiss()
+                    }
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                }
 
                 if let firstWeek = firstWeekProgress {
                     FirstWeekGoalCard(progress: firstWeek) {

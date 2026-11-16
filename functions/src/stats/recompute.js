@@ -1828,6 +1828,17 @@ async function updateGlobalLeaderboard(db) {
     { hours: realHours, updatedAt: FieldValue.serverTimestamp() },
     { merge: false }
   );
+  // Who's hidden for inactivity, and who just came back (the app shows those
+  // a welcome-back card; see rejoinLeaderboard in index.js).
+  try {
+    const inactiveRef = db.collection("_leaderboardPrivate").doc("inactive");
+    const prevInactive = (await inactiveRef.get()).data() || null;
+    const rankByUid = new Map(all.map((r) => [r.uid, r.rank]));
+    const next = boardActivity.nextInactiveState(prevInactive, inactiveUids, rankByUid, nowMs);
+    await inactiveRef.set({ ...next, updatedAt: FieldValue.serverTimestamp() }, { merge: false });
+  } catch (err) {
+    console.warn("updateGlobalLeaderboard: inactive state write failed:", err?.message || err);
+  }
 
   return { previous, current: broadcastAll };
 }
