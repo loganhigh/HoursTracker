@@ -253,25 +253,31 @@ struct BoardTitlePickerCard: View {
                             Haptics.lightTap()
                             withAnimation(AppMotion.Spring.snappy) { store.boardTitleJobID = option.id }
                         } label: {
-                            HStack(spacing: AppSpacing.sm) {
+                            VStack(spacing: 2) {
+                                Text(option.role)
+                                    .appText(.headline)
+                                    .foregroundStyle(isOn ? AppColors.accent : AppColors.text)
+                                Text(option.company)
+                                    .appText(.caption)
+                                    .foregroundStyle(AppColors.subtext)
+                            }
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 40)
+                            .overlay(alignment: .trailing) {
                                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                                     .font(.system(size: 20, weight: .semibold))
                                     .foregroundStyle(isOn ? AppColors.accent : AppColors.faint)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(option.role)
-                                        .appText(.headline)
-                                        .foregroundStyle(AppColors.text)
-                                    Text(option.company)
-                                        .appText(.caption)
-                                        .foregroundStyle(AppColors.subtext)
-                                }
-                                Spacer()
+                                    .padding(.trailing, AppSpacing.sm)
                             }
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, AppSpacing.sm)
                             .background(
                                 RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
                                     .fill(isOn ? AppColors.accent.opacity(0.12) : AppColors.card2.opacity(0.6))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
+                                    .strokeBorder(isOn ? AppColors.accent.opacity(0.5) : .clear, lineWidth: 1)
                             )
                             .contentShape(Rectangle())
                         }
@@ -281,6 +287,8 @@ struct BoardTitlePickerCard: View {
                     Text("Changes show on the leaderboard within about 15 minutes.")
                         .appText(.caption)
                         .foregroundStyle(AppColors.faint)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
                         .padding(.top, 2)
                 }
                 .padding(.vertical, AppSpacing.xs)

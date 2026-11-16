@@ -83,38 +83,27 @@ struct JobsListSection: View {
                 Button {
                     editingJob = job
                 } label: {
-                    HStack(spacing: AppSpacing.sm) {
-                        Image(systemName: job.id == JobProfile.primaryID ? "building.2.fill" : "briefcase.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(AppColors.accent)
-                            .frame(width: 30, height: 30)
-                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppColors.accentMuted))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(job.name)
-                                .foregroundStyle(AppColors.text)
-                            Text(summary(job))
-                                .appText(.caption)
-                                .foregroundStyle(AppColors.subtext)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(AppColors.faint)
-                    }
+                    jobRow(job)
                 }
+                .buttonStyle(.plain)
             }
             Button {
                 showingNewJob = true
             } label: {
-                Label("Add a job", systemImage: "plus.circle.fill")
+                Text("Add a job")
+                    .appText(.headline)
                     .foregroundStyle(AppColors.accent)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 4)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
         } header: {
             SectionEyebrow("Jobs")
         } footer: {
-            Text("Each job has its own company details, wage, pay cycle and overtime rules. When you log a shift you pick the job, and it counts toward that job's cheque.")
+            Text("Tap a job to edit its company details and pay rules.")
                 .appText(.caption)
-                .foregroundStyle(AppColors.subtext)
+                .foregroundStyle(AppColors.faint)
         }
         .listRowBackground(AppColors.card.opacity(0.55))
         .listRowSeparatorTint(AppColors.stroke)
@@ -135,12 +124,63 @@ struct JobsListSection: View {
         }
     }
 
-    private func summary(_ job: JobProfile) -> String {
+    private func jobRow(_ job: JobProfile) -> some View {
+        let isMain = job.id == JobProfile.primaryID
         let shifts = store.shiftCount(forJob: job.id)
+        let role = store.role(ofJob: job.id)
+        return HStack(spacing: AppSpacing.sm) {
+            Image(systemName: isMain ? "building.2.fill" : "briefcase.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(AppColors.accent)
+                .frame(width: 34, height: 34)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(AppColors.accentMuted))
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(job.name)
+                        .appText(.headline)
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+                    if isMain && store.hasMultipleJobs {
+                        Text("MAIN")
+                            .font(.system(size: 9, weight: .heavy))
+                            .tracking(0.6)
+                            .foregroundStyle(AppColors.accent)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(AppColors.accent.opacity(0.14)))
+                    }
+                }
+                Text(summary(job, role: role))
+                    .appText(.caption)
+                    .foregroundStyle(AppColors.subtext)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            Spacer(minLength: AppSpacing.xs)
+            VStack(alignment: .trailing, spacing: 0) {
+                Text("\(shifts)")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(AppColors.text)
+                Text(shifts == 1 ? "shift" : "shifts")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(AppColors.faint)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(AppColors.faint)
+        }
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private func summary(_ job: JobProfile, role: String) -> String {
         let wage = job.settings.hourlyRateSet
             ? (job.settings.hourlyWage.formatted(.currency(code: job.settings.currencyCode)) + "/h")
             : "No wage set"
-        return "\(wage) · \(job.settings.payPeriodType.displayName) · \(shifts) shift\(shifts == 1 ? "" : "s")"
+        let parts = [role.isEmpty ? nil : role, wage, job.settings.payPeriodType.displayName].compactMap { $0 }
+        return parts.joined(separator: " · ")
     }
 }
 
