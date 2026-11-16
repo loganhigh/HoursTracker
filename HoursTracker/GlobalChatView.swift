@@ -98,7 +98,10 @@ struct GlobalChatView: View {
             Text("Fixing @\(message.username)'s message. Everyone sees the new text.")
         }
         .alert("Board Chat rules", isPresented: $showingRules) {
-            Button("I agree") { acceptedRules = true }
+            Button("I agree") {
+                acceptedRules = true
+                Task { await chat.joinGlobal() }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Keep it encouraging. No harassment, hate, sexual content, spam or sharing personal info. Messages that break these rules are removed and the sender can lose chat access. Long-press any message to report or block someone.")
@@ -174,6 +177,9 @@ struct GlobalChatView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: AppSpacing.sm) {
                         ForEach(chat.visibleGlobalMessages) { message in
+                            if message.isJoin {
+                                joinLine(message)
+                            } else {
                             ChatMessageRow(message: message, isMine: message.uid == myUid, myUid: myUid,
                                            myUsername: myUsername,
                                            seenCount: chat.seenCount(message),
@@ -193,6 +199,7 @@ struct GlobalChatView: View {
                                     }
                                     .presentationCompactAdaptation(.popover)
                                 }
+                            }
                         }
                     }
                     .padding(.horizontal, AppSpacing.md)
@@ -211,6 +218,25 @@ struct GlobalChatView: View {
     }
 
     private var canReact: Bool { myUsername != nil && acceptedRules }
+
+    /// "logan joined the chat" — small, grey, centred; no bubble or avatar.
+    private func joinLine(_ message: ChatMessage) -> some View {
+        Text(message.text)
+            .font(.system(size: 12, weight: .medium, design: .rounded))
+            .foregroundStyle(AppColors.faint)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 2)
+            .id(message.id)
+            .contextMenu {
+                if chat.canDelete(message) {
+                    Button(role: .destructive) {
+                        Task { await chat.delete(message) }
+                    } label: { Label("Delete", systemImage: "trash") }
+                }
+            }
+    }
 
     private func openPicker(for message: ChatMessage) {
         guard canReact else {

@@ -14,6 +14,8 @@ struct BoardChatHomeRow: View {
         guard let latest = chat.latestGlobal, !chat.blockedUids.contains(latest.uid) else {
             return "Talk with everyone on the leaderboard"
         }
+        // "@logan joined the chat", not "@logan: logan joined the chat".
+        if latest.isJoin { return "@\(latest.username) joined the chat" }
         return "@\(latest.username): \(latest.text)"
     }
 

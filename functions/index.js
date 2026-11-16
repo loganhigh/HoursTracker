@@ -3492,6 +3492,39 @@ exports.sendGlobalChatMessage = onCall(
   }
 );
 
+/**
+ * "Join the chat" tapped: posts a quiet "X joined the chat" line to Board
+ * Chat, once per person ever (chatJoins/{uid} guards it). No pushes, no
+ * rate limit. Clients draw `kind: "join"` as centred grey text.
+ */
+exports.joinGlobalChat = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+    const uid = request.auth.uid;
+    const sender = await chatSender(uid);
+    try {
+      // create() fails if it exists, so a second tap never posts twice.
+      await db.collection("chatJoins").doc(uid).create({ joinedAt: FieldValue.serverTimestamp() });
+    } catch (err) {
+      return { status: "already-joined" };
+    }
+    const ref = await db.collection("globalChat").add({
+      uid,
+      username: sender.username,
+      prestige: sender.prestige,
+      photoURL: sender.photoURL,
+      isSupporter: sender.isSupporter,
+      supporter: sender.supporter,
+      kind: "join",
+      text: `${sender.username} joined the chat`,
+      mentions: [],
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    return { status: "ok", id: ref.id };
+  }
+);
+
 exports.sendDirectMessage = onCall(
   { region: "us-central1" },
   async (request) => {

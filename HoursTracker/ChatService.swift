@@ -25,6 +25,10 @@ struct ChatMessage: Identifiable, Equatable {
     let createdAt: Date
     /// `ChatReaction.rawValue` → uids who reacted with it.
     var reactions: [String: [String]] = [:]
+    /// "join" = the "X joined the chat" line; nil = an ordinary message.
+    var kind: String? = nil
+
+    var isJoin: Bool { kind == "join" }
 
     static func parse(_ doc: QueryDocumentSnapshot) -> ChatMessage? {
         let data = doc.data()
@@ -44,7 +48,8 @@ struct ChatMessage: Identifiable, Equatable {
             text: text,
             mentions: data["mentions"] as? [String] ?? [],
             createdAt: (data["createdAt"] as? Timestamp)?.dateValue() ?? Date(),
-            reactions: ChatReaction.parse(data["reactions"])
+            reactions: ChatReaction.parse(data["reactions"]),
+            kind: data["kind"] as? String
         )
     }
 
@@ -179,7 +184,9 @@ final class ChatService: ObservableObject {
 
     /// Something newer than the user's last visit, from someone else.
     var hasUnreadGlobal: Bool {
-        guard let latest = latestGlobal, latest.uid != myUid, !blockedUids.contains(latest.uid) else { return false }
+        // A join line alone isn't worth a dot.
+        guard let latest = latestGlobal, !latest.isJoin, latest.uid != myUid,
+              !blockedUids.contains(latest.uid) else { return false }
         guard let read = myGlobalReadAt else { return true }
         return latest.createdAt > read
     }
@@ -301,6 +308,12 @@ final class ChatService: ObservableObject {
         globalListener = nil
         globalReadsListener?.remove()
         globalReadsListener = nil
+    }
+
+    /// Posts "X joined the chat" the first time someone joins (the server
+    /// keeps it to once per person). Best effort: joining never fails on it.
+    func joinGlobal() async {
+        _ = try? await functions.httpsCallable("joinGlobalChat").call()
     }
 
     func sendGlobal(_ text: String) async throws {
