@@ -319,7 +319,7 @@ struct AdminPanelView: View {
                     if let analytics {
                         Section {
                             insightLink("chart.bar.fill", "Top Active Users") {
-                                AdminTopActiveView(analytics: analytics)
+                                AdminTopActiveView(analytics: analytics, passcode: passcode)
                             }
                             insightLink("chart.line.uptrend.xyaxis", "User Analytics") {
                                 AdminUserAnalyticsView(analytics: analytics)

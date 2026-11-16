@@ -36,6 +36,7 @@ const usernames = require("./src/social/usernames");
 const chat = require("./src/social/chat");
 const adminAnalytics = require("./src/admin/analytics");
 const winback = require("./src/admin/winback");
+const appreciation = require("./src/admin/appreciation");
 const boardActivity = require("./src/leaderboard/boardActivity");
 const updatePush = require("./src/admin/updatePush");
 const prestigeReady = require("./src/stats/prestigeReady");
@@ -2286,10 +2287,30 @@ exports.adminAnalytics = onCall(
       createdAt: r.createdAt,
     });
 
+    // Thank-you history so Top Active can show who was already thanked.
+    const thanksByUid = new Map();
+    try {
+      const thSnap = await db.collection("_appreciation").get();
+      for (const d of thSnap.docs) thanksByUid.set(d.id, d.data() || {});
+    } catch (err) {
+      console.warn("adminAnalytics: appreciation read failed:", err?.message || err);
+    }
     const topActive = rows
       .map((r) => ({ ...compactRow(r), score: adminAnalytics.activityScore(r, now) }))
       .sort((a, b) => b.score - a.score || b.weeklyHours - a.weeklyHours)
-      .slice(0, 50);
+      .slice(0, 50)
+      .map((r) => {
+        const th = thanksByUid.get(r.uid) || {};
+        const status = appreciation.appreciationStatus(th, r, now);
+        return {
+          ...r,
+          lastThanksMs: Number(th.lastThanksMs) || null,
+          thanksCount: Number(th.count) || 0,
+          canThank: status.allowed,
+          thankBlockedReason: status.allowed ? null : status.reason,
+          nextThanksMs: status.nextAllowedMs,
+        };
+      });
 
     // Win-back history so the At Risk list can show who was already nudged.
     const winbackByUid = new Map();
@@ -3128,6 +3149,61 @@ exports.adminSendWinbackNudge = onCall(
     if (!ok) throw new HttpsError("not-found", "User has no profile.");
     await stateRef.set({ lastManualMs: now }, { merge: true });
     return { status: "ok" };
+  }
+);
+
+/**
+ * Admin → Top Active Users: a thank-you push to one person. Capped at one per
+ * 90 days per person, and only while they're still active (7 days), so it
+ * can never turn into spam. Optional custom title/body from the admin.
+ */
+exports.adminSendAppreciation = onCall(
+  { region: "us-central1", secrets: [ADMIN_PASSCODE] },
+  async (request) => {
+    assertAdmin(request);
+    const uid = String(request.data?.uid || "");
+    if (!uid) throw new HttpsError("invalid-argument", "uid is required.");
+    const now = Date.now();
+    const stateRef = db.collection("_appreciation").doc(uid);
+    const state = (await stateRef.get()).data() || null;
+    const [userSnap, profileSnap, presenceSnap, bhSnap] = await Promise.all([
+      db.collection("users").doc(uid).get(),
+      db.collection("publicProfiles").doc(uid).get(),
+      db.collection("presence").doc(uid).get(),
+      db.collection("boardHours").doc(uid).get(),
+    ]);
+    if (!userSnap.exists) throw new HttpsError("not-found", "User not found.");
+    const u = userSnap.data() || {};
+    const p = profileSnap.data() || {};
+    const row = {
+      displayName: String(p.username || u.username || p.displayName || u.displayName || ""),
+      totalHours: Number(bhSnap.data()?.hours) || Number(p.totalHours) || Number(u.totalHours) || 0,
+      lastActiveAt: presenceSnap.data()?.lastActiveAt?.toMillis?.() || 0,
+      lastShiftMs: Math.max(
+        Number(bhSnap.data()?.lastShiftMs) || 0,
+        p.lastShiftLoggedAt?.toMillis?.() || 0
+      ),
+    };
+    const status = appreciation.appreciationStatus(state, row, now);
+    if (!status.allowed) {
+      throw new HttpsError(
+        "resource-exhausted",
+        status.reason === "cooldown"
+          ? "Already thanked in the last 90 days."
+          : "They haven't used the app in the last 7 days."
+      );
+    }
+    const title = String(request.data?.title || "").trim().slice(0, 80);
+    const body = String(request.data?.body || "").trim().slice(0, 200);
+    const msg = title && body ? { title, body } : appreciation.appreciationMessage(row);
+    await sendPushToUser(uid, u, {
+      title: msg.title,
+      body: msg.body,
+      dataPayload: { kind: "appreciation" },
+      threadId: "appreciation",
+    });
+    await stateRef.set({ lastThanksMs: now, count: FieldValue.increment(1) }, { merge: true });
+    return { status: "ok", nextAllowedMs: now + appreciation.APPRECIATION_COOLDOWN_MS };
   }
 );
 

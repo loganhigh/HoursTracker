@@ -84,7 +84,7 @@ final class MascotScreenDumpTests: XCTestCase {
                     GlobalLeaderboardHeader(onBack: {})
                     GlobalRankHeroCard(rank: 7)
                     VerifiedReviewNote(isVerified: false, onTap: {})
-                    GlobalStatsStrip(trackerCount: 154, totalHours: 48_210, activeNow: 9)
+                    GlobalStatsStrip(appUserCount: 203, rankedCount: 61, totalHours: 48_210, activeNow: 9)
                     GlobalPodiumRow(entries: trackers, currentUid: nil).padding(.top, AppSpacing.xs)
                 }
                 .padding(.horizontal, AppSpacing.md)

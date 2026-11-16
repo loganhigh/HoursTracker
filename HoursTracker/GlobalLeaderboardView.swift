@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Global leaderboard (full list)
 //
@@ -47,6 +48,9 @@ struct GlobalLeaderboardView: View {
     /// True while the climb replay (and its "You passed N people" pill) is
     /// on screen, so a live movement banner doesn't talk over it.
     @State private var isShowingClimb = false
+    /// My climb landed while something covered the board (the Add Shift
+    /// sheet, or the app in the background), so it replays once visible.
+    @State private var pendingCoveredClimb = false
 
     private var myUid: String? { authService.user?.uid }
 
@@ -71,6 +75,11 @@ struct GlobalLeaderboardView: View {
     private var displayedMyRank: Int? {
         guard let myUid else { return nil }
         return displayTrackers.first { $0.uid == myUid }?.rank
+    }
+
+    /// Ranked users: the server's full count, or the rows we hold.
+    private var rankedCount: Int {
+        max(topTrackers.rankedCount, topTrackers.allTrackers.count)
     }
 
     private var totalRankedHours: Double {
@@ -182,7 +191,8 @@ struct GlobalLeaderboardView: View {
                     .cardAppear(index: 1, group: "globalBoard")
 
                     GlobalStatsStrip(
-                        trackerCount: topTrackers.allTrackers.count,
+                        appUserCount: max(topTrackers.appUserCount, rankedCount),
+                        rankedCount: rankedCount,
                         totalHours: totalRankedHours,
                         activeNow: presence.activeNowCount
                     )
@@ -215,10 +225,20 @@ struct GlobalLeaderboardView: View {
                 await maybeReplayMissedClimb(proxy: proxy)
             }
             .onDisappear {
-                rememberCurrentRank()
+                // A climb still waiting to replay plays on the next open.
+                if !pendingCoveredClimb { rememberCurrentRank() }
             }
             .onChange(of: topTrackers.movementToken) { _, _ in
                 guard let myUid, let delta = topTrackers.movements[myUid] else { return }
+                // Logged a shift from on top of the board: the move happened
+                // under the sheet. Keep the old "last seen" rank and replay
+                // the climb once the board is back in view.
+                if delta > 0, Self.boardIsCovered {
+                    guard !pendingCoveredClimb else { return }
+                    pendingCoveredClimb = true
+                    Task { await replayWhenUncovered(proxy: proxy) }
+                    return
+                }
                 rememberCurrentRank()
                 if delta > 0 { Haptics.success() } else { Haptics.mediumTap() }
                 if !isShowingClimb, let rank = topTrackers.tracker(for: myUid)?.rank, ownRowOffscreen {
@@ -315,6 +335,32 @@ struct GlobalLeaderboardView: View {
         replayTrackers = nil
         topTrackers.injectReplayMovement(uid: uid, delta: passed)
         showClimbBanner(passed: passed)
+    }
+
+    /// True while a sheet is up over the app or the app isn't frontmost.
+    private static var boardIsCovered: Bool {
+        guard UIApplication.shared.applicationState == .active else { return true }
+        let root = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .rootViewController
+        return root?.presentedViewController != nil
+    }
+
+    /// Waits for the covering sheet to close, then plays the missed climb.
+    private func replayWhenUncovered(proxy: ScrollViewProxy) async {
+        defer { pendingCoveredClimb = false }
+        var waited = 0.0
+        while Self.boardIsCovered, waited < 600 {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            waited += 0.3
+        }
+        // Let the sheet finish sliding away.
+        try? await Task.sleep(nanoseconds: 450_000_000)
+        guard !isShowingClimb else { return }
+        didAttemptReplay = false
+        await maybeReplayMissedClimb(proxy: proxy)
     }
 
     /// Holds the final "You passed N people" pill for a few seconds.

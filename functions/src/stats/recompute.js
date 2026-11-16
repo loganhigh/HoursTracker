@@ -1644,6 +1644,8 @@ async function applyLeaderboardDeltaForUser(db, uid) {
       top: next.rows.slice(0, 5).map(({ uid: id, name, hours, countryCode }) => ({ uid: id, name, hours, countryCode })),
       all: next.rows,
       totalRanked: Math.max(Number(board.totalRanked) || 0, next.rows.length),
+      hiddenInactive: Number(board.hiddenInactive) || 0,
+      appUsers: Number(board.appUsers) || 0,
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: false });
     tx.set(privateRef, { hours: next.hours, updatedAt: FieldValue.serverTimestamp() }, { merge: false });
@@ -1809,12 +1811,22 @@ async function updateGlobalLeaderboard(db) {
     console.warn("updateGlobalLeaderboard: previous read failed:", err?.message || err);
   }
 
+  // Everyone with an account (the "Total Trackers" tile), not just the
+  // ranked. An aggregate count costs one read per 1000 docs.
+  let appUsers = 0;
+  try {
+    appUsers = (await db.collection("users").count().get()).data().count || 0;
+  } catch (err) {
+    console.warn("updateGlobalLeaderboard: user count failed:", err?.message || err);
+  }
+
   await db.collection("leaderboards").doc("global").set(
     {
       top,
       all: broadcastAll,
       totalRanked: all.length,
       hiddenInactive: inactiveUids.size,
+      appUsers,
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: false }

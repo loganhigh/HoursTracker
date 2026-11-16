@@ -213,27 +213,43 @@ struct LivePulseDot: View {
 // MARK: - Stats strip
 
 struct GlobalStatsStrip: View {
-    let trackerCount: Int
+    /// Everyone with an Hour Tracker account.
+    let appUserCount: Int
+    /// Everyone currently ranked on the global board.
+    let rankedCount: Int
     let totalHours: Double
     /// Signed-in users on the app right now, from PresenceService's
     /// aggregation count. `nil` until the first count resolves.
     let activeNow: Int?
 
     var body: some View {
-        HStack(spacing: 0) {
-            tile(
-                icon: "person.2.fill",
-                value: "\(trackerCount)",
-                label: "Total Trackers"
-            )
-            divider
-            tile(
-                icon: "clock.fill",
-                value: GlobalHoursFormat.hours(totalHours),
-                label: "Total Hours"
-            )
-            divider
-            activeUsersTile
+        VStack(spacing: AppSpacing.xs) {
+            HStack(spacing: 0) {
+                tile(
+                    icon: "person.2.fill",
+                    value: appUserCount.formatted(.number.grouping(.automatic)),
+                    label: "Total Trackers"
+                )
+                divider
+                tile(
+                    icon: "list.number",
+                    value: rankedCount.formatted(.number.grouping(.automatic)),
+                    label: "On the Leaderboard"
+                )
+            }
+            Rectangle()
+                .fill(AppColors.stroke)
+                .frame(height: 0.5)
+                .padding(.horizontal, 6)
+            HStack(spacing: 0) {
+                tile(
+                    icon: "clock.fill",
+                    value: GlobalHoursFormat.hours(totalHours),
+                    label: "Total Hours"
+                )
+                divider
+                activeUsersTile
+            }
         }
         .padding(.vertical, AppSpacing.sm)
         .padding(.horizontal, AppSpacing.xs)

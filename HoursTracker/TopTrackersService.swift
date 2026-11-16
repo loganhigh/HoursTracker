@@ -143,6 +143,11 @@ final class TopTrackersService: ObservableObject {
     @Published private(set) var topTrackers: [TopTracker] = []
     @Published private(set) var allTrackers: [TopTracker] = []
     @Published private(set) var hasLoaded = false
+    /// Everyone with an account (server `appUsers`); 0 until the server
+    /// publishes it, then callers fall back to the ranked count.
+    @Published private(set) var appUserCount = 0
+    /// Everyone ranked on the board (server `totalRanked`).
+    @Published private(set) var rankedCount = 0
     @Published private(set) var isLoadingFull = false
 
     /// Rank deltas from the most recent live snapshot (uid → places gained,
@@ -240,6 +245,8 @@ final class TopTrackersService: ObservableObject {
         topTrackers = []
         allTrackers = []
         hasLoaded = false
+        appUserCount = 0
+        rankedCount = 0
         hasServerFullList = false
         isFetchingFull = false
         isLoadingFull = false
@@ -258,6 +265,10 @@ final class TopTrackersService: ObservableObject {
 
     private func applyBoard(_ snapshot: DocumentSnapshot?) {
         let rows = (snapshot?.data()?["all"] as? [[String: Any]]) ?? []
+        let data = snapshot?.data() ?? [:]
+        func int(_ key: String) -> Int { (data[key] as? Int) ?? (data[key] as? NSNumber)?.intValue ?? 0 }
+        appUserCount = int("appUsers")
+        rankedCount = int("totalRanked")
         let parsed = Self.parseBoardRows(rows)
         for row in rows {
             if let name = row["name"] as? String {

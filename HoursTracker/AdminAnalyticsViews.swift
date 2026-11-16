@@ -81,6 +81,14 @@ struct AdminInsightUser: Identifiable {
     var canNudge = true
     /// Latest app open or logged shift (activity-breakdown lists only).
     var lastTouchAt: Date?
+    /// Thank-you push state (Top Active only): last sent, how many ever,
+    /// whether one can go now, why not ("cooldown" / "inactive"), and when
+    /// the 90-day cap lifts.
+    var lastThanksAt: Date?
+    var thanksCount = 0
+    var canThank = false
+    var thankBlockedReason: String?
+    var nextThanksAt: Date?
 
     var id: String { uid }
 
@@ -118,6 +126,11 @@ struct AdminInsightUser: Identifiable {
         user.lastNudgeAt = date("lastNudgeMs")
         user.canNudge = dict["canNudge"] as? Bool ?? true
         user.lastTouchAt = date("lastTouchMs")
+        user.lastThanksAt = date("lastThanksMs")
+        user.thanksCount = int("thanksCount")
+        user.canThank = dict["canThank"] as? Bool ?? false
+        user.thankBlockedReason = dict["thankBlockedReason"] as? String
+        user.nextThanksAt = date("nextThanksMs")
         return user
     }
 }
@@ -370,88 +383,6 @@ struct AdminInsightUserRow: View {
             }
         }
         .padding(.vertical, 2)
-    }
-}
-
-// MARK: - Top Active Users
-
-struct AdminTopActiveView: View {
-    let analytics: AdminAnalyticsPayload
-
-    /// Honest ranges only: per-day hours aren't stored per user, so there is
-    /// no "Today" tab — This Week / This Month / All Time are the periods the
-    /// server genuinely tracks.
-    enum Range: String, CaseIterable {
-        case week = "This Week"
-        case month = "This Month"
-        case allTime = "All Time"
-    }
-
-    @State private var range: Range = .week
-
-    private var ranked: [AdminInsightUser] {
-        switch range {
-        case .week:
-            // Score already weights the present hard.
-            return analytics.topActive
-        case .month:
-            return analytics.topActive.sorted { $0.monthHours > $1.monthHours }
-        case .allTime:
-            return analytics.topActive.sorted { $0.totalHours > $1.totalHours }
-        }
-    }
-
-    var body: some View {
-        List {
-            Section {
-                Picker("Range", selection: $range) {
-                    ForEach(Range.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
-            }
-
-            Section {
-                ForEach(Array(ranked.enumerated()), id: \.element.id) { index, user in
-                    AdminInsightUserRow(
-                        user: user,
-                        rank: index + 1,
-                        detail: detail(for: user),
-                        subDetail: AdminFormat.lastActive(user.lastActiveAt),
-                        trailing: ("\(user.score)", scoreTint(user.score))
-                    )
-                    .listRowBackground(AppTheme.Colors.card)
-                }
-            } footer: {
-                Text("Activity score (0–100) weights the present: recency, shifts and hours this week, and current streak. Lifetime hours deliberately don't count — the score answers \"who is using Hour Tracker right now\".")
-            }
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(AppTheme.Colors.bg.ignoresSafeArea())
-        .navigationTitle("Top Active Users")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func detail(for user: AdminInsightUser) -> String {
-        var parts: [String]
-        switch range {
-        case .week:
-            parts = [AppTheme.Format.hours(user.weeklyHours), "\(user.weeklyShifts) shifts"]
-        case .month:
-            parts = [AppTheme.Format.hours(user.monthHours) + " this month"]
-        case .allTime:
-            parts = [AppTheme.Format.hours(user.totalHours) + " lifetime"]
-        }
-        if user.currentStreak > 0 { parts.append("\(user.currentStreak) day streak") }
-        return parts.joined(separator: " • ")
-    }
-
-    private func scoreTint(_ score: Int) -> Color {
-        if score >= 70 { return AppTheme.Colors.success }
-        if score >= 35 { return AppTheme.Colors.accent }
-        return AppTheme.Colors.faint
     }
 }
 
