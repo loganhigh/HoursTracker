@@ -255,6 +255,8 @@ struct HoursHomeView: View {
     @State private var offDayBurst = 0
     @State private var holidayBurst = 0
     @State private var showingAdminPanel = false
+    /// Admin opened from the new-user push: land on New Users.
+    @State private var adminStartsOnNewUsers = false
 
     private var todayEntry: WorkEntry? {
         let cal = Calendar.current
@@ -403,6 +405,21 @@ struct HoursHomeView: View {
         notificationRouter.openGlobalLeaderboard = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             notificationRouter.openGlobalLeaderboard = true
+        }
+    }
+
+    /// Tapped "New Hour Tracker user!": open Admin straight on New Users.
+    private func openAdminFromNewUserPush() {
+        // Cold launch: wait for sign-in to load (retried on uid change).
+        guard DeveloperConfig.isCEO(uid: authService.user?.uid) else { return }
+        notificationRouter.openAdminNewUsers = false
+        adminStartsOnNewUsers = true
+        if showingAdminPanel {
+            // Already open: close and reopen so it lands on New Users.
+            showingAdminPanel = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showingAdminPanel = true }
+        } else {
+            showingAdminPanel = true
         }
     }
 
@@ -750,8 +767,17 @@ struct HoursHomeView: View {
         } message: {
             Text("Log your shifts each day. Your hours and pay are calculated automatically. Monthly totals appear here once you have entries.")
         }
-        .sheet(isPresented: $showingAdminPanel) {
-            AdminPanelView()
+        .sheet(isPresented: $showingAdminPanel, onDismiss: { adminStartsOnNewUsers = false }) {
+            AdminPanelView(startOnNewUsers: adminStartsOnNewUsers)
+        }
+        .onChange(of: notificationRouter.openAdminNewUsers) { _, isOpen in
+            if isOpen { openAdminFromNewUserPush() }
+        }
+        .onAppear {
+            if notificationRouter.openAdminNewUsers { openAdminFromNewUserPush() }
+        }
+        .onChange(of: authService.user?.uid) { _, _ in
+            if notificationRouter.openAdminNewUsers { openAdminFromNewUserPush() }
         }
         .sheet(isPresented: $showingVerifiedProofSheet) {
             VerifiedReviewProofSheet(

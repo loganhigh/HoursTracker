@@ -192,6 +192,10 @@ struct AppTabView: View {
         .onChange(of: notificationRouter.openGlobalLeaderboard) { _, isOpen in
             if isOpen { tabRouter.selection = .home }
         }
+        // The admin console is presented from Home too.
+        .onChange(of: notificationRouter.openAdminNewUsers) { _, isOpen in
+            if isOpen { tabRouter.selection = .home }
+        }
         // A cold launch from the push raises the flag before this view exists,
         // so check on appear as well as on change.
         .onChange(of: notificationRouter.openYouTab) { _, isOpen in

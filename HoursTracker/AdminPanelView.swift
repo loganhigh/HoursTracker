@@ -87,9 +87,13 @@ struct AdminPanelView: View {
     @EnvironmentObject private var cloudSync: CloudSyncManager
     @Environment(\.dismiss) private var dismiss
 
+    /// Opened from the new-user push: push New Users once analytics load.
+    var startOnNewUsers = false
+
     /// Kept only as inert plumbing to the callables' legacy parameter — the
     /// server now authorizes purely on the signed-in admin uid.
     private let passcode = ""
+    @State private var showingNewUsers = false
     @State private var isLoading = false
     @State private var users: [AdminUser] = []
     /// Pending verified-mark submissions, shown on the inbox row.
@@ -168,6 +172,14 @@ struct AdminPanelView: View {
             }
             .navigationTitle("Admin")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(isPresented: $showingNewUsers) {
+                if let analytics {
+                    AdminNewUsersView(analytics: analytics)
+                }
+            }
+            .onChange(of: analytics != nil) { _, loaded in
+                if loaded, startOnNewUsers { showingNewUsers = true }
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }

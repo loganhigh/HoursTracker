@@ -103,6 +103,11 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
             }
             return
         }
+        if let type = userInfo["type"] as? String, type == "admin_new_user" {
+            Task { @MainActor in
+                NotificationRouter.shared.openAdminNewUsers = true
+            }
+        }
         if let kind = userInfo["kind"] as? String, kind == "leaderboardRank" {
             Task { @MainActor in
                 NotificationRouter.shared.openGlobalLeaderboard = true
@@ -156,6 +161,9 @@ final class NotificationRouter: ObservableObject {
     /// Raised by a leaderboard-rank push; HoursHomeView presents the global
     /// board and lowers it.
     @Published var openGlobalLeaderboard = false
+    /// Raised by the admin's "New Hour Tracker user!" push; Home opens the
+    /// admin console on New Users and lowers it.
+    @Published var openAdminNewUsers = false
     /// Raised with the board by a chat-mention push; the board opens the chat.
     @Published var openGlobalChat = false
     /// Set with the board by a direct-message push; the board opens the thread.
