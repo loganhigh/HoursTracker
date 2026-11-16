@@ -9,12 +9,6 @@ struct SettingsView: View {
     var onClose: (() -> Void)? = nil
 
     @State private var showingDeleteConfirm = false
-    /// Raw text of the Hourly wage field. Parsed and saved when editing ends —
-    /// a currency-formatted field reformatted mid-typing and dropped cents.
-    @State private var wageText = ""
-    @FocusState private var wageFocused: Bool
-    @State private var showingPaydayPicker = false
-    @State private var showingCutoffPicker = false
     @State private var showingNotificationsSheet = false
     @State private var showingDataExportSheet = false
     @State private var showingYearEndSummary = false
@@ -32,183 +26,16 @@ struct SettingsView: View {
     @ObservedObject private var smartNotifier = SmartNotifier.shared
     @ObservedObject private var weeklyNotifier = WeeklyMilestoneNotifier.shared
 
-    private var paydayDate: Date {
-        let span = PayCycleEngine.spanDays(for: settings.payPeriodType)
-        return settings.nextPayday ?? Calendar.current.date(byAdding: .day, value: span, to: Date()) ?? Date()
-    }
-
-    private var cutoffPickerDate: Date {
-        settings.nextCutoff ?? paydayDate
-    }
-
-    /// Spells out the resulting work window so "my weeks start on the wrong
-    /// day" is diagnosable right here: the period is anchored to payday by
-    /// default, and the cutoff toggle is how you move the week start.
-    private var payCycleFooter: String {
-        let cycle = PayCycleEngine.currentCycle(settings: settings)
-        let df = DateFormatter()
-        df.dateFormat = "EEE MMM d"
-        let window = "\(df.string(from: cycle.start)) – \(df.string(from: cycle.cutoff))"
-        let startDay = PayCycleEngine.weekdayName(Calendar.current.component(.weekday, from: cycle.start))
-        if PayCycleEngine.usesSavedCutoff(settings) {
-            return "Current period: \(window) · paid \(df.string(from: cycle.payday)). Your weeks start on \(startDay) — move the cutoff date to change that."
-        }
-        if PayCycleEngine.usesWeekStart(settings) {
-            return "Current period: \(window) · paid \(df.string(from: cycle.payday)). Your weeks start on \(startDay)."
-        }
-        return "Current period: \(window), ending the day before payday. Your weeks start on \(startDay) — pick a different start day above (e.g. Sunday) to align your periods to it."
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
                 AppColors.bg.ignoresSafeArea()
                 Form {
                 // MARK: - Jobs
-                Section {
-                    NavigationLink {
-                        JobsSettingsView(store: store)
-                    } label: {
-                        SettingsValueRow(
-                            icon: "briefcase.fill",
-                            title: "Jobs",
-                            value: store.jobs.count == 1 ? store.jobs[0].name : "\(store.jobs.count) jobs"
-                        )
-                    }
-                } header: {
-                    SectionEyebrow("Jobs")
-                } footer: {
-                    if store.hasMultipleJobs {
-                        Text("The pay settings below are for \(store.jobs[0].name). Each other job's are under Jobs.")
-                            .appText(.caption)
-                            .foregroundStyle(AppColors.subtext)
-                    }
-                }
-                .listRowBackground(AppColors.card.opacity(0.55))
-                .listRowSeparatorTint(AppColors.stroke)
-
-                // MARK: - Payday
-                Section {
-                    // The wage drives every pay figure in the app. Blank until
-                    // the user enters it; the $35 placeholder rate behind it is
-                    // never presented as theirs.
-                    HStack(spacing: AppSpacing.sm) {
-                        SettingsRowLabel(icon: "dollarsign.circle.fill", title: "Hourly wage")
-                        Spacer(minLength: AppSpacing.xs)
-                        HStack(spacing: 2) {
-                            if !wageText.isEmpty || wageFocused {
-                                Text("$").foregroundStyle(AppColors.subtext)
-                            }
-                            TextField("Not set", text: $wageText)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .monospacedDigit()
-                                .foregroundStyle(AppColors.text)
-                                .focused($wageFocused)
-                                .fixedSize()
-                                // The decimal pad has no return key; without
-                                // this there's no obvious way to finish.
-                                .toolbar {
-                                    ToolbarItemGroup(placement: .keyboard) {
-                                        Spacer()
-                                        Button("Done") { wageFocused = false }
-                                            .fontWeight(.semibold)
-                                    }
-                                }
-                        }
-                        .frame(maxWidth: 140, alignment: .trailing)
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture { wageFocused = true }
-                    .onAppear { wageText = Self.wageText(for: settings) }
-                    .onChange(of: wageFocused) { _, focused in
-                        if !focused { commitWage() }
-                    }
-                    .onDisappear { commitWage() }
-
-                    Picker("Pay period", selection: Binding(
-                        get: { settings.payPeriodType },
-                        set: { newType in
-                            settings.payPeriodType = newType
-                            store.persist()
-                        }
-                    )) {
-                        ForEach(PayPeriodType.allCases, id: \.self) { type in
-                            Text(type.displayName).tag(type)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.vertical, AppSpacing.xxs)
-
-                    Button {
-                        showingPaydayPicker = true
-                    } label: {
-                        SettingsValueRow(
-                            icon: "calendar",
-                            title: "Next payday",
-                            value: paydayDate.formatted(date: .abbreviated, time: .omitted)
-                        )
-                    }
-
-                    Toggle(isOn: Binding(
-                        get: { settings.payPeriodUsesCutoff },
-                        set: { enabled in
-                            settings.payPeriodUsesCutoff = enabled
-                            if !enabled {
-                                settings.nextCutoff = nil
-                            }
-                            store.persist()
-                        }
-                    )) {
-                        SettingsRowLabel(icon: "clock.badge.checkmark", title: "Hours cutoff")
-                    }
-                    .tint(AppColors.accent)
-
-                    if settings.payPeriodUsesCutoff {
-                        Button {
-                            showingCutoffPicker = true
-                        } label: {
-                            SettingsValueRow(
-                                icon: "calendar.badge.checkmark",
-                                title: "Cutoff date",
-                                value: settings.nextCutoff?.formatted(date: .abbreviated, time: .omitted)
-                                    ?? "Select date"
-                            )
-                        }
-                    } else {
-                        Picker(selection: Binding(
-                            get: { settings.weekStartWeekday ?? 0 },
-                            set: { newValue in
-                                Haptics.lightTap()
-                                settings.weekStartWeekday = newValue == 0 ? nil : newValue
-                                store.persist()
-                            }
-                        )) {
-                            Text("Payday").tag(0)
-                            ForEach(1...7, id: \.self) { day in
-                                Text(PayCycleEngine.weekdayName(day)).tag(day)
-                            }
-                        } label: {
-                            SettingsRowLabel(
-                                icon: "calendar.circle.fill",
-                                title: "Week starts on"
-                            )
-                        }
-                        .pickerStyle(.menu)
-                        .tint(AppColors.accent)
-                    }
-                } header: {
-                    SectionEyebrow("Pay Cycle")
-                } footer: {
-                    Text(payCycleFooter)
-                        .appText(.caption)
-                        .foregroundStyle(AppColors.subtext)
-                }
-                .listRowBackground(AppColors.card.opacity(0.55))
-                .listRowSeparatorTint(AppColors.stroke)
-
-                // MARK: - Overtime Rules
-                OvertimeRulesSettingsSection(store: store, settings: $settings)
+                // Every job (main included) with its company details, wage,
+                // pay cycle and overtime in one editor, the same one each
+                // job's card opens on the You page.
+                JobsListSection(store: store)
 
                 // MARK: - Friends
                 Section {
@@ -422,32 +249,6 @@ struct SettingsView: View {
             .onDisappear {
                 store.persist()
             }
-            .sheet(isPresented: $showingPaydayPicker) {
-                AutoDismissDatePickerSheet(
-                    date: Binding(
-                        get: { paydayDate },
-                        set: {
-                            settings.nextPayday = $0
-                            store.persist()
-                        }
-                    ),
-                    title: "Next Payday",
-                    onDismiss: { showingPaydayPicker = false }
-                )
-            }
-            .sheet(isPresented: $showingCutoffPicker) {
-                AutoDismissDatePickerSheet(
-                    date: Binding(
-                        get: { cutoffPickerDate },
-                        set: {
-                            settings.nextCutoff = $0
-                            store.persist()
-                        }
-                    ),
-                    title: "Cutoff Date",
-                    onDismiss: { showingCutoffPicker = false }
-                )
-            }
             .sheet(isPresented: $showingNotificationsSheet) {
                 NotificationsSheet(store: store, onDismiss: { showingNotificationsSheet = false })
             }
@@ -516,36 +317,5 @@ struct SettingsView: View {
         } catch {
             backupErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
-    }
-}
-
-// MARK: - Hourly wage field
-
-extension SettingsView {
-    static func wageText(for settings: PaySettings) -> String {
-        guard settings.hourlyRateSet else { return "" }
-        return String(format: "%.2f", settings.hourlyRate)
-    }
-
-    /// Accepts "46.61", "46,61" or "$46.61"; blank or zero clears the wage.
-    func commitWage() {
-        let cleaned = wageText
-            .replacingOccurrences(of: "$", with: "")
-            .replacingOccurrences(of: ",", with: ".")
-            .trimmingCharacters(in: .whitespaces)
-        if let value = Double(cleaned), value > 0, value.isFinite, value < 10_000 {
-            let rounded = (value * 100).rounded() / 100
-            if !settings.hourlyRateSet || settings.hourlyRate != rounded {
-                settings.hourlyRate = rounded
-                settings.hourlyRateSet = true
-                store.persist()
-            }
-        } else if cleaned.isEmpty || Double(cleaned) == 0 {
-            if settings.hourlyRateSet {
-                settings.hourlyRateSet = false
-                store.persist()
-            }
-        }
-        wageText = Self.wageText(for: settings)
     }
 }

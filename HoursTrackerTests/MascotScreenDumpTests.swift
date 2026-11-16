@@ -163,7 +163,7 @@ final class MascotScreenDumpTests: XCTestCase {
             ("you", AnyView(NavigationStack { AccountView(store: store) }), phone, 1.2),
             ("you-full", AnyView(NavigationStack { AccountView(store: store) }), CGSize(width: 390, height: 2700), 1.2),
             ("badges", AnyView(NavigationStack { AchievementsView(store: store) }), phone, 1.2),
-            ("company", AnyView(NavigationStack { CompanyProfileView(store: store) }), phone, 1.2),
+            ("company", AnyView(NavigationStack { JobEditorView(store: store, job: store.jobs[0]) }), phone, 1.2),
             // The portal opening runs ~2.8s before the reveal settles.
             ("prestige", AnyView(PrestigeCelebrationView(prestige: 4, onDismiss: {})), phone, 5),
             ("crop", AnyView(ProfilePhotoCropView(image: photo, onCancel: {}, onConfirm: { _ in })), phone, 1.2),

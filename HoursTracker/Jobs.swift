@@ -17,9 +17,15 @@ struct JobProfile: Codable, Equatable, Identifiable, Hashable {
     var name: String
     /// This job's pay rules. Its own `additionalJobs` is always empty.
     var settings: PaySettings
+    /// Company-profile details for an extra job (role, first day there).
+    /// The main job keeps these in the company_* app storage keys instead,
+    /// which the cloud profile and work anniversaries already read.
+    var occupation: String? = nil
+    var startDate: Date? = nil
 
     static func == (lhs: JobProfile, rhs: JobProfile) -> Bool {
         lhs.id == rhs.id && lhs.name == rhs.name && lhs.settings == rhs.settings
+            && lhs.occupation == rhs.occupation && lhs.startDate == rhs.startDate
     }
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -33,7 +39,12 @@ extension HoursStore {
     var jobs: [JobProfile] {
         var main = paySettings
         main.additionalJobs = []
-        let name = paySettings.primaryJobName.trimmingCharacters(in: .whitespacesAndNewlines)
+        var name = paySettings.primaryJobName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty {
+            // Named in the company profile but never under Jobs.
+            name = (UserDefaults.standard.string(forKey: "company_name") ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         return [JobProfile(id: JobProfile.primaryID, name: name.isEmpty ? "Main job" : name, settings: main)]
             + paySettings.additionalJobs
     }
@@ -82,7 +93,10 @@ extension HoursStore {
             paySettings = rules
         } else if let index = paySettings.additionalJobs.firstIndex(where: { $0.id == job.id }) {
             rules.primaryJobName = ""
-            paySettings.additionalJobs[index] = JobProfile(id: job.id, name: job.name, settings: rules)
+            paySettings.additionalJobs[index] = JobProfile(
+                id: job.id, name: job.name, settings: rules,
+                occupation: job.occupation, startDate: job.startDate
+            )
         }
         persist()
     }

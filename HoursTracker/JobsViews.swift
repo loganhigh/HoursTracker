@@ -68,58 +68,61 @@ struct JobPickerMenu: View {
 
 // MARK: - Settings → Jobs
 
-struct JobsSettingsView: View {
+/// Every job (main first) with its pay summary, each opening the job
+/// editor, plus "Add a job". Lives right in Settings; the same editor opens
+/// from each job's card on the You page.
+struct JobsListSection: View {
     @ObservedObject var store: HoursStore
     @State private var showingNewJob = false
     @State private var newJobName = ""
     @State private var editingJob: JobProfile?
 
     var body: some View {
-        Form {
-            Section {
-                ForEach(store.jobs) { job in
-                    Button {
-                        editingJob = job
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(job.name)
-                                    .foregroundStyle(AppColors.text)
-                                Text(summary(job))
-                                    .appText(.caption)
-                                    .foregroundStyle(AppColors.subtext)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(AppColors.faint)
+        Section {
+            ForEach(store.jobs) { job in
+                Button {
+                    editingJob = job
+                } label: {
+                    HStack(spacing: AppSpacing.sm) {
+                        Image(systemName: job.id == JobProfile.primaryID ? "building.2.fill" : "briefcase.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(AppColors.accent)
+                            .frame(width: 30, height: 30)
+                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppColors.accentMuted))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(job.name)
+                                .foregroundStyle(AppColors.text)
+                            Text(summary(job))
+                                .appText(.caption)
+                                .foregroundStyle(AppColors.subtext)
                         }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(AppColors.faint)
                     }
                 }
-                Button {
-                    showingNewJob = true
-                } label: {
-                    Label("Add a job", systemImage: "plus.circle.fill")
-                        .foregroundStyle(AppColors.accent)
-                }
-            } header: {
-                SectionEyebrow("Your jobs")
-            } footer: {
-                Text("Each job has its own wage, pay schedule and overtime rules. When you log a shift you pick the job, and it counts toward that job's cheque.")
-                    .appText(.caption)
-                    .foregroundStyle(AppColors.subtext)
             }
-            .listRowBackground(AppColors.card.opacity(0.55))
+            Button {
+                showingNewJob = true
+            } label: {
+                Label("Add a job", systemImage: "plus.circle.fill")
+                    .foregroundStyle(AppColors.accent)
+            }
+        } header: {
+            SectionEyebrow("Jobs")
+        } footer: {
+            Text("Each job has its own company details, wage, pay cycle and overtime rules. When you log a shift you pick the job, and it counts toward that job's cheque.")
+                .appText(.caption)
+                .foregroundStyle(AppColors.subtext)
         }
-        .scrollContentBackground(.hidden)
-        .background(AppColors.bg.ignoresSafeArea())
-        .navigationTitle("Jobs")
-        .navigationBarTitleDisplayMode(.inline)
+        .listRowBackground(AppColors.card.opacity(0.55))
+        .listRowSeparatorTint(AppColors.stroke)
         .navigationDestination(item: $editingJob) { job in
             JobEditorView(store: store, job: job)
         }
         .alert("New job", isPresented: $showingNewJob) {
-            TextField("Job name", text: $newJobName)
+            TextField("Company name", text: $newJobName)
             Button("Add") {
                 let name = newJobName.trimmingCharacters(in: .whitespacesAndNewlines)
                 newJobName = ""
@@ -128,7 +131,7 @@ struct JobsSettingsView: View {
             }
             Button("Cancel", role: .cancel) { newJobName = "" }
         } message: {
-            Text("It starts with your main job's pay rules — change anything that's different next.")
+            Text("It starts with your main job's pay rules. Change anything that's different next.")
         }
     }
 
@@ -141,28 +144,56 @@ struct JobsSettingsView: View {
     }
 }
 
-// MARK: - One job's settings
+// MARK: - One job: company profile + pay rules
 
+/// The single editor for any job, main or extra: company details (name,
+/// role, start date) on top, then wage, pay cycle and overtime. The main
+/// job's company fields live in the company_* app storage keys (cloud
+/// profile, anniversaries, leaderboard title); extra jobs keep them on
+/// their JobProfile.
 struct JobEditorView: View {
     @ObservedObject var store: HoursStore
     @State private var draft: JobProfile
     @State private var wageText: String
+    @State private var occupation: String
+    @State private var hasStartDate: Bool
+    @State private var startDate: Date
     @State private var confirmingDelete = false
     @Environment(\.dismiss) private var dismiss
 
+    @AppStorage("company_name") private var mainCompanyName = ""
+    @AppStorage("company_occupation") private var mainOccupation = ""
+    @AppStorage("company_start_date_ts") private var mainStartTS: Double = 0
+
     init(store: HoursStore, job: JobProfile) {
         self.store = store
+        var job = job
+        let isMain = job.id == JobProfile.primaryID
+        let defaults = UserDefaults.standard
+        if isMain {
+            let company = (defaults.string(forKey: "company_name") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !company.isEmpty { job.name = company }
+            if job.name == "Main job" { job.name = "" }
+        }
+        let ts = defaults.double(forKey: "company_start_date_ts")
+        let start: Date? = isMain ? (ts > 0 ? Date(timeIntervalSince1970: ts) : nil) : job.startDate
         _draft = State(initialValue: job)
         _wageText = State(initialValue: job.settings.hourlyRateSet
                           ? String(format: "%.2f", job.settings.hourlyWage) : "")
+        _occupation = State(initialValue: isMain ? (defaults.string(forKey: "company_occupation") ?? "") : (job.occupation ?? ""))
+        _hasStartDate = State(initialValue: start != nil)
+        _startDate = State(initialValue: start ?? Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date())
     }
 
     private var isMain: Bool { draft.id == JobProfile.primaryID }
+    private var trimmedName: String { draft.name.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
         Form {
+            companySection
+            if isMain, !jobTitles.isEmpty { leaderboardTitleSection }
+
             Section {
-                TextField("Job name", text: $draft.name)
                 HStack {
                     Text("Hourly wage")
                     Spacer()
@@ -182,7 +213,7 @@ struct JobEditorView: View {
                         }
                 }
             } header: {
-                SectionEyebrow(isMain ? "Main job" : "Job")
+                SectionEyebrow("Pay")
             }
             .listRowBackground(AppColors.card.opacity(0.55))
 
@@ -236,7 +267,7 @@ struct JobEditorView: View {
                 Section {
                     Button("Delete job", role: .destructive) { confirmingDelete = true }
                 } footer: {
-                    Text("Its shifts move to your main job — no hours are lost.")
+                    Text("Its shifts move to your main job, so no hours are lost.")
                         .appText(.caption)
                         .foregroundStyle(AppColors.subtext)
                 }
@@ -245,7 +276,7 @@ struct JobEditorView: View {
         }
         .scrollContentBackground(.hidden)
         .background(AppColors.bg.ignoresSafeArea())
-        .navigationTitle(draft.name.isEmpty ? "Job" : draft.name)
+        .navigationTitle(trimmedName.isEmpty ? "Edit job" : trimmedName)
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear(perform: save)
         .confirmationDialog("Delete \(draft.name)?", isPresented: $confirmingDelete, titleVisibility: .visible) {
@@ -256,6 +287,90 @@ struct JobEditorView: View {
         } message: {
             Text("\(store.shiftCount(forJob: draft.id)) shifts will move to your main job.")
         }
+    }
+
+    // MARK: Company
+
+    private var companySection: some View {
+        Section {
+            TextField("Company name", text: $draft.name)
+                .textInputAutocapitalization(.words)
+            TextField("Role (e.g. Foreman, Server)", text: $occupation)
+                .textInputAutocapitalization(.words)
+            Toggle("Start date", isOn: $hasStartDate.animation())
+                .tint(AppColors.accent)
+            if hasStartDate {
+                DatePicker("First day", selection: $startDate, in: ...Date(), displayedComponents: .date)
+                Label {
+                    Text(tenureLine)
+                        .foregroundStyle(AppColors.subtext)
+                } icon: {
+                    Image(systemName: "clock.badge.checkmark.fill")
+                        .foregroundStyle(AppColors.accent)
+                }
+                .appText(.subheadline)
+            }
+        } header: {
+            SectionEyebrow(isMain ? "Main job" : "Other job")
+        } footer: {
+            Text(isMain
+                 ? "Your start date powers time at the company and work anniversary reminders."
+                 : "Your start date powers time at the company on your You page.")
+                .appText(.caption)
+                .foregroundStyle(AppColors.subtext)
+        }
+        .listRowBackground(AppColors.card.opacity(0.55))
+    }
+
+    private var tenureLine: String {
+        let tenure = FriendProfileFormat.tenureAtCompanyString(from: startDate)
+        return trimmedName.isEmpty ? tenure : "\(tenure) at \(trimmedName)"
+    }
+
+    // MARK: Leaderboard title (main job's role is the board title)
+
+    private var jobTitles: [String] {
+        var seen = Set<String>()
+        return store.jobs
+            .map { $0.id == JobProfile.primaryID ? trimmedName : $0.name }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0 != "Main job" && seen.insert($0.lowercased()).inserted }
+    }
+
+    private var leaderboardTitleSection: some View {
+        Section {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(jobTitles, id: \.self) { title in
+                        let selected = occupation.trimmingCharacters(in: .whitespacesAndNewlines)
+                            .caseInsensitiveCompare(title) == .orderedSame
+                        Button {
+                            Haptics.lightTap()
+                            occupation = String(title.prefix(80))
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: selected ? "checkmark" : "briefcase.fill")
+                                    .font(.system(size: 11, weight: .bold))
+                                Text(title).lineLimit(1)
+                            }
+                            .appText(.subheadline)
+                            .foregroundStyle(selected ? AppColors.textOnAccent : AppColors.accent)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Capsule().fill(selected ? AppColors.accent : AppColors.accentMuted))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        } header: {
+            SectionEyebrow("Leaderboard title")
+        } footer: {
+            Text("Your role shows under your name on the global leaderboard. Tap one of your jobs to use it instead.")
+                .appText(.caption)
+                .foregroundStyle(AppColors.subtext)
+        }
+        .listRowBackground(AppColors.card.opacity(0.55))
     }
 
     private var cycleFooter: String {
@@ -269,8 +384,28 @@ struct JobEditorView: View {
         // Deleted while open: nothing to save.
         guard isMain || store.paySettings.additionalJobs.contains(where: { $0.id == draft.id }) else { return }
         var job = draft
-        job.name = job.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if job.name.isEmpty { job.name = isMain ? "" : store.job(id: job.id).name }
+        job.name = trimmedName
+        let role = occupation.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isMain {
+            let startChanged = mainStartTS != (hasStartDate ? startDate.timeIntervalSince1970 : 0)
+            let nameChanged = mainCompanyName != job.name
+            mainCompanyName = job.name
+            mainOccupation = String(role.prefix(80))
+            mainStartTS = hasStartDate ? startDate.timeIntervalSince1970 : 0
+            if (startChanged || nameChanged), hasStartDate, !job.name.isEmpty {
+                let name = job.name, start = startDate
+                Task {
+                    if await NotificationManager.shared.hasPermission() {
+                        SmartNotifier.shared.scheduleWorkAnniversaryNotification(companyName: name, startDate: start)
+                    }
+                }
+            }
+        } else {
+            if job.name.isEmpty { job.name = store.job(id: job.id).name }
+            job.occupation = role.isEmpty ? nil : role
+            job.startDate = hasStartDate ? Calendar.current.startOfDay(for: startDate) : nil
+        }
         store.updateJob(job)
+        if isMain { store.syncProfileSnapshotToCloud() }
     }
 }

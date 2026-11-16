@@ -6,9 +6,6 @@ import SwiftUI
 /// grid already carries those numbers.
 struct CareerSections: View {
     @ObservedObject var store: HoursStore
-    @AppStorage("company_name") private var companyName: String = ""
-    @AppStorage("company_start_date_ts") private var companyStartDateTS: Double = 0
-    @AppStorage("company_occupation") private var companyOccupation: String = ""
 
     @ObservedObject private var statsListener = StatsListenerService.shared
 
@@ -37,34 +34,6 @@ struct CareerSections: View {
         return Date().timeIntervalSince(first) / (60 * 60 * 24 * 365.25)
     }
 
-    private var trimmedCompanyName: String {
-        companyName.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var hasCompanyInfo: Bool {
-        !trimmedCompanyName.isEmpty
-    }
-
-    private var companyStartDate: Date? {
-        guard companyStartDateTS > 0 else { return nil }
-        return Date(timeIntervalSince1970: companyStartDateTS)
-    }
-
-    private var yearsAtCompany: Double {
-        guard let start = companyStartDate else { return 0 }
-        return FriendProfileFormat.yearsAtCompany(from: start)
-    }
-
-    private var companyHoursLogged: Double {
-        guard let start = companyStartDate else { return totalHours }
-        return lifetime.hours(since: start)
-    }
-
-    private var companyDaysWorked: Int {
-        guard let start = companyStartDate else { return daysWorked }
-        return lifetime.daysWorked(since: start)
-    }
-
     private var bestMonthEntry: (label: String, hours: Double)? {
         guard let best = lifetime.bestMonth else { return nil }
         return (FriendProfileFormat.companyStartedString(from: best.start), best.hours)
@@ -74,10 +43,8 @@ struct CareerSections: View {
 
     var body: some View {
         VStack(spacing: AppSpacing.xl) {
-                companyCard
-
-                // Extra jobs, each in its own card under the main one.
-                OtherJobCareerCards(store: store)
+                // Every job in the same card, main first.
+                JobCareerCards(store: store, soleJobHours: totalHours)
 
                 SectionCard(
                     title: "Personal bests",
@@ -149,136 +116,6 @@ struct CareerSections: View {
                 }
 
         }
-    }
-
-    // MARK: - Company
-
-    @ViewBuilder
-    private var companyCard: some View {
-        if hasCompanyInfo {
-            companyCardFilled
-        } else {
-            companyCardEmpty
-        }
-    }
-
-    private var companyCardEmpty: some View {
-        SectionCard(
-            title: "Company",
-            subtitle: "Track your start date, anniversaries, and hours at work",
-            trailing: nil,
-            centerHeader: true
-        ) {
-            VStack(spacing: AppSpacing.md) {
-                Image(systemName: "building.2.fill")
-                    .font(.largeTitle.weight(.semibold))
-                    .foregroundStyle(AppColors.accent.opacity(0.85))
-
-                Text("Add your company to see start date, time worked, and work anniversaries here.")
-                    .appText(.subheadline)
-                    .foregroundStyle(AppColors.subtext)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, AppSpacing.xs)
-
-                NavigationLink {
-                    CompanyProfileView(store: store)
-                } label: {
-                    Label("Set up company profile", systemImage: "plus.circle.fill")
-                }
-                .buttonStyle(PrimaryButtonStyle())
-            }
-            .padding(.vertical, AppSpacing.sm)
-        }
-    }
-
-    private var companyCardFilled: some View {
-        SectionCard(
-            title: trimmedCompanyName,
-            subtitle: companyCardSubtitle,
-            trailing: nil,
-            centerHeader: true
-        ) {
-            VStack(spacing: 10) {
-                if let start = companyStartDate {
-                    FriendRecordRow(
-                        icon: "building.2.fill",
-                        title: "Started",
-                        value: FriendProfileFormat.companyStartedString(from: start),
-                        tint: AppColors.accent
-                    )
-                    FriendRecordRow(
-                        icon: "briefcase.fill",
-                        title: "Time at company",
-                        value: FriendProfileFormat.tenureAtCompanyString(from: start),
-                        tint: AppColors.accent2
-                    )
-                    if yearsAtCompany >= 0.1 {
-                        FriendRecordRow(
-                            icon: "star.circle.fill",
-                            title: "Years worked",
-                            value: String(format: "%.1f", yearsAtCompany),
-                            tint: AppColors.gold
-                        )
-                    }
-                    if let anniversary = FriendProfileFormat.nextWorkAnniversary(from: start) {
-                        FriendRecordRow(
-                            icon: "gift.fill",
-                            title: "Next anniversary",
-                            value: FriendProfileFormat.anniversaryCountdownString(to: anniversary),
-                            detail: FriendProfileFormat.anniversaryDateString(anniversary),
-                            tint: AppColors.accentHighlight
-                        )
-                    }
-                }
-                FriendRecordRow(
-                    icon: "clock.fill",
-                    title: "Hours logged",
-                    value: FriendProfileFormat.hoursDisplay(companyHoursLogged),
-                    detail: store.hasMultipleJobs
-                        ? (companyStartDate == nil ? "All jobs" : "All jobs, since start date")
-                        : (companyStartDate == nil ? "All shifts in app" : "Since start date"),
-                    tint: AppColors.streak
-                )
-                FriendRecordRow(
-                    icon: "calendar",
-                    title: "Days worked",
-                    value: "\(companyDaysWorked)",
-                    detail: store.hasMultipleJobs ? "All jobs" : nil,
-                    tint: AppColors.accent
-                )
-
-                NavigationLink {
-                    CompanyProfileView(store: store)
-                } label: {
-                    HStack(spacing: AppSpacing.xs) {
-                        Image(systemName: "pencil.circle.fill")
-                            .font(.callout.weight(.semibold))
-                        Text("Edit company profile")
-                            .appText(.headline)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(AppColors.faint)
-                    }
-                    .foregroundStyle(AppColors.accent)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, AppSpacing.sm)
-                    .background(
-                        RoundedRectangle(cornerRadius: AppRadius.sm, style: .continuous)
-                            .fill(AppColors.accent.opacity(0.1))
-                    )
-                }
-                .buttonStyle(PremiumPressStyle())
-                .padding(.top, AppSpacing.xxs)
-            }
-            .padding(.vertical, AppSpacing.xs)
-        }
-    }
-
-    private var companyCardSubtitle: String {
-        let occupation = companyOccupation.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !occupation.isEmpty { return occupation }
-        return "Your workplace"
     }
 
     // MARK: - Formatting

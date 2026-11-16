@@ -21,12 +21,17 @@ enum WrappedFormat {
     /// A duration mid count-up toward `target`, in the shape the final
     /// value will have so the text never changes form while counting.
     /// Lands on exactly `hoursAndMinutes(target)`.
+    ///
+    /// Only the hours count; the minutes sit at their final value the whole
+    /// time. Counting minutes made them spin 0→59 once per hour, which read
+    /// as a glitchy number scramble next to the other slides' smooth counts.
     static func countingDuration(_ hours: Double, target: Double) -> String {
-        guard hours.isFinite, hours > 0 else { return "0h" }
-        let targetMinutes = Int((target * 60).rounded())
-        let totalMinutes = min(Int((hours * 60).rounded()), targetMinutes)
-        if targetMinutes % 60 == 0 { return "\(totalMinutes / 60)h" }
-        return "\(totalMinutes / 60)h \(totalMinutes % 60)m"
+        let targetMinutes = Int((max(target, 0) * 60).rounded())
+        let targetHours = targetMinutes / 60
+        let minutes = targetMinutes % 60
+        let shownHours = hours.isFinite ? min(max(Int(hours.rounded(.down)), 0), targetHours) : 0
+        let finalHours = hours.isFinite && hours >= target ? targetHours : shownHours
+        return minutes == 0 ? "\(finalHours)h" : "\(finalHours)h \(minutes)m"
     }
 
     /// "2,847" — grouped integer, for large whole-number stats like total
