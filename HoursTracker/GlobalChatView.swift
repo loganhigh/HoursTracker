@@ -18,6 +18,9 @@ struct GlobalChatView: View {
     @State private var errorText: String?
     @State private var reportTarget: ChatReportTarget?
     @State private var blockTarget: ChatMessage?
+    /// Admin: the message being corrected, and the edited text.
+    @State private var editTarget: ChatMessage?
+    @State private var editText = ""
     @State private var dmTarget: DirectThreadTarget?
     @State private var showingInbox = false
     /// The message whose emoji picker is open (double-tap or long-press).
@@ -75,6 +78,25 @@ struct GlobalChatView: View {
         .navigationDestination(item: $dmTarget) { DirectThreadView(target: $0) }
         .navigationDestination(isPresented: $showingInbox) { DirectInboxView() }
         .chatReportDialog($reportTarget)
+        .alert("Edit message", isPresented: Binding(
+            get: { editTarget != nil }, set: { if !$0 { editTarget = nil } }
+        ), presenting: editTarget) { message in
+            TextField("Message", text: $editText, axis: .vertical)
+            Button("Save") {
+                let text = editText
+                Task {
+                    do {
+                        try await chat.edit(message, text: text)
+                        Haptics.success()
+                    } catch {
+                        errorText = "Couldn't save the edit. Try again."
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { message in
+            Text("Fixing @\(message.username)'s message. Everyone sees the new text.")
+        }
         .alert("Board Chat rules", isPresented: $showingRules) {
             Button("I agree") { acceptedRules = true }
             Button("Cancel", role: .cancel) {}
@@ -235,6 +257,12 @@ struct GlobalChatView: View {
             Button(role: .destructive) {
                 blockTarget = message
             } label: { Label("Block @\(message.username)", systemImage: "hand.raised") }
+        }
+        if chat.canEdit(message) {
+            Button {
+                editText = message.text
+                editTarget = message
+            } label: { Label("Edit message", systemImage: "pencil") }
         }
         if chat.canDelete(message) {
             Button(role: .destructive) {

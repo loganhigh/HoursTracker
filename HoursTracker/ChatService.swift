@@ -311,6 +311,20 @@ final class ChatService: ObservableObject {
         }
     }
 
+    /// The developer can fix a typo in anyone's Board Chat message.
+    func canEdit(_ message: ChatMessage) -> Bool { DeveloperConfig.isCEO(uid: myUid) }
+
+    /// Rewrites a message's text (admin only; the rules enforce it). Updates
+    /// the list at once so the fix shows before the listener catches up.
+    func edit(_ message: ChatMessage, text: String) async throws {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard canEdit(message), !cleaned.isEmpty, cleaned != message.text else { return }
+        try await db.collection("globalChat").document(message.id).updateData([
+            "text": String(cleaned.prefix(500)),
+            "editedAt": FieldValue.serverTimestamp(),
+        ])
+    }
+
     func delete(_ message: ChatMessage) async {
         try? await db.collection("globalChat").document(message.id).delete()
     }

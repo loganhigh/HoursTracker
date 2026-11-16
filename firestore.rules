@@ -153,11 +153,20 @@ service cloud.firestore {
     match /globalChat/{messageId} {
       allow read: if isSignedIn();
       allow create: if false;
-      allow update: if isSignedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
-        && request.resource.data.reactions.keys().hasOnly(['like', 'heart', 'laugh', 'fire', 'strong', 'clap'])
-        && chatReactionKeyOK('like') && chatReactionKeyOK('heart') && chatReactionKeyOK('laugh')
-        && chatReactionKeyOK('fire') && chatReactionKeyOK('strong') && chatReactionKeyOK('clap');
+      allow update: if isSignedIn() && ((
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+          && request.resource.data.reactions.keys().hasOnly(['like', 'heart', 'laugh', 'fire', 'strong', 'clap'])
+          && chatReactionKeyOK('like') && chatReactionKeyOK('heart') && chatReactionKeyOK('laugh')
+          && chatReactionKeyOK('fire') && chatReactionKeyOK('strong') && chatReactionKeyOK('clap')
+        ) || (
+          // The developer fixing a typo: text only (plus an edit stamp).
+          request.auth.uid == 'msUcdbAbaAaS4HDj52CMs0Vzw8j2'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 500
+          && request.resource.data.editedAt == request.time
+        ));
       allow delete: if isSignedIn()
         && (resource.data.uid == request.auth.uid
           || request.auth.uid == 'msUcdbAbaAaS4HDj52CMs0Vzw8j2');
