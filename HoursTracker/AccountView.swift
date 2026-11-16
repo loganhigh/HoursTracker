@@ -530,11 +530,7 @@ struct AccountView: View {
                 Haptics.lightTap()
                 showingYearEndSummary = true
             } label: {
-                AccountNavRow(
-                    icon: "doc.text.magnifyingglass",
-                    title: "Year-End Summary",
-                    subtitle: "Hours, overtime and gross pay for tax time"
-                )
+                AccountNavRow(icon: "doc.text.magnifyingglass", title: "Year-End Summary")
             }
             .buttonStyle(PremiumPressStyle())
 
