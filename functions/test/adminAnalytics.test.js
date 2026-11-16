@@ -70,3 +70,42 @@ test("countWithin respects the window", () => {
   assert.equal(aa.countWithin(rows, "lastActiveAt", 7, NOW), 2);
   assert.equal(aa.countWithin(rows, "lastActiveAt", 30, NOW), 3);
 });
+
+// --- Activity breakdown + week-one cohorts -------------------------------
+
+{
+  const { activityBucket, weekOneCohorts, startOfUTCWeek } = require("../src/admin/analytics");
+  const D = 86_400_000;
+  const N = Date.UTC(2026, 10, 15, 12); // Sun 15 Nov 2026
+
+  test("activityBucket sorts users into active / quiet / gone / never", () => {
+    assert.equal(activityBucket({ totalHours: 0, lastActiveAt: N - D }, N), "never");
+    assert.equal(activityBucket({ realHours: 5, lastActiveAt: N - 2 * D }, N), "active");
+    assert.equal(activityBucket({ realHours: 5, lastActiveAt: N - 12 * D }, N), "quiet");
+    assert.equal(activityBucket({ realHours: 5, lastActiveAt: N - 45 * D }, N), "gone");
+    // A recent shift counts even without a presence stamp.
+    assert.equal(activityBucket({ realHours: 5, lastShiftMs: N - D }, N), "active");
+  });
+
+  test("startOfUTCWeek is Monday", () => {
+    assert.equal(new Date(startOfUTCWeek(N)).getUTCDay(), 1);
+    assert.equal(startOfUTCWeek(N), Date.UTC(2026, 10, 9));
+  });
+
+  test("weekOneCohorts counts distinct log days in the first week", () => {
+    const created = Date.UTC(2026, 9, 26, 9); // Mon of cohort 3 weeks ago
+    const users = [
+      { createdAt: created, shiftDatesMs: [created, created + D, created + 3 * D], lastTouchMs: N - D },
+      { createdAt: created, shiftDatesMs: [created, created + 2 * 3600_000, created + 9 * D], lastTouchMs: 0 },
+      { createdAt: created + D, shiftDatesMs: [], lastTouchMs: 0 },
+    ];
+    const cohorts = weekOneCohorts(users, N, 4);
+    const c = cohorts.find((x) => x.weekStartMs === Date.UTC(2026, 9, 26));
+    assert.equal(c.signups, 3);
+    assert.equal(c.loggedAny, 2);
+    assert.equal(c.hitGoal, 1);
+    assert.equal(c.activeNow, 1);
+    assert.equal(c.complete, true);
+    assert.equal(cohorts[cohorts.length - 1].complete, false);
+  });
+}

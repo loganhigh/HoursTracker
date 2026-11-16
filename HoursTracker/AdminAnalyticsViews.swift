@@ -10,10 +10,9 @@ import FirebaseFunctions
 // and nothing here weakens security rules (every read happens server-side
 // behind the admin-uid check).
 //
-// Metrics shown are only ones the backend genuinely records. There is no
-// retention section and no per-period XP because no historical data exists
-// for them — the daily `adminDaily` snapshot (written by dailyStatsRefresh)
-// starts accumulating engagement history from the day this ships.
+// Metrics shown are only ones the backend genuinely records. Week-one
+// retention is counted server-side from the shifts each new account logged;
+// the User Analytics screen itself lives in AdminUserAnalyticsScreen.swift.
 
 // MARK: Models
 
@@ -80,6 +79,8 @@ struct AdminInsightUser: Identifiable {
     /// is allowed now (once a week per user).
     var lastNudgeAt: Date?
     var canNudge = true
+    /// Latest app open or logged shift (activity-breakdown lists only).
+    var lastTouchAt: Date?
 
     var id: String { uid }
 
@@ -116,6 +117,7 @@ struct AdminInsightUser: Identifiable {
         user.reasons = dict["reasons"] as? [String] ?? []
         user.lastNudgeAt = date("lastNudgeMs")
         user.canNudge = dict["canNudge"] as? Bool ?? true
+        user.lastTouchAt = date("lastTouchMs")
         return user
     }
 }
@@ -133,6 +135,36 @@ struct AdminDailyHistory: Identifiable {
     var id: Date { at }
 }
 
+/// Active vs inactive buckets from the server (see activityBucket in
+/// functions/src/admin/analytics.js).
+enum AdminActivityBucket: String, CaseIterable, Identifiable {
+    case active, quiet, gone, never
+    var id: String { rawValue }
+}
+
+struct AdminActivityBreakdown {
+    var counts: [AdminActivityBucket: Int] = [:]
+    var lists: [AdminActivityBucket: [AdminInsightUser]] = [:]
+    var boardCutoffDays = 30
+
+    var total: Int { counts.values.reduce(0, +) }
+    func count(_ b: AdminActivityBucket) -> Int { counts[b] ?? 0 }
+}
+
+/// One weekly signup cohort's first-week outcome.
+struct AdminCohort: Identifiable {
+    let weekStart: Date
+    let signups: Int
+    let loggedAny: Int
+    let hitGoal: Int
+    let activeNow: Int
+    /// false while the cohort's newest accounts are still in week one.
+    let complete: Bool
+    var id: Date { weekStart }
+
+    var goalRate: Double { signups > 0 ? Double(hitGoal) / Double(signups) : 0 }
+}
+
 struct AdminAnalyticsPayload {
     let overview: AdminOverviewStats
     let topActive: [AdminInsightUser]
@@ -140,6 +172,8 @@ struct AdminAnalyticsPayload {
     let newUsers: [AdminInsightUser]
     let growth: [AdminGrowthBucket]
     let history: [AdminDailyHistory]
+    var activity = AdminActivityBreakdown()
+    var cohorts: [AdminCohort] = []
     let generatedAt: Date
 
     nonisolated static func parse(_ dict: [String: Any]) -> AdminAnalyticsPayload {
@@ -163,7 +197,31 @@ struct AdminAnalyticsPayload {
                 usersLoggedToday: (d["usersLoggedToday"] as? Int) ?? (d["usersLoggedToday"] as? NSNumber)?.intValue ?? 0
             )
         }
-        return AdminAnalyticsPayload(
+        func num(_ any: Any?) -> Int { (any as? Int) ?? (any as? NSNumber)?.intValue ?? 0 }
+        var activity = AdminActivityBreakdown()
+        if let raw = dict["activity"] as? [String: Any] {
+            let counts = raw["counts"] as? [String: Any] ?? [:]
+            let lists = raw["lists"] as? [String: Any] ?? [:]
+            for bucket in AdminActivityBucket.allCases {
+                activity.counts[bucket] = num(counts[bucket.rawValue])
+                activity.lists[bucket] = users(lists[bucket.rawValue] as? [Any])
+            }
+            if raw["boardCutoffDays"] != nil { activity.boardCutoffDays = num(raw["boardCutoffDays"]) }
+        }
+        let cohorts: [AdminCohort] = ((dict["cohorts"] as? [Any]) ?? []).compactMap { raw in
+            guard let d = raw as? [String: Any],
+                  let ms = (d["weekStartMs"] as? Double) ?? (d["weekStartMs"] as? NSNumber)?.doubleValue
+            else { return nil }
+            return AdminCohort(
+                weekStart: Date(timeIntervalSince1970: ms / 1000),
+                signups: num(d["signups"]),
+                loggedAny: num(d["loggedAny"]),
+                hitGoal: num(d["hitGoal"]),
+                activeNow: num(d["activeNow"]),
+                complete: d["complete"] as? Bool ?? true
+            )
+        }
+        var payload = AdminAnalyticsPayload(
             overview: AdminOverviewStats.parse(dict["overview"] as? [String: Any] ?? [:]),
             topActive: users(dict["topActive"] as? [Any]),
             atRisk: users(dict["atRisk"] as? [Any]),
@@ -172,6 +230,9 @@ struct AdminAnalyticsPayload {
             history: history,
             generatedAt: Date()
         )
+        payload.activity = activity
+        payload.cohorts = cohorts
+        return payload
     }
 }
 
@@ -389,107 +450,6 @@ struct AdminTopActiveView: View {
         if score >= 70 { return AppTheme.Colors.success }
         if score >= 35 { return AppTheme.Colors.accent }
         return AppTheme.Colors.faint
-    }
-}
-
-// MARK: - User Analytics
-
-struct AdminUserAnalyticsView: View {
-    let analytics: AdminAnalyticsPayload
-
-    enum GrowthRange: String, CaseIterable {
-        case week = "7D", month = "30D", quarter = "90D"
-        var days: Int { self == .week ? 7 : self == .month ? 30 : 90 }
-    }
-
-    @State private var growthRange: GrowthRange = .month
-
-    var body: some View {
-        let stats = analytics.overview
-        List {
-            Section {
-                statRow("Total users", "\(stats.totalUsers)")
-                statRow("New today", "+\(stats.newToday)")
-                statRow("New this week", "+\(stats.new7d)",
-                        delta: stats.new7dDeltaPct.map { "\($0 >= 0 ? "+" : "")\($0)% vs last week" })
-                statRow("New this month", "+\(stats.new30d)")
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Picker("Range", selection: $growthRange) {
-                        ForEach(GrowthRange.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    AdminMiniBarChart(
-                        values: analytics.growth.suffix(growthRange.days).map { Double($0.count) }
-                    )
-                    Text("Signups per day")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(AppTheme.Colors.faint)
-                }
-                .listRowBackground(AppTheme.Colors.card)
-            } header: {
-                Text("User Growth")
-            }
-            .listRowBackground(AppTheme.Colors.card)
-
-            Section {
-                statRow("Daily active users", "\(stats.activeToday)")
-                statRow("Weekly active users", "\(stats.active7d)")
-                statRow("Monthly active users", "\(stats.active30d)")
-                statRow("Users who logged today", "\(stats.usersLoggedToday)")
-                statRow("Shifts this week", "\(stats.shiftsThisWeek)")
-                statRow("Hours this week", AppTheme.Format.hours(stats.hoursThisWeek))
-
-                if analytics.history.count >= 2 {
-                    VStack(alignment: .leading, spacing: 6) {
-                        AdminMiniBarChart(values: analytics.history.map { Double($0.activeToday) })
-                        Text("Daily active users — last \(analytics.history.count) days")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(AppTheme.Colors.faint)
-                    }
-                    .listRowBackground(AppTheme.Colors.card)
-                }
-            } header: {
-                Text("Engagement")
-            } footer: {
-                analytics.history.count < 2
-                    ? Text("Daily engagement history starts accumulating from today's snapshot — charts appear once a few days exist.")
-                    : Text("")
-            }
-            .listRowBackground(AppTheme.Colors.card)
-
-            Section {
-                Text("Not tracked yet — retention needs per-user return history, which the backend doesn't record. Nothing here is estimated.")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.Colors.faint)
-                    .listRowBackground(AppTheme.Colors.card)
-            } header: {
-                Text("Retention")
-            }
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(AppTheme.Colors.bg.ignoresSafeArea())
-        .navigationTitle("User Analytics")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func statRow(_ label: String, _ value: String, delta: String? = nil) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(value)
-                    .monospacedDigit()
-                    .fontWeight(.semibold)
-                if let delta {
-                    Text(delta)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(delta.hasPrefix("+") ? AppTheme.Colors.success : AppTheme.Colors.danger)
-                }
-            }
-        }
-        .listRowBackground(AppTheme.Colors.card)
     }
 }
 

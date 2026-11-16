@@ -12,6 +12,7 @@ const { sanitizeBadgeSummaries } = require("./badgeSanity");
 const { typicalGapDays } = require("../admin/winback");
 const { supporterInfo, withSupporterBadge } = require("../supporter");
 const { withReferralBadge } = require("../social/referrals");
+const boardActivity = require("../leaderboard/boardActivity");
 
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 
@@ -1316,6 +1317,8 @@ async function recomputeUserStats(db, uid, options = {}) {
   batch.set(db.collection("boardHours").doc(uid), {
     hours: Math.round((Number(totalHours) || 0) * 100) / 100,
     hidden: !privacy.shareHours,
+    // Server-only, so hidden-hours users still count as active when they log.
+    lastShiftMs: lastShiftMs > 0 ? lastShiftMs : null,
     updatedAt,
   });
 
@@ -1608,15 +1611,22 @@ async function applyLeaderboardDeltaForUser(db, uid) {
   const boardRef = db.collection("leaderboards").doc("global");
   const privateRef = db.collection("_leaderboardPrivate").doc("global");
   const outcome = await db.runTransaction(async (tx) => {
-    const [boardSnap, privateSnap, hoursSnap, profileSnap] = await tx.getAll(
+    const [boardSnap, privateSnap, hoursSnap, profileSnap, presenceSnap] = await tx.getAll(
       boardRef,
       privateRef,
       db.collection("boardHours").doc(uid),
-      db.collection("publicProfiles").doc(uid)
+      db.collection("publicProfiles").doc(uid),
+      db.collection("presence").doc(uid)
     );
     if (!boardSnap.exists || !privateSnap.exists) return "missing";
     const hoursData = hoursSnap.exists ? hoursSnap.data() || {} : {};
-    const row = profileSnap.exists
+    // Off the board after 30 quiet days (see leaderboard/boardActivity.js).
+    const inactive = boardActivity.isInactiveForBoard(boardActivity.lastActivityMs({
+      presenceMs: presenceSnap.exists ? presenceSnap.data()?.lastActiveAt : null,
+      lastShiftMs: hoursData.lastShiftMs,
+      profileLastShift: profileSnap.exists ? profileSnap.data()?.lastShiftLoggedAt : null,
+    }), Date.now());
+    const row = profileSnap.exists && !inactive
       ? buildBoardEntries(
         [{ uid, hours: Number(hoursData.hours) || 0, hidden: hoursData.hidden === true }],
         new Map([[uid, profileSnap.data() || {}]])
@@ -1739,7 +1749,29 @@ async function updateGlobalLeaderboard(db) {
     for (const snap of snaps) if (snap.exists) profilesByUid.set(snap.id, snap.data() || {});
   }
 
-  const all = buildBoardEntries(hourRows, profilesByUid);
+  // Leave out anyone with no app opens or shifts in 30 days. Their hours stay
+  // in boardHours, so the first rebuild after they come back re-ranks them.
+  const presenceByUid = new Map();
+  try {
+    const presenceSnap = await db.collection("presence").get();
+    for (const doc of presenceSnap.docs) presenceByUid.set(doc.id, doc.data()?.lastActiveAt || null);
+  } catch (err) {
+    console.warn("updateGlobalLeaderboard: presence read failed, keeping everyone:", err?.message || err);
+  }
+  const lastShiftByUid = new Map(hoursSnap.docs.map((doc) => [doc.id, doc.data()?.lastShiftMs || 0]));
+  const nowMs = Date.now();
+  const inactiveUids = new Set();
+  for (const r of hourRows) {
+    const activity = boardActivity.lastActivityMs({
+      presenceMs: presenceByUid.get(r.uid),
+      lastShiftMs: lastShiftByUid.get(r.uid),
+      profileLastShift: profilesByUid.get(r.uid)?.lastShiftLoggedAt,
+    });
+    if (boardActivity.isInactiveForBoard(activity, nowMs)) inactiveUids.add(r.uid);
+  }
+  const activeRows = hourRows.filter((r) => !inactiveUids.has(r.uid));
+
+  const all = buildBoardEntries(activeRows, profilesByUid);
 
   await enrichLeaderboardCountryCodes(db, all);
 
@@ -1770,7 +1802,9 @@ async function updateGlobalLeaderboard(db) {
   try {
     const prevSnap = await db.collection("leaderboards").doc("global").get();
     const prevAll = prevSnap.exists ? prevSnap.data()?.all : null;
-    if (Array.isArray(prevAll)) previous = prevAll;
+    // Drop the users hidden for inactivity from the comparison, so their
+    // removal doesn't read as everyone below them climbing.
+    if (Array.isArray(prevAll)) previous = boardActivity.withoutUids(prevAll, inactiveUids);
   } catch (err) {
     console.warn("updateGlobalLeaderboard: previous read failed:", err?.message || err);
   }
@@ -1780,6 +1814,7 @@ async function updateGlobalLeaderboard(db) {
       top,
       all: broadcastAll,
       totalRanked: all.length,
+      hiddenInactive: inactiveUids.size,
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: false }

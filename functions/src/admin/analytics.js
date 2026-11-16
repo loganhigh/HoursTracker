@@ -6,8 +6,8 @@
  *
  * Every signal used here actually exists in the backend: presence stamps,
  * lastShiftLoggedAt, the server-computed weekly/streak fields, auth creation
- * times. Nothing is estimated from data we don't track — that's why there is
- * deliberately no retention module and no per-period XP.
+ * times. Nothing is estimated from data we don't track: week-one retention is
+ * counted from the shifts each new account actually logged.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -97,8 +97,86 @@ function startOfUTCDay(nowMs) {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
+/** Latest touch: app open or logged shift (0 when neither). */
+function lastTouchMs(row) {
+  return Math.max(Number(row.lastActiveAt) || 0, Number(row.lastShiftMs) || 0);
+}
+
+/**
+ * Which activity bucket a user is in:
+ *   "never"  — signed up, never logged a shift
+ *   "active" — opened the app or logged within 7 days
+ *   "quiet"  — last seen 7–30 days ago
+ *   "gone"   — nothing for 30+ days (off the leaderboard until they return)
+ */
+function activityBucket(row, nowMs) {
+  const hasShifts = (Number(row.realHours ?? row.totalHours) || 0) > 0 || (Number(row.lastShiftMs) || 0) > 0;
+  if (!hasShifts) return "never";
+  const touch = lastTouchMs(row) || Number(row.createdAt) || 0;
+  if (touch <= 0) return "gone";
+  const days = (nowMs - touch) / DAY_MS;
+  if (days <= 7) return "active";
+  if (days <= 30) return "quiet";
+  return "gone";
+}
+
+/** Rows grouped by activityBucket, each list most recently seen first. */
+function activityBreakdown(rows, nowMs) {
+  const out = { active: [], quiet: [], gone: [], never: [] };
+  for (const r of rows) out[activityBucket(r, nowMs)].push(r);
+  const recent = (a, b) => (lastTouchMs(b) || b.createdAt || 0) - (lastTouchMs(a) || a.createdAt || 0);
+  for (const k of Object.keys(out)) out[k].sort(recent);
+  return out;
+}
+
+/** Monday 00:00 UTC of the week containing `ms`. */
+function startOfUTCWeek(ms) {
+  const day = startOfUTCDay(ms);
+  const weekday = new Date(day).getUTCDay(); // 0 Sun
+  return day - ((weekday + 6) % 7) * DAY_MS;
+}
+
+/**
+ * Week-one retention per weekly signup cohort, oldest first.
+ * users: [{ createdAt, shiftDatesMs: [ms], lastTouchMs }]
+ * A user "hit the goal" when they logged shifts on 3+ different days within
+ * the first 7 days of their account. Cohorts whose newest member is still in
+ * week one are flagged `complete: false` (their numbers can still rise).
+ */
+function weekOneCohorts(users, nowMs, weeks = 8, goalDays = 3) {
+  const thisWeek = startOfUTCWeek(nowMs);
+  const cohorts = [];
+  for (let i = weeks - 1; i >= 0; i--) {
+    const start = thisWeek - i * 7 * DAY_MS;
+    cohorts.push({ weekStartMs: start, signups: 0, loggedAny: 0, hitGoal: 0, activeNow: 0, complete: start + 14 * DAY_MS <= nowMs });
+  }
+  const first = cohorts[0].weekStartMs;
+  for (const u of users) {
+    const created = Number(u.createdAt);
+    if (!Number.isFinite(created) || created < first) continue;
+    const c = cohorts[Math.floor((created - first) / (7 * DAY_MS))];
+    if (!c) continue;
+    c.signups += 1;
+    const createdDay = startOfUTCDay(created);
+    const days = new Set();
+    for (const ms of u.shiftDatesMs || []) {
+      const offset = Math.floor((startOfUTCDay(ms) - createdDay) / DAY_MS);
+      if (offset >= 0 && offset < 7) days.add(offset);
+    }
+    if (days.size > 0) c.loggedAny += 1;
+    if (days.size >= goalDays) c.hitGoal += 1;
+    if ((Number(u.lastTouchMs) || 0) >= nowMs - 7 * DAY_MS) c.activeNow += 1;
+  }
+  return cohorts;
+}
+
 module.exports = {
   DAY_MS,
+  lastTouchMs,
+  activityBucket,
+  activityBreakdown,
+  startOfUTCWeek,
+  weekOneCohorts,
   activityScore,
   atRiskInfo,
   signupBuckets,

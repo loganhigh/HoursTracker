@@ -2327,7 +2327,64 @@ exports.adminAnalytics = onCall(
       console.warn("adminAnalytics: history read failed:", err?.message || err);
     }
 
-    return { ok: true, generatedAtMs: now, overview, topActive, atRisk, newUsers, growth, history };
+    // Active vs inactive. Real hours + last shift come from the server-only
+    // boardHours doc so people who hide their hours are bucketed correctly.
+    try {
+      const bhSnap = await db.collection("boardHours").get();
+      const bh = new Map(bhSnap.docs.map((d) => [d.id, d.data() || {}]));
+      for (const r of rows) {
+        const h = bh.get(r.uid);
+        if (!h) continue;
+        r.realHours = Number(h.hours) || 0;
+        const ms = Number(h.lastShiftMs) || 0;
+        if (ms > (r.lastShiftMs || 0)) r.lastShiftMs = ms;
+      }
+    } catch (err) {
+      console.warn("adminAnalytics: boardHours read failed:", err?.message || err);
+    }
+    const buckets = adminAnalytics.activityBreakdown(rows, now);
+    const bucketRow = (r) => ({
+      ...compactRow(r),
+      totalHours: r.realHours ?? r.totalHours,
+      lastTouchMs: adminAnalytics.lastTouchMs(r) || null,
+    });
+    const activity = {
+      boardCutoffDays: 30,
+      counts: Object.fromEntries(Object.entries(buckets).map(([k, list]) => [k, list.length])),
+      lists: Object.fromEntries(Object.entries(buckets).map(([k, list]) => [k, list.slice(0, 400).map(bucketRow)])),
+    };
+
+    // Week-one retention: for each account from the last 8 weeks, the days
+    // it logged a shift. New accounts have few entries, so reading them is
+    // cheap; only date/isOffDay are fetched.
+    const cohortStart = adminAnalytics.startOfUTCWeek(now) - 7 * 7 * adminAnalytics.DAY_MS;
+    const recent = rows.filter((r) => Number.isFinite(r.createdAt) && r.createdAt >= cohortStart);
+    const shiftDatesFor = async (uid) => {
+      const userRef = db.collection("users").doc(uid);
+      let snap = await userRef.collection("timeEntries").select("date", "isOffDay").get();
+      if (snap.empty) snap = await userRef.collection("entries").select("date", "isOffDay").get();
+      const out = [];
+      for (const d of snap.docs) {
+        const e = d.data() || {};
+        if (e.isOffDay === true) continue;
+        const ms = typeof e.date?.toMillis === "function" ? e.date.toMillis() : Number(e.date);
+        if (Number.isFinite(ms) && ms > 0) out.push(ms);
+      }
+      return out;
+    };
+    const cohortUsers = [];
+    for (let i = 0; i < recent.length; i += 25) {
+      const chunk = recent.slice(i, i + 25);
+      const dates = await Promise.all(chunk.map((r) => shiftDatesFor(r.uid).catch(() => [])));
+      chunk.forEach((r, j) => cohortUsers.push({
+        createdAt: r.createdAt,
+        shiftDatesMs: dates[j],
+        lastTouchMs: adminAnalytics.lastTouchMs(r),
+      }));
+    }
+    const cohorts = adminAnalytics.weekOneCohorts(cohortUsers, now, 8);
+
+    return { ok: true, generatedAtMs: now, overview, topActive, atRisk, newUsers, growth, history, activity, cohorts };
   }
 );
 
